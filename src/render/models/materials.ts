@@ -7,7 +7,9 @@ import type { CraneSpec } from '../../crane/cranes';
 
 export type MatKey =
   | 'yellow' | 'yellowDark' | 'yellowShade' | 'grey' | 'greyDark' | 'greyDeep' | 'dark' | 'black'
-  | 'tire' | 'glass' | 'chrome' | 'steel' | 'rim' | 'lamp' | 'beacon' | 'red' | 'warn' | 'drum' | 'cabin';
+  | 'tire' | 'glass' | 'chrome' | 'steel' | 'rim' | 'lamp' | 'beacon' | 'red' | 'warn' | 'drum' | 'cabin'
+  // orugas y celosía (fase 6)
+  | 'lattice' | 'latticeDiag' | 'latticeFoot' | 'mast' | 'pendant' | 'roller' | 'idler' | 'undercarriage';
 
 /** Oscurece o aclara un color hexadecimal (shade() de la referencia). */
 export function shade(hex: string, f: number): string {
@@ -21,6 +23,9 @@ const FIXED: Partial<Record<MatKey, string>> = {
   grey: '#9aa0a6', greyDark: '#7c838a', greyDeep: '#5d646b', dark: '#3a3f45', black: '#1d2125',
   tire: '#17191c', glass: '#3f6a85', chrome: '#c9ced3', steel: '#8a929b', red: '#c0392b', warn: '#f2b632',
   drum: '#5a4a3a', cabin: '#d8962a',
+  // colores de la referencia para la celosía, el caballete y el tren de rodaje
+  lattice: '#e3a52a', latticeDiag: '#d39a28', latticeFoot: '#d0951f', mast: '#7d858f', pendant: '#c9cdd2',
+  roller: '#454b52', idler: '#30353b', undercarriage: '#2f353d',
 };
 const EMISSIVE: Partial<Record<MatKey, [string, string]>> = {
   lamp: ['#f3ecd0', '#6b6440'],
@@ -54,7 +59,8 @@ export function colorOf(T: CraneSpec, k: MatKey): string {
 export function palette(T: CraneSpec): Palette {
   const out = {} as Palette;
   const keys: MatKey[] = ['yellow', 'yellowDark', 'yellowShade', 'grey', 'greyDark', 'greyDeep', 'dark', 'black',
-    'tire', 'glass', 'chrome', 'steel', 'rim', 'lamp', 'beacon', 'red', 'warn', 'drum', 'cabin'];
+    'tire', 'glass', 'chrome', 'steel', 'rim', 'lamp', 'beacon', 'red', 'warn', 'drum', 'cabin',
+    'lattice', 'latticeDiag', 'latticeFoot', 'mast', 'pendant', 'roller', 'idler', 'undercarriage'];
   for (const k of keys) {
     const e = EMISSIVE[k];
     out[k] = e ? mat(e[0], e[1]) : mat(colorOf(T, k));

@@ -1,8 +1,8 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import './style.css';
-import { CRANES, type WheeledSpec } from './crane/cranes';
-import { WHEELED_IDS, type WheeledId } from './render/models/layout';
+import { CRANES, isCrawler, type CraneId, type WheeledSpec } from './crane/cranes';
+import { WHEELED_IDS } from './render/models/layout';
 import { initialState, stepCrane, stepOutriggers, type CraneState } from './crane/kinematics';
 import { baseConfig, lmiStatic, ratedCap, reach } from './crane/stability';
 import { dynamicStability, stepTilt, supportMode, toggleOutriggers, TILTED_PHI, type Dyn } from './crane/ops';
@@ -10,13 +10,17 @@ import { apply, carrierFrame, carrierPose, edgeAxis, rotate, worldToCarrier, typ
 import { stepDrive, stepSuspension } from './crane/drive';
 import { blockWhileAssembling, outriggersLocked, stepAssembly, teleLimit, toggleBallast, toggleYGuy, yGuyPhase } from './crane/assembly';
 import { CameraRig } from './render/camera';
-import { buildSite, TEST_OBSTACLES } from './render/site';
+import { buildSite, TEST_OBSTACLES, TEST_SOFT } from './render/site';
 import { createScene } from './render/scene';
 import { CraneModel } from './render/craneModel';
+import { CrawlerModel } from './render/crawlerModel';
 import { Rigging } from './render/rigging';
 import { Physics, FIXED_DT } from './physics/world';
 import { Input } from './ui/input';
 import { Hud } from './ui/hud';
+
+/** Grúas del menú: las de ruedas (fase 4) y la LR 300 (fase 6; la LR 3000 llega en la parte B) */
+const MENU_IDS: CraneId[] = [...WHEELED_IDS, 'crawler'];
 
 const MODE_TEXT = { out: 'estabilizadores', tire: 'neumáticos', move: 'en marcha', crawler: 'orugas', crawlMove: 'orugas en marcha' };
 
@@ -27,23 +31,25 @@ async function start() {
 
   const ctx = createScene(document.getElementById('c') as HTMLCanvasElement);
   // Grúa elegida en el menú (?grua=id); por defecto la AT 60
-  const q = new URLSearchParams(location.search).get('grua') as WheeledId | null;
-  const id: WheeledId = q && WHEELED_IDS.includes(q) ? q : 'medium';
-  const T = CRANES[id] as WheeledSpec;
+  const q = new URLSearchParams(location.search).get('grua') as CraneId | null;
+  const id: CraneId = q && MENU_IDS.includes(q) ? q : 'medium';
+  const T = CRANES[id];
   const S: CraneState = initialState(T);
   const C = baseConfig(T);
 
-  const crane = new CraneModel(T);
+  const crane = isCrawler(T) ? new CrawlerModel(T) : new CraneModel(T as WheeledSpec);
   ctx.scene.add(crane.root);
-  let pose: Pose = carrierPose(T, S, supportMode(S));
+  let pose: Pose = carrierPose(T, S, supportMode(S, T));
   const phys = new Physics(T, S, pose);
   for (const o of TEST_OBSTACLES) phys.addObstacle(o);
-  buildSite(ctx.scene, phys.obstacles);
+  phys.softs.push(...TEST_SOFT);
+  buildSite(ctx.scene, phys.obstacles, phys.softs);
   const rig = new Rigging(ctx.scene, phys, T);
-  const cam = new CameraRig(ctx, crane.cab, (s) => crane.eye(s), Math.max(1, (T.len[1] - T.len[0]) / 12.3));
+  // escala de la cámara con el largo del chasis; las orugas, con su pluma de celosía larga, un poco más lejos
+  const cam = new CameraRig(ctx, crane.cab, (s) => crane.eye(s), Math.max(isCrawler(T) ? 1.4 : 1, (T.len[1] - T.len[0]) / 12.3));
   const input = new Input();
-  const hud = new Hud(document.getElementById('hud')!, T.name, id, WHEELED_IDS.map((k) => ({ id: k, name: CRANES[k].name })),
-    { ballast: !!T.ballast, yguy: !!T.yguy });
+  const hud = new Hud(document.getElementById('hud')!, T.name, id, MENU_IDS.map((k) => ({ id: k, name: CRANES[k].name })),
+    { ballast: !!T.ballast, yguy: !!T.yguy, outriggers: !!T.out, tele: T.boom.max > T.boom.min });
   hud.onCrane = (k) => {
     const u = new URL(location.href);
     u.searchParams.set('grua', k);
@@ -75,7 +81,7 @@ async function start() {
   hud.onRestart = () => {
     Object.assign(S, initialState(T));
     Object.assign(C, baseConfig(T)); // sin lastre ni Y-guy
-    pose = carrierPose(T, S, supportMode(S));
+    pose = carrierPose(T, S, supportMode(S, T));
     phys.reset(S, pose);
     dyn = { u: 0, edge: 0, lmi: 0 };
     tipClock = -1;
@@ -83,7 +89,8 @@ async function start() {
     hud.showTipped(null);
     hud.say('Grúa reiniciada', 1.5);
   };
-  hud.say(`${T.name} · flechas para conducir · O despliega los estabilizadores · V cambia la cámara`, 4);
+  hud.say(T.crawler ? `${T.name} · flechas para conducir (← → gira en el sitio) · puede llevar la carga colgada · V cambia la cámara`
+    : `${T.name} · flechas para conducir · O despliega los estabilizadores · V cambia la cámara`, 4);
 
   /** Un paso fijo de la lógica de la grúa y de la física. */
   function tick(dt: number) {
@@ -95,7 +102,7 @@ async function start() {
       const v0 = S.vd;
       const dr = stepDrive(T, S, input.drive(), dt, {
         loadHanging: hanging(),
-        lmiMove: lmiStatic(T, C, 'move', S.Lb, S.ang, S.slew, mLoad),
+        lmiMove: lmiStatic(T, C, T.crawler ? 'crawlMove' : 'move', S.Lb, S.ang, S.slew, mLoad),
         tilted: S.phi > TILTED_PHI,
         bypass,
         blocked: (x, z, h) => phys.carrierBlocked(x, z, h),
@@ -111,7 +118,7 @@ async function start() {
       if (inp.tele > 0 && S.Lb >= teleMax - 1e-6 && teleMax < T.boom.max) {
         hud.sayOnce(`Sin arriostramiento tensado la pluma solo llega a ${teleMax} m (Y)`);
       }
-      const md = supportMode(S);
+      const md = supportMode(S, T);
       // Como la referencia: los cortes usan el LMI estático; la carga cuenta solo si cuelga.
       const mEval = hanging() ? mLoad : T.hookM;
       const noHoistUp = !!att && lmiStatic(T, C, md, S.Lb, S.ang, S.slew, mLoad) >= 1;
@@ -128,7 +135,7 @@ async function start() {
       }
       cutMsg = cut;
       stepOutriggers(T, S, dt);
-      pose = carrierPose(T, S, supportMode(S));
+      pose = carrierPose(T, S, supportMode(S, T));
     }
     phys.step(S, pose);
     if (tipped()) {
@@ -138,7 +145,7 @@ async function start() {
     }
 
     // Estabilidad con la tensión real del cable: un balanceo o un tirón también cuentan.
-    const md = supportMode(S);
+    const md = supportMode(S, T);
     dyn = dynamicStability(T, C, S, md, phys.tension, worldToCarrier(S, phys.gp));
     if (stepTilt(S, dyn, dt)) {
       const { p, axis } = edgeAxis(T, md, S.edge);
@@ -148,7 +155,7 @@ async function start() {
       cut = false;
       tipClock = 0;
       tipText = `El momento de vuelco superó la estabilidad (${Math.round(dyn.u * 100)} %). ` +
-        (md !== 'out' ? 'Sobre neumáticos la capacidad es mucho menor: despliega los estabilizadores (O). ' : '') +
+        (md === 'tire' || md === 'move' ? 'Sobre neumáticos la capacidad es mucho menor: despliega los estabilizadores (O). ' : '') +
         'Reduce el radio y evita que la carga se balancee hacia fuera.';
       hud.say('¡La grúa vuelca!', CARD_DELAY);
     }
@@ -185,7 +192,7 @@ async function start() {
     ctx.renderer.render(ctx.scene, ctx.camera);
     const t2 = performance.now();
 
-    const md = supportMode(S);
+    const md = supportMode(S, T);
     const att = phys.attached;
     const hp = phys.headWorld();
     hud.frame(dt, physMs, t2 - t1, ctx.renderer.info);
@@ -207,7 +214,7 @@ async function start() {
       tipped: tipped(),
       bypass,
       speed: S.vd,
-      steerDeg: (S.steer * 180) / Math.PI,
+      steerDeg: T.crawler ? null : (S.steer * 180) / Math.PI,
       ballast: T.ballast ? { t: T.ballast.m * S.cw, of: T.ballast.m, p: S.cw, target: S.cwT } : null,
       yguy: T.yguy ? { text: yGuyPhase(S.yg), p: S.yg } : null,
     });

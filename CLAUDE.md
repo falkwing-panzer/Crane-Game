@@ -56,7 +56,7 @@ src/
 
 ## Controles (heredados de la referencia)
 Flechas conducir/dirección · A/D giro · W/S elevar pluma · Q/E telescopar · R/F cable · Espacio gancho ·
-O estabilizadores · B lastre · Y Y-guy · T/G plumín · M montaje · K/L radio superlift · Shift fino ·
+O estabilizadores (no en orugas) · B lastre · Y Y-guy · T/G plumín · M montaje · K/L radio superlift · Shift fino ·
 V cámara (en la referencia cambiaba la vista lateral; aquí: orbital libre → seguimiento → cabina del conductor).
 Extra (no está en la referencia): **X** reponer la carga en su posición inicial (ayuda de prueba hasta que haya reinicio de nivel) ·
 **P** puentear el LMI (sin cortes, para poder probar el vuelco; se apaga al reiniciar).
@@ -82,10 +82,14 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - **Fase 5** (montajes): lastre (B) en AT 300-6, AT 450-8 y AT 500-8; Y-guy (Y) en la AT 500-8 (la AT 650-8 lo tendrá al
   hacer su modelo en la fase 7: la lógica ya es general). Bloqueo de mandos mientras se monta, indicadores en el HUD.
   Pruebas en `assembly.test.ts` y `models.test.ts`.
+- **Fase 6, parte A** (LR 300): modelo de orugas con pluma de celosía instanciada y caballete, conducción sobre orugas
+  (giro en el sitio, `crawler`/`crawlMove`, pick & carry al 45 %), terreno blando de prueba (barro y agua). Pruebas en
+  `crawler.test.ts` (conducción, terreno, física) y `models/crawler.test.ts`. **Falta la parte B**: LR 3000 (derrick,
+  superlift con K/L, choques de la bandeja, cámara y sombras para 108 m, cable con cargas de cientos de t, fps).
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
-  `CraneSpec`, `AT60` (= `CRANES.medium`, tipada `WheeledSpec` para el modelo 3D de la fase 0).
+  `CraneSpec`, `AT60` (= `CRANES.medium`, tipada `WheeledSpec` para el modelo 3D de la fase 0), `CrawlerSpec`/`isCrawler`.
 - `src/crane/stability.ts`: `KF`, `yNoGuy`, `reach`, `structCap`, `supportRect`, `craneMasses`, `tipUtil`, `lmiStatic`,
   `ratedCap`, `CraneConfig` y `baseConfig(T)`. `tipEdge` (no está en la referencia) = `tipUtil` + qué arista manda
   (0 delante, 1 detrás, 2 izquierda −z, 3 derecha +z).
@@ -95,7 +99,11 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   `stepOutriggers`, `carrierLift`, `headPos` (en el marco del chasis apoyado; luego se aplica la pose).
 - `src/crane/drive.ts`: `stepDrive` (conducción de `step()` de la referencia), `yawRate`, `minTurnRadius`, `stepSuspension`,
   `axleSteer` (ángulo de cada eje como el dibujo de la referencia). `MOVING` = 0,05 m/s, `CARRY_SPEED` = 0,3.
-- `src/crane/ops.ts`: `supportMode` (`out` solo con `out = 1`; `move` con |vd| > 0,05), `toggleOutriggers` (condiciones de la referencia),
+  Orugas (`stepCrawl`): giro en el sitio a `spd.turn`, invertido marcha atrás; con carga 45 % de velocidad y 50 % de giro;
+  `S.trackL`/`trackR` (recorrido de cada oruga, para las tejas) y `S.turnKey` (dirección pulsada).
+- `src/crane/terrain.ts`: `SoftZone` (barro/agua, centro y medidas como la referencia), `terrainBlocked`, `padsOnSoft`.
+- `src/crane/ops.ts`: `supportMode(S, T)` (`out` solo con `out = 1`; `move` con |vd| > 0,05; orugas `crawlMove` en marcha o
+  con la dirección pulsada, si no `crawler`), `toggleOutriggers` (condiciones de la referencia),
   `dynamicStability` (tensión en `gp`), `stepTilt` (phi de la referencia), `TIP_PHI` = 0,06.
 - `src/crane/assembly.ts`: `toggleBallast`/`toggleYGuy` (condiciones de la referencia), `stepAssembly` (avance de `S.cw`/`S.yg`
   y `syncConfig` → `C.mCw`, `C.yOn`), `blockWhileAssembling`, `teleLimit` (35 m sin Y-guy), `outriggersLocked`, `yGuyPhase`.
@@ -110,6 +118,9 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   cabina), `superstructure.ts` (superestructura, tramos, cabeza con poleas), `builder.ts` (`Parts`: caja, cilindro, extrusión de
   perfil; fusiona por material), `materials.ts` (paleta compartida, materiales por color), `ballastPlates(T, L, cw)` en
   `layout.ts` (placas de lastre) y `yguy.ts` (`yGuyGeom` sin three.js, `YGuyView` instanciado en el grupo de la pluma).
+- Orugas: `models/crawlerLayout.ts` (cotas sin three.js: orugas, contorno de las tejas `loopPoint`, superestructura, pie de
+  pluma), `models/lattice.ts` (`latticeSegs` genérica, `boomLattice`), `render/crawlerModel.ts` (`CrawlerModel`, misma
+  interfaz que `CraneModel`: `update`, `eye`, `lateral`, `cab`).
 - `src/render/craneModel.ts` (`CraneModel`: grupos rígidos, llantas y estabilizadores instanciados, `eye(S)`, `lateral()`),
   `scene.ts`, `rigging.ts` (gancho escalado y 2/4 ramales).
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
@@ -207,6 +218,15 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   **rectangulares** (pedido de Jesús), con la misma planta (`cwLen` × `cwLen`). El cabrestante va **delante** de la torre. `tailR` se
   calcula con el lastre completo. La AT 500-8 llega a 8,24 m de ancho de lastre (`cwWide` = 4,12 es media anchura en la
   referencia); se dejó así.
+- **Orugas (fase 6)**: `track` es a la vez el apoyo y la caja de choques (las orugas no tienen suspensión ni dirección, como
+  la referencia). Celosía de la pluma: 2 InstancedMesh (cordones y diagonales) colocados **una vez** en el grupo de la pluma
+  (largo fijo). Tejas: 1 InstancedMesh que se recoloca solo si cambia `trackL`/`trackR`; arriba avanzan con la marcha.
+  **Ajustes a la referencia** (aproximación visual): pie de pluma que se estrecha hacia el bulón y ranura en la plataforma
+  (la caja de la referencia se hundía en ella); cuerpo trasero solo hasta el cabrestante y capó a la derecha (el de la
+  referencia lo atravesaba la pluma); cabrestante apoyado sobre la plataforma; cabina del operador a la izquierda.
+- **Terreno blando**: solo las reglas de la referencia (no calcula presión al suelo, y no se inventó): nadie entra al agua;
+  ruedas no entran al barro salvo `offroad` (RT 90); orugas sí; zapatas no en barro ni agua (margen 0,6 m). Zonas de prueba
+  `TEST_SOFT` en `site.ts` detrás de la grúa hasta que lleguen los niveles.
 - **Y-guy** (`yGuyModel` de la referencia, marco de la pluma): el cable delantero se ata en lo alto de la cabeza (`Lb + 0,1`), no
   1,1 m detrás como la referencia (con la pluma recogida quedaba dentro del tramo base). Sin masa en la estabilidad (referencia).
 
@@ -235,13 +255,17 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   sombras incluidas). Lastre: 1 InstancedMesh; Y-guy: 4 InstancedMesh, recolocados solo cuando cambian. **En la laptop de
   Jesús: 60 fps.**
 
+- Fase 6A (LR 300): 63 draw calls y ~11.600 triángulos (75 con la carga colgada); física ~0,2 ms, render CPU ~1 ms; 60 fps en
+  el panel de la app. **Pendiente medir en la laptop.**
+
 ### Pendientes
+- El colisionador de la superestructura (`supBox`) y el del vuelco son los de las grúas de ruedas: en las orugas no cubren
+  todo el ancho de la plataforma ni el contrapeso alto. Revisar en la parte B.
 - El encuadre de sombras (±45 m) no cubre plumas de 64–85 m enteras; la cámara se escala con el largo del chasis.
 - Colisión de la carga con la pluma (no existe todavía).
 - Radio de cola: el contrapeso no choca con obstáculos al girar (`boomHit`/contrapeso de la referencia), ni la pluma.
   Con lastre la cola llega a ~7,8 m en la AT 500-8; el colisionador de la superestructura no incluye el lastre.
 - Terreno (agua, barro, `offroad`) y límites reales de la obra llegan con los niveles (fase 9); ahora el límite es ±150 m.
-- Conducción de orugas (`spd.turn`, `crawlMove`): fase 6; `stepDrive` no hace nada si la grúa no tiene `wheelbase`.
 - `CLEARANCE` y la suspensión siguen siendo los de la AT 60; el colisionador de la superestructura (`supBox`) no cubre la
   cabina del operador. Revisar si molesta con otras grúas.
 - La caja despedida 45 m de la fase 1 no se reprodujo con el nuevo ajuste del solver; si vuelve a pasar, anotar cómo.

@@ -11,8 +11,12 @@ export const TIP_PHI = 0.06;
 /** Por encima de esto la grúa se considera inclinada y solo se permiten movimientos que la recuperan. */
 export const TILTED_PHI = 0.002;
 
-/** mode() de la referencia (grúas de ruedas): estabilizadores solo si están apoyados del todo; en marcha "move". */
-export function supportMode(S: CraneState): SupportMode {
+/**
+ * mode() de la referencia. Ruedas: estabilizadores solo si están apoyados del todo; en marcha "move".
+ * Orugas: "crawlMove" en marcha o mientras se pulsa la dirección (gira en el sitio), si no "crawler".
+ */
+export function supportMode(S: CraneState, T: Pick<CraneSpec, 'crawler'>): SupportMode {
+  if (T.crawler) return Math.abs(S.vd) > MOVING || S.turnKey ? 'crawlMove' : 'crawler';
   return S.out >= 1 ? 'out' : Math.abs(S.vd) > MOVING ? 'move' : 'tire';
 }
 

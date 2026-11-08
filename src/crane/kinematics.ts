@@ -28,6 +28,11 @@ export interface CraneState {
   steer: number;
   /** Giro acumulado de las ruedas (rad), solo para el dibujo */
   spin: number;
+  /** Orugas: recorrido acumulado de la oruga izquierda (−z) y derecha (m), para el dibujo */
+  trackL: number;
+  trackR: number;
+  /** Orugas: se está pulsando la dirección (mode() de la referencia: girar en el sitio también es "crawlMove") */
+  turnKey: boolean;
   /** Suspensión (visual y en la pose): cabeceo y balanceo (rad) con sus velocidades */
   sus: { pitch: number; bank: number; vp: number; vb: number };
   /** Lastre: avance del montaje 0…1 y objetivo (cwS / cwT de la referencia) */
@@ -69,9 +74,10 @@ export const OUT_LIFT = 0.3;
 
 export function initialState(T: CraneSpec): CraneState {
   return {
-    slew: 0, ang: 40 * Math.PI / 180, Lb: T.boom.min, cable: 4, v: { slew: 0, ang: 0, Lb: 0, cable: 0 },
+    // la referencia empieza las orugas con la pluma a 70°
+    slew: 0, ang: (T.crawler ? 70 : 40) * Math.PI / 180, Lb: T.boom.min, cable: 4, v: { slew: 0, ang: 0, Lb: 0, cable: 0 },
     out: 0, outT: 0, phi: 0, phiV: 0, edge: -1,
-    x: 0, z: 0, h: 0, vd: 0, steer: 0, spin: 0, sus: { pitch: 0, bank: 0, vp: 0, vb: 0 },
+    x: 0, z: 0, h: 0, vd: 0, steer: 0, spin: 0, trackL: 0, trackR: 0, turnKey: false, sus: { pitch: 0, bank: 0, vp: 0, vb: 0 },
     cw: 0, cwT: 0, yg: 0, ygT: 0,
   };
 }

@@ -187,6 +187,12 @@ export const CRANES: Record<CraneId, CraneSpec> = {
 export type WheeledSpec = CraneSpec & { axles: number[]; wheelR: number; tire: SupportRect; out: SupportRect };
 export const AT60 = CRANES.medium as WheeledSpec;
 
+/** Grúa sobre orugas (LR 300, LR 3000): apoyo `track`, ancho de oruga y velocidad de giro en el sitio. */
+export type CrawlerSpec = CraneSpec & { crawler: true; track: SupportRect; trackW: number; spd: CraneSpec['spd'] & { turn: number } };
+export const isCrawler = (T: CraneSpec): T is CrawlerSpec => !!T.crawler;
+/** Grúas de orugas con modelo 3D (fase 6). */
+export const CRAWLER_IDS = ['crawler', 'lr'] as const;
+
 /** Distancia del centro del gancho a la parte superior de la carga cuando está enganchada (SLING en la referencia). */
 export const SLING = 1.0;
 

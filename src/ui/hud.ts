@@ -30,7 +30,8 @@ export interface Readout {
   bypass: boolean;
   /** Velocidad de marcha (m/s) y dirección (°, + izquierda) */
   speed: number;
-  steerDeg: number;
+  /** null en las orugas (no tienen dirección: giran en el sitio) */
+  steerDeg: number | null;
   /** Lastre: t montadas, total, avance 0…1 y objetivo (null si la grúa no monta lastre) */
   ballast: { t: number; of: number; p: number; target: number } | null;
   /** Y-guy: texto de la fase y avance 0…1 (null si no tiene) */
@@ -67,7 +68,7 @@ export class Hud {
   private renderAcc = 0;
 
   constructor(root: HTMLElement, private title: string, current: string, cranes: { id: string; name: string }[],
-    has = { ballast: false, yguy: false }) {
+    has = { ballast: false, yguy: false, outriggers: true, tele: true }) {
     const opts = cranes.map((c) => `<option value="${c.id}"${c.id === current ? ' selected' : ''}>${c.name}</option>`).join('');
     root.innerHTML = `
       <div class="panel perf" id="perf">— fps</div>
@@ -75,8 +76,8 @@ export class Hud {
       <div class="panel data" id="data"></div>
       <div class="msg" id="msg"></div>
       <div class="panel keys">
-        <b>Flechas</b> conducir · <b>A/D</b> giro · <b>W/S</b> pluma · <b>Q/E</b> telescopio · <b>R/F</b> gancho ·
-        <b>O</b> estabilizadores · ${has.ballast ? '<b>B</b> lastre · ' : ''}${has.yguy ? '<b>Y</b> arriostramiento · ' : ''}<b>Espacio</b> enganchar/soltar · <b>X</b> reponer carga · <b>P</b> puentear LMI · <b>Shift</b> fino · <b>V</b> cámara
+        <b>Flechas</b> conducir · <b>A/D</b> giro · <b>W/S</b> pluma · ${has.tele ? '<b>Q/E</b> telescopio · ' : ''}<b>R/F</b> gancho ·
+        ${has.outriggers ? '<b>O</b> estabilizadores · ' : ''}${has.ballast ? '<b>B</b> lastre · ' : ''}${has.yguy ? '<b>Y</b> arriostramiento · ' : ''}<b>Espacio</b> enganchar/soltar · <b>X</b> reponer carga · <b>P</b> puentear LMI · <b>Shift</b> fino · <b>V</b> cámara
       </div>
       <div class="card" id="card" hidden>
         <h2>Grúa volcada</h2>
@@ -143,7 +144,8 @@ export class Hud {
       `Radio <b>${f(r.radius)} m</b> · punta <b>${f(r.headH)} m</b><br>` +
       `Cable <b>${f(r.cable)} m</b><br>` +
       `Gancho: <b>${r.load}</b><br>` +
-      `Marcha <b>${f(Math.abs(r.speed) * 3.6)} km/h</b>${r.speed < -0.05 ? ' atrás' : ''} · dirección <b>${f(r.steerDeg, 0)}°</b>` +
+      `Marcha <b>${f(Math.abs(r.speed) * 3.6)} km/h</b>${r.speed < -0.05 ? ' atrás' : ''}` +
+      (r.steerDeg === null ? '' : ` · dirección <b>${f(r.steerDeg, 0)}°</b>`) +
       `<div class="lmi ${lmiCls}"><span>LMI</span><b>${Math.round(r.lmi * 100)} %</b>` +
       `<i><u style="width:${Math.min(100, (r.lmi / 1.25) * 100).toFixed(1)}%"></u><s></s></i></div>` +
       (r.bypass && !r.tipped ? `<div class="cut">LMI PUENTEADO (P)</div>` : '') +

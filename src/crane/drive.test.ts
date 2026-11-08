@@ -28,12 +28,12 @@ describe('conducción (step() de la referencia)', () => {
     expect(S.vd).toBeCloseTo(T.spd.drive, 6);
     expect(S.x).toBeGreaterThan(10);
     expect(S.z).toBeCloseTo(0, 9);
-    expect(supportMode(S)).toBe('move');
+    expect(supportMode(S, T)).toBe('move');
     run(S, 0.5, 0, 0);
     expect(S.vd).toBeCloseTo(T.spd.drive - 1.2, 2);
     run(S, 2, 0, 0);
     expect(S.vd).toBe(0);
-    expect(supportMode(S)).toBe('tire');
+    expect(supportMode(S, T)).toBe('tire');
   });
 
   it('radio de giro = wheelbase / (2·tan steerMax) con dirección en todos los ejes; ← gira a la izquierda', () => {
@@ -134,7 +134,7 @@ describe('física: choques y carga en marcha', () => {
     for (let i = 0; i < 60 * 15; i++) {
       const r = stepDrive(T, S, { throttle: 1, steer: 0, fine: false }, dt, ctx);
       if (r.msg) msg = r.msg;
-      P.step(S, carrierPose(T, S, supportMode(S)));
+      P.step(S, carrierPose(T, S, supportMode(S, T)));
     }
     expect(msg).toMatch(/obstáculo/);
     // frente del chasis (x = 6,3) a menos de un paso del bloque (cara en x = 19,4); el bordillo bajo no frena
@@ -168,9 +168,9 @@ describe('física: choques y carga en marcha', () => {
     const lmi0 = dynamicStability(T, C, S, 'move', calm, worldToCarrier(S, P.gp)).lmi;
     for (let i = 0; i < 60 * 8; i++) {
       stepDrive(T, S, { throttle: 1, steer: i > 120 ? 1 : 0, fine: false }, dt, { ...free, loadHanging: true });
-      P.step(S, carrierPose(T, S, supportMode(S)));
+      P.step(S, carrierPose(T, S, supportMode(S, T)));
       peakT = Math.max(peakT, P.tension);
-      peakLmi = Math.max(peakLmi, dynamicStability(T, C, S, supportMode(S), P.tension, worldToCarrier(S, P.gp)).lmi);
+      peakLmi = Math.max(peakLmi, dynamicStability(T, C, S, supportMode(S, T), P.tension, worldToCarrier(S, P.gp)).lmi);
     }
     expect(peakT).toBeGreaterThan(calm * 1.01);
     expect(peakLmi).toBeGreaterThan(lmi0 * 1.03);

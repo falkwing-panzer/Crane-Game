@@ -4,6 +4,7 @@ import { hookScale } from '../render/models/layout';
 import { carrierLift, headPos, type CraneState } from '../crane/kinematics';
 import { craneMasses, supportRect, type CraneConfig, type SupportMode } from '../crane/stability';
 import { apply, axisAngle, mul, rotate, type Pose, type V3 } from '../crane/pose';
+import { padsOnSoft, terrainBlocked, type SoftZone } from '../crane/terrain';
 
 // Unidades de masa: toneladas (igual que la referencia). Gravedad 9,81 m/s².
 // Mientras la grúa está de pie NO es un cuerpo dinámico: su cinemática viene del modelo analítico y aquí
@@ -47,6 +48,8 @@ export class Physics {
   readonly hookCollider: RAPIER.Collider;
   readonly loads: Load[] = [];
   readonly obstacles: Obstacle[] = [];
+  /** Terreno blando (barro, agua): no es un colisionador, solo impide entrar o apoyar zapatas */
+  readonly softs: SoftZone[] = [];
   /** Carga enganchada, si la hay */
   attached: Load | null = null;
   /** Tensión del cable (t), filtrada; incluye el gancho */
@@ -124,6 +127,8 @@ export class Physics {
       const wx = x + c * lx + s * lz, wz = z - s * lx + c * lz;
       if (Math.abs(wx) > SITE_HALF || Math.abs(wz) > SITE_HALF) return 'Límite de la obra';
     }
+    const soft = terrainBlocked(T, this.softs, x, z, h);
+    if (soft) return soft;
     const cx = (L0 + L1) / 2, hy = (T.deckHi - CLEARANCE) / 2;
     const shape = new RAPIER.Cuboid((L1 - L0) / 2, hy, bodyHalf(T));
     const pos = { x: x + c * cx, y: CLEARANCE + hy, z: z - s * cx };
@@ -141,7 +146,7 @@ export class Physics {
       if (Math.abs(wx) > SITE_HALF || Math.abs(wz) > SITE_HALF) return 'No hay espacio para los estabilizadores';
       if (this.hitsSomething({ x: wx, y: 0.55, z: wz }, q, shape)) return 'Un obstáculo impide abrir los estabilizadores';
     }
-    return null;
+    return padsOnSoft(this.T, this.softs, S.x, S.z, S.h);
   }
 
   private hitsSomething(pos: V3, rot: { x: number; y: number; z: number; w: number }, shape: RAPIER.Shape) {

@@ -17,7 +17,7 @@ export interface DriveInput {
 export interface DriveCtx {
   /** Hay carga enganchada que no está apoyada (susp de la referencia) */
   loadHanging: boolean;
-  /** LMI estático en modo "move" con gancho + carga (para el pick & carry) */
+  /** LMI estático en modo "move" (orugas: "crawlMove") con gancho + carga (para el pick & carry) */
   lmiMove: number;
   /** Grúa inclinada (phi > 0,002) */
   tilted: boolean;
@@ -40,6 +40,9 @@ export interface DriveResult {
 export const MOVING = 0.05;
 /** Fracción de la velocidad máxima con carga colgando (referencia: 0,3 sobre ruedas) */
 export const CARRY_SPEED = 0.3;
+/** Orugas con carga colgando: velocidad al 45 % y giro al 50 % (referencia) */
+export const CRAWL_CARRY_SPEED = 0.45;
+export const CRAWL_CARRY_TURN = 0.5;
 const FINE = 0.3;
 /** Velocidad de giro del volante (rad/s) */
 const STEER_RATE = 0.8;
@@ -57,8 +60,9 @@ export function minTurnRadius(T: CraneSpec) {
 }
 
 export function stepDrive(T: CraneSpec, S: CraneState, inp: DriveInput, dt: number, ctx: DriveCtx): DriveResult {
+  if (T.crawler) return stepCrawl(T, S, inp, dt, ctx);
   const res: DriveResult = { msg: null, lmiCut: false, hit: false };
-  if (!T.wheelbase || !T.steerMax) return res; // orugas: fase 6
+  if (!T.wheelbase || !T.steerMax) return res;
   const fk = inp.fine ? FINE : 1;
   let thr = inp.throttle, str = inp.steer;
   if (thr && S.out > 0) { thr = 0; str = 0; res.msg = 'Recoge los estabilizadores para conducir (O)'; }
@@ -87,11 +91,50 @@ export function stepDrive(T: CraneSpec, S: CraneState, inp: DriveInput, dt: numb
 }
 
 /**
+ * Orugas (step() de la referencia con T.crawler): sin dirección, giran en el sitio a spd.turn con ←/→
+ * (al revés en marcha atrás, como un coche). Con carga colgando: 45 % de velocidad, 50 % de giro, y el LMI
+ * en "crawlMove" impide tanto avanzar como girar.
+ */
+function stepCrawl(T: CraneSpec, S: CraneState, inp: DriveInput, dt: number, ctx: DriveCtx): DriveResult {
+  const res: DriveResult = { msg: null, lmiCut: false, hit: false };
+  const fk = inp.fine ? FINE : 1;
+  let thr = inp.throttle, str = inp.steer;
+  S.turnKey = str !== 0;
+  if (ctx.tilted) { thr = 0; str = 0; }
+  if ((thr || str) && ctx.loadHanging && !ctx.bypass && ctx.lmiMove >= 1) {
+    thr = 0; str = 0; res.lmiCut = true;
+    res.msg = 'LMI: con esta carga no puedes desplazarte. Acerca la carga (más ángulo).';
+  }
+  const vmax = T.spd.drive * fk * (ctx.loadHanging ? CRAWL_CARRY_SPEED : 1);
+  const acc = thr ? 1.2 : 2.4;
+  S.vd += clamp(thr * vmax - S.vd, -acc * dt, acc * dt);
+  const dh = str * (T.spd.turn ?? 0) * fk * (ctx.loadHanging ? CRAWL_CARRY_TURN : 1) * (S.vd < -MOVING ? -1 : 1);
+  if (Math.abs(S.vd) > 1e-4 || Math.abs(dh) > 1e-5) {
+    const nh = S.h + dh * dt;
+    const nx = S.x + Math.cos(nh) * S.vd * dt, nz = S.z - Math.sin(nh) * S.vd * dt;
+    const why = ctx.blocked?.(nx, nz, nh) ?? null;
+    if (why) {
+      if (Math.abs(S.vd) > 1.2 && why.includes('obstáculo')) { res.hit = true; res.msg = 'El chasis chocó con un obstáculo'; }
+      else res.msg = why;
+      S.vd = 0;
+    } else {
+      // cada oruga avanza v ∓ ω·z (la izquierda está en −z): girando en el sitio van en sentidos opuestos
+      const zc = T.track!.hw - (T.trackW ?? 1) / 2;
+      S.trackL += (S.vd - ((nh - S.h) / dt) * zc) * dt;
+      S.trackR += (S.vd + ((nh - S.h) / dt) * zc) * dt;
+      S.x = nx; S.z = nz; S.h = nh;
+    }
+  }
+  return res;
+}
+
+/**
  * Suspensión simple: el chasis cabecea con la aceleración y se balancea hacia fuera en las curvas
  * (resorte amortiguado, tope de 1°). Valores de aproximación visual: no están en la referencia.
  * `aLong` = aceleración longitudinal (m/s²), la lateral sale de v·ω.
  */
 export function stepSuspension(T: CraneSpec, S: CraneState, aLong: number, dt: number) {
+  if (!T.wheelbase) return; // orugas: sin suspensión (la referencia no tiene)
   const MAX = Math.PI / 180;
   const aLat = S.vd * yawRate(T, S.vd, S.steer); // + hacia la izquierda
   const tp = clamp(0.006 * aLong, -MAX, MAX); // acelerar levanta el morro

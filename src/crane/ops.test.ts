@@ -90,13 +90,13 @@ describe('cortes del LMI (guard)', () => {
 describe('estabilizadores', () => {
   it('se despliegan en T.out.t, levantan el chasis y suben la capacidad', () => {
     const S = initialState(T);
-    expect(supportMode(S)).toBe('tire');
+    expect(supportMode(S, T)).toBe('tire');
     toggleOutriggers(T, C, S, { loadHanging: false });
     for (let t = 0; t < T.out.t! - 0.1; t += 1 / 60) stepOutriggers(T, S, 1 / 60);
-    expect(supportMode(S)).toBe('tire'); // a medio desplegar sigue sobre neumáticos
+    expect(supportMode(S, T)).toBe('tire'); // a medio desplegar sigue sobre neumáticos
     for (let i = 0; i < 30; i++) stepOutriggers(T, S, 1 / 60);
     expect(S.out).toBe(1);
-    expect(supportMode(S)).toBe('out');
+    expect(supportMode(S, T)).toBe('out');
     expect(carrierLift(S)).toBeCloseTo(0.3);
     // de lado (90°) la base pasa de 1,25 a 3,6 m de media anchura. (Por delante NO: en los datos de la
     // referencia la viga delantera, out.xf = 1,6, está detrás del eje delantero, tire.xf = 3,4.)

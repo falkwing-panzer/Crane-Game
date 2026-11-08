@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Obstacle } from '../physics/world';
+import type { SoftZone } from '../crane/terrain';
 
 // Obstáculos de la obra (cajas fijas). Los bloques de hormigón van en un InstancedMesh.
 
@@ -16,7 +17,26 @@ export const TEST_OBSTACLES: Obstacle[] = [
   { label: 'Contenedor', kind: 'container', half: { x: 3.03, y: 1.3, z: 1.22 }, pos: { x: 4, y: 1.3, z: -18 }, rotY: 0.25, color: '#7a3b33' },
 ];
 
-export function buildSite(scene: THREE.Scene, obstacles: Obstacle[]) {
+/**
+ * Terreno blando de prueba (fase 6), detrás de la grúa: barro (solo orugas y la RT 90) y, al lado, agua
+ * (nadie). Colores de la referencia.
+ */
+export const TEST_SOFT: SoftZone[] = [
+  { kind: 'mud', x: -32, z: 0, w: 26, d: 30 },
+  { kind: 'water', x: -32, z: 30, w: 26, d: 14 },
+];
+const SOFT_COLOR = { mud: '#54432f', water: '#28465e' };
+
+export function buildSite(scene: THREE.Scene, obstacles: Obstacle[], softs: SoftZone[] = []) {
+  for (const s of softs) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(s.w, s.d), new THREE.MeshLambertMaterial({
+      color: SOFT_COLOR[s.kind], polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
+    }));
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(s.x, 0.01, s.z);
+    m.receiveShadow = true;
+    scene.add(m);
+  }
   const concrete = new THREE.MeshLambertMaterial({ color: '#a7a39a' });
   const blocks = obstacles.filter((o) => o.kind === 'block');
   const inst = new THREE.InstancedMesh(box, concrete, Math.max(1, blocks.length));
