@@ -1,5 +1,5 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import { SLING, type CraneSpec } from '../crane/cranes';
+import { SLING, bodyHalf, type CraneSpec } from '../crane/cranes';
 import { carrierLift, headPos, type CraneState } from '../crane/kinematics';
 import { craneMasses, supportRect, type CraneConfig, type SupportMode } from '../crane/stability';
 import { apply, axisAngle, mul, rotate, type Pose, type V3 } from '../crane/pose';
@@ -117,12 +117,12 @@ export class Physics {
     const T = this.T, [L0, L1] = T.len;
     const c = Math.cos(h), s = Math.sin(h);
     // esquinas en el mundo para el límite de la obra
-    for (const lx of [L0, L1]) for (const lz of [-T.half, T.half]) {
+    for (const lx of [L0, L1]) for (const lz of [-bodyHalf(T), bodyHalf(T)]) {
       const wx = x + c * lx + s * lz, wz = z - s * lx + c * lz;
       if (Math.abs(wx) > SITE_HALF || Math.abs(wz) > SITE_HALF) return 'Límite de la obra';
     }
     const cx = (L0 + L1) / 2, hy = (T.deckHi - CLEARANCE) / 2;
-    const shape = new RAPIER.Cuboid((L1 - L0) / 2, hy, T.half);
+    const shape = new RAPIER.Cuboid((L1 - L0) / 2, hy, bodyHalf(T));
     const pos = { x: x + c * cx, y: CLEARANCE + hy, z: z - s * cx };
     return this.hitsSomething(pos, axisAngle(0, 1, 0, h), shape) ? 'El chasis toca un obstáculo' : null;
   }
@@ -160,7 +160,7 @@ export class Physics {
     this.chassisBody = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(pose.t.x, pose.t.y, pose.t.z));
     const [L0, L1] = T.len;
     world.createCollider(
-      RAPIER.ColliderDesc.cuboid((L1 - L0) / 2, T.deckHi / 2, T.half).setTranslation((L0 + L1) / 2, T.deckHi / 2, 0),
+      RAPIER.ColliderDesc.cuboid((L1 - L0) / 2, T.deckHi / 2, bodyHalf(T)).setTranslation((L0 + L1) / 2, T.deckHi / 2, 0),
       this.chassisBody,
     );
     this.chassisBody.setRotation(pose.q, false);
@@ -337,7 +337,7 @@ export class Physics {
     const com = { x: 0, y: 0, z: 0 };
     for (const p of pts) { com.x += p.m * p.x / M; com.y += p.m * p.y / M; com.z += p.m * p.z / M; }
     // Inercia: masas puntuales respecto del CDG + el portador como caja (diagonal; suficiente para la caída)
-    const [L0, L1] = T.len, lx = L1 - L0, ly = T.deckHi, lz = 2 * T.half;
+    const [L0, L1] = T.len, lx = L1 - L0, ly = T.deckHi, lz = 2 * bodyHalf(T);
     const I = { x: T.mCar * (ly * ly + lz * lz) / 12, y: T.mCar * (lx * lx + lz * lz) / 12, z: T.mCar * (lx * lx + ly * ly) / 12 };
     for (const p of pts) {
       const dx = p.x - com.x, dy = p.y - com.y, dz = p.z - com.z;
@@ -361,7 +361,7 @@ export class Physics {
     const r = supportRect(T, md);
     if (md === 'out') for (const x of [r.xf, r.xr]) for (const z of [-r.hw, r.hw]) cub(0.36, 0.1, 0.36, x, 0.1 - lift, z);
     else cub((r.xf - r.xr) / 2, 0.2, r.hw, (r.xf + r.xr) / 2, 0.2, 0);
-    cub((L1 - L0) / 2, (T.deckHi - T.deckLo) / 2, T.half, (L0 + L1) / 2, (T.deckLo + T.deckHi) / 2, 0);
+    cub((L1 - L0) / 2, (T.deckHi - T.deckLo) / 2, bodyHalf(T), (L0 + L1) / 2, (T.deckLo + T.deckHi) / 2, 0);
     // superestructura y pluma, giradas con el slew actual alrededor del centro de giro
     const qs = axisAngle(0, 1, 0, S.slew);
     const at = (x: number, y: number) => { const p = rotate(qs, { x, y, z: 0 }); return { x: T.piv + p.x, y: p.y, z: p.z }; };

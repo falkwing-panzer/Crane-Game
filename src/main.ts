@@ -32,7 +32,7 @@ async function start() {
   for (const o of TEST_OBSTACLES) phys.addObstacle(o);
   buildSite(ctx.scene, phys.obstacles);
   const rig = new Rigging(ctx.scene, phys);
-  const cam = new CameraRig(ctx, T, crane.cab);
+  const cam = new CameraRig(ctx, crane.cab, crane.eye);
   const input = new Input();
   const hud = new Hud(document.getElementById('hud')!);
 

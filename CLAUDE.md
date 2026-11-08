@@ -163,6 +163,10 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - **Suspensión** (aproximación visual, no está en la referencia): cabeceo 0,006 rad por m/s² y balanceo 0,009 rad por m/s²
   lateral, resorte ω = 5, ζ = 0,6, tope 1°. Va **en la pose** (también en física) para que el cable salga de la cabeza; las
   ruedas van en un grupo que deshace la suspensión.
+- **Chasis de la AT 60 más ancho** (pedido por Jesús): `bodyHalf(T)` = 1,7 m (3,4 m) en vez de `half` = 1,38 de la
+  referencia, solo para el dibujo y los choques; `CRANES` no cambia y la estabilidad sigue con `tire`/`out` (ojo: las ruedas quedan más afuera que `tire.hw` = 1,25). Cabina del
+  conductor a todo el ancho (el largo y la altura siguen la fórmula de la referencia: el techo queda bajo la pluma tumbada)
+  y cabina del operador de 2,5 × 0,9 × 1,85 m y llantas de 0,7 m (aproximación visual).
 - **Luz con sombras**: se recentra a saltos cada 15 m de recorrido (no cada cuadro) para que las sombras no tiemblen.
 
 ### Plan y riesgos conocidos

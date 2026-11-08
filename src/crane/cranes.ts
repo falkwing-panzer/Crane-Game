@@ -189,3 +189,12 @@ export const AT60 = CRANES.medium as WheeledSpec;
 
 /** Distancia del centro del gancho a la parte superior de la carga cuando está enganchada (SLING en la referencia). */
 export const SLING = 1.0;
+
+/**
+ * Media anchura del chasis para el dibujo y los choques (m). La referencia da `half` = 1,38 m (2,76 m de ancho) para la
+ * AT 60; Jesús pidió un chasis más ancho para que quepan una cabina de conductor a todo el ancho y una cabina de operador
+ * más grande: 3,4 m (aproximación visual). La estabilidad no cambia: usa los rectángulos `tire` y `out`.
+ */
+export function bodyHalf(T: CraneSpec): number {
+  return T.id === 'medium' ? 1.7 : T.half;
+}

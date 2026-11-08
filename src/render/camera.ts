@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import type { WheeledSpec } from '../crane/cranes';
 import type { CraneState } from '../crane/kinematics';
 import { apply, type Pose } from '../crane/pose';
 import type { SceneCtx } from './scene';
@@ -27,7 +26,7 @@ export class CameraRig {
   private look = new THREE.Vector3();
   private sunAt = new THREE.Vector3();
 
-  constructor(private ctx: SceneCtx, private T: WheeledSpec, private cab: THREE.Object3D[]) {}
+  constructor(private ctx: SceneCtx, private cab: THREE.Object3D[], private eyeLocal: { x: number; y: number; z: number }) {}
 
   cycle(S: CraneState, pose: Pose): string {
     this.mode = ORDER[(ORDER.indexOf(this.mode) + 1) % ORDER.length];
@@ -72,9 +71,9 @@ export class CameraRig {
       this.look.lerp(new THREE.Vector3(c.x + 3 * Math.cos(this.yaw), 5, c.z - 3 * Math.sin(this.yaw)), k);
       camera.lookAt(this.look);
     } else {
-      const [, L1] = this.T.len;
-      const eye = apply(pose, { x: L1 - 0.35, y: 2.15, z: -0.75 });
-      const at = apply(pose, { x: L1 + 20, y: 0.8, z: -0.75 });
+      const e = this.eyeLocal;
+      const eye = apply(pose, e);
+      const at = apply(pose, { x: e.x + 20, y: e.y - 1.2, z: e.z });
       camera.position.set(eye.x, eye.y, eye.z);
       camera.lookAt(at.x, at.y, at.z);
     }

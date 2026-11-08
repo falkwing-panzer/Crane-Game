@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { WheeledSpec } from '../crane/cranes';
+import { bodyHalf, type WheeledSpec } from '../crane/cranes';
 import { carrierLift, type CraneState } from '../crane/kinematics';
 import { suspensionPose, type Pose } from '../crane/pose';
 import { axleSteer } from '../crane/drive';
@@ -49,9 +49,11 @@ export class CraneModel {
   private wheelGroup = new THREE.Group();
   private wheels: THREE.InstancedMesh;
   private hubs: THREE.InstancedMesh;
-  private wheelW = 0.6;
+  private wheelW = 0.7;
   /** Cabina del conductor: se oculta en la vista de cabina */
   readonly cab: THREE.Object3D[] = [];
+  /** Ojo del conductor en el marco del chasis */
+  readonly eye: { x: number; y: number; z: number };
 
   constructor(private T: WheeledSpec) {
     const yellow = new THREE.MeshLambertMaterial({ color: T.color });
@@ -72,14 +74,27 @@ export class CraneModel {
     };
 
     // --- Chasis (portador). +x = frente, -z = izquierda ---
-    const [L0, L1] = T.len, hf = T.half;
+    const [L0, L1] = T.len, hf = bodyHalf(T);
+    // Cabina del conductor a todo el ancho, delante del primer eje (como la referencia: cabX0 = máx(L1 − 2,05, frente de
+    // la rueda delantera), suelo en deckLo − 0,15 y techo bajo la pluma tumbada: pivH − 0,63·boom.w − 0,12).
+    const tireFront = Math.max(...T.axles) + T.wheelR + 0.12;
+    const cabX0 = Math.max(L1 - 2.05, tireFront), cabLow = T.deckLo - 0.15;
+    const cabTop = T.pivH - T.boom.w * 0.63 - 0.12;
     add(this.root, dark, L0 + 0.3, L1 - 0.3, T.deckLo, T.deckHi - 0.45, -0.6, 0.6); // bastidor
-    add(this.root, yellow, L0, L1, T.deckHi - 0.45, T.deckHi, -hf, hf); // plataforma / guardabarros
-    // cabina del conductor: delante a la izquierda, baja para que la pluma descanse encima
+    add(this.root, yellow, L0, cabX0, T.deckHi - 0.45, T.deckHi, -hf, hf); // plataforma / guardabarros
+    const lamp = new THREE.MeshLambertMaterial({ color: '#f6f1cf', emissive: '#6b6440' });
+    const beacon = new THREE.MeshLambertMaterial({ color: '#f08a1c', emissive: '#7a3c00' });
     this.cab.push(
-      add(this.root, yellow, L1 - 2.05, L1, 1.0, 2.2, -hf, -0.15),
-      add(this.root, glass, L1 - 0.02, L1 + 0.01, 1.45, 2.1, -hf + 0.1, -0.25),
+      add(this.root, yellow, cabX0, L1, cabLow, cabTop - 0.08, -hf, hf), // cuerpo
+      add(this.root, yellowDark, cabX0 + 0.05, L1 - 0.15, cabTop - 0.08, cabTop, -hf + 0.05, hf - 0.05), // techo
+      add(this.root, glass, L1 - 0.01, L1 + 0.02, cabTop - 0.85, cabTop - 0.16, -hf + 0.12, hf - 0.12), // parabrisas
+      add(this.root, glass, cabX0 + 0.3, L1 - 0.15, cabTop - 0.8, cabTop - 0.18, -hf - 0.02, hf + 0.02), // ventanas laterales
+      add(this.root, dark, L1 - 0.1, L1 + 0.08, cabLow, cabLow + 0.3, -hf, hf), // parachoques
+      add(this.root, beacon, cabX0 + 0.3, cabX0 + 0.55, cabTop, cabTop + 0.18, -hf + 0.3, -hf + 0.55), // rotativo
     );
+    for (const sd of [-1, 1]) this.cab.push(add(this.root, lamp, L1, L1 + 0.03, cabLow + 0.4, cabLow + 0.58, sd * (hf - 0.65), sd * (hf - 0.2)));
+    /** Ojo del conductor (vista de cabina), a la izquierda */
+    this.eye = { x: L1 - 0.5, y: cabTop - 0.4, z: -hf + 0.7 };
     // cajas de estabilizadores en out.xf / out.xr (como la referencia), con franjas de advertencia
     const stripes = new THREE.MeshLambertMaterial({ map: stripeTexture() });
     for (const x of [T.out.xf, T.out.xr]) {
@@ -115,7 +130,7 @@ export class CraneModel {
     ring.position.set(0, yd + 0.1, 0);
     ring.scale.set(1.2, 0.2, 1.2);
     this.sup.add(ring);
-    add(this.sup, yellow, T.foot - 0.9, 1.3, yd + 0.2, yd + 0.85, -1.15, 1.15); // plataforma giratoria
+    add(this.sup, yellow, T.foot - 0.9, 1.3, yd + 0.2, yd + 0.85, -1.6, 1.6); // plataforma giratoria
     // contrapeso: x = xCw y largo cwLen de la referencia; ancho 1,45 y alto 1,7 son los valores por defecto de cwDims()
     add(this.sup, dark, T.xCw - T.cwLen / 2, T.xCw + T.cwLen / 2, yd + 0.2, yd + 1.9, -0.725, 0.725);
     // soportes del pie de pluma
@@ -125,9 +140,13 @@ export class CraneModel {
     pin.rotation.x = Math.PI / 2;
     pin.scale.set(0.16, 1.6, 0.16);
     this.sup.add(pin);
-    // cabina del operador, a la izquierda de la pluma
-    add(this.sup, yellow, -0.2, 1.6, yd + 0.85, yd + 2.4, -1.25, -0.8);
-    add(this.sup, glass, 1.6, 1.62, yd + 1.3, yd + 2.3, -1.2, -0.85);
+    // cabina del operador, a la izquierda de la pluma (aproximación visual: 2,5 × 0,9 × 1,85 m)
+    const oz0 = -1.7, oz1 = -0.8, oy0 = yd + 0.5, oy1 = yd + 2.35;
+    add(this.sup, yellow, -0.6, 1.9, oy0, oy1, oz0, oz1);
+    add(this.sup, yellowDark, -0.5, 1.75, oy1, oy1 + 0.06, oz0 + 0.04, oz1 - 0.04); // techo
+    add(this.sup, glass, 1.9, 1.93, oy0 + 0.55, oy1 - 0.12, oz0 + 0.08, oz1 - 0.08); // frente
+    add(this.sup, glass, 0.1, 1.75, oy0 + 0.75, oy1 - 0.15, oz0 - 0.02, oz0); // ventana lateral
+    add(this.sup, glass, 0.2, 1.7, oy1 + 0.005, oy1 + 0.07, oz0 + 0.12, oz1 - 0.12); // ventana del techo
 
     // cilindro de elevación (se orienta en cada cuadro)
     this.luffBarrel = new THREE.Mesh(cyl, dark);
@@ -194,7 +213,7 @@ export class CraneModel {
 
   /** Ruedas: dirección por eje (como la referencia), giro según lo recorrido y sin el balanceo del chasis. */
   private updateWheels(S: CraneState) {
-    const T = this.T, w = this.wheelW, wz = T.half - w / 2;
+    const T = this.T, w = this.wheelW, wz = bodyHalf(T) - w / 2;
     const sp = suspensionPose(S); // el grupo aplica la inversa de la suspensión
     _qs.set(sp.q.x, sp.q.y, sp.q.z, sp.q.w).invert();
     this.wheelGroup.quaternion.copy(_qs);
@@ -220,7 +239,7 @@ export class CraneModel {
    * el suelo está en y = −lift.
    */
   private updateOutriggers(S: CraneState) {
-    const T = this.T, o = T.out, hf = T.half, dLo = T.deckLo;
+    const T = this.T, o = T.out, hf = bodyHalf(T), dLo = T.deckLo;
     const e = Math.min(1, S.out * 1.6);
     const ground = -carrierLift(S);
     const padY = S.out >= 0.5 ? ground : dLo * 0.8 * (1 - S.out / 0.5);
