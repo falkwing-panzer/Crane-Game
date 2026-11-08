@@ -1,0 +1,2097 @@
+<title>Operador de Grúa Móvil</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: cabina del operador. Arriba dos ventanas (planta + lateral), abajo la consola (instrumentos · tabla de carga · mandos). Un solo look nocturno, a propósito. */
+:root{
+  --bg:#1a1f26; --panel:#222a33; --panel-2:#2a333e; --line:#36414e;
+  --ink:#ebe6da; --muted:#909aa6; --amber:#f2b632; --amber-ink:#2a2006;
+  --alarm:#e8573f; --ok:#74c690; --warn:#f0a03a;
+  --f-display:'Saira Condensed','Arial Narrow',sans-serif;
+  --f-body:'Barlow',system-ui,sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+}
+html,body{background:var(--bg);color:var(--ink)}
+body{font-family:var(--f-body);font-size:15px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:14px 28px}
+.wrap{max-width:1320px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px 20px}
+h1{font-family:var(--f-display);font-weight:700;font-size:clamp(26px,4vw,38px);line-height:1;margin:0;letter-spacing:.01em;text-transform:uppercase;text-wrap:balance}
+h1 span{color:var(--amber)}
+.sub{color:var(--muted);font-size:13px;margin-top:4px}
+.levels{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:600 12px/1 var(--f-mono);color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:7px 9px;cursor:pointer;display:flex;gap:6px;align-items:center}
+.chip .st{color:var(--amber);letter-spacing:1px}
+.chip[aria-current="true"]{color:var(--amber-ink);background:var(--amber);border-color:var(--amber)}
+.chip[aria-current="true"] .st{color:var(--amber-ink)}
+.chip:disabled{opacity:.4;cursor:not-allowed}
+.stage{position:relative;display:grid;grid-template-columns:3fr 2fr;gap:8px}
+@media (max-width:820px){.stage{grid-template-columns:1fr}}
+.view{position:relative;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:#20262e;min-width:0}
+.view canvas{display:block;width:100%;max-width:100%;touch-action:none}
+#top{aspect-ratio:3/2} #side{aspect-ratio:1/1}
+@media (min-width:821px){#side{aspect-ratio:auto;height:100%}}
+.vlabel{position:absolute;left:8px;top:8px;font:600 10px/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);background:rgba(20,24,30,.75);padding:5px 7px;border-radius:3px;pointer-events:none}
+.modal{position:absolute;inset:0;display:flex;align-items:flex-start;justify-content:center;background:rgba(14,18,24,.72);padding:12px;overflow:auto;z-index:5;border-radius:6px}
+.modal[hidden]{display:none}
+.card{background:var(--panel);border:1px solid var(--line);border-top:4px solid var(--amber);border-radius:6px;padding:18px 20px;max-width:640px;width:100%;display:flex;flex-direction:column;gap:11px;margin:auto}
+.card.fail{border-top-color:var(--alarm)}
+.card .eyebrow{font:600 11px/1.3 var(--f-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.card h2{font-family:var(--f-display);font-size:30px;line-height:1;margin:0;text-transform:uppercase}
+.card p{margin:0;color:#cfcabf}
+.card ul{margin:0;padding-left:18px;color:#cfcabf;display:flex;flex-direction:column;gap:3px;font-size:14px}
+.cranes{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:8px}
+.copt{display:flex;flex-direction:column;gap:4px;text-align:left;background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:9px 10px;color:var(--ink);cursor:pointer;font:inherit;min-width:0}
+.copt b{font:700 18px/1 var(--f-display);text-transform:uppercase;letter-spacing:.03em}
+.copt small{font:11px/1.35 var(--f-mono);color:var(--muted)}
+.copt em{font-style:normal;font-size:12px;color:#cfcabf;line-height:1.3}
+.copt[aria-pressed="true"]{border-color:var(--amber);box-shadow:inset 0 0 0 1px var(--amber)}
+.copt:disabled{opacity:.42;cursor:not-allowed}
+.copt .why{color:var(--alarm)}
+.tag{display:inline-block;font:600 10px/1 var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--amber-ink);background:var(--amber);padding:4px 6px;border-radius:3px;margin-right:6px}
+.stars{font-size:30px;letter-spacing:4px;color:var(--amber)}
+.stars .off{color:var(--line)}
+.stats{display:grid;grid-template-columns:1fr auto;gap:4px 16px;font:13px/1.5 var(--f-mono);font-variant-numeric:tabular-nums;color:var(--muted)}
+.stats b{color:var(--ink);font-weight:600;text-align:right}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.btn{font:700 15px/1 var(--f-display);text-transform:uppercase;letter-spacing:.06em;padding:11px 16px;border-radius:4px;border:1px solid var(--line);background:var(--panel-2);color:var(--ink);cursor:pointer}
+.btn.primary{background:var(--amber);color:var(--amber-ink);border-color:var(--amber)}
+.btn:focus-visible,.chip:focus-visible,.pad:focus-visible,.copt:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.keys{font:12px/1.8 var(--f-mono);color:var(--muted)}
+kbd{font:600 11px var(--f-mono);border:1px solid var(--line);border-bottom-width:2px;border-radius:3px;padding:1px 5px;color:var(--ink);background:var(--panel-2)}
+
+.console{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.ptitle{font:600 11px/1 var(--f-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);display:flex;justify-content:space-between;gap:8px}
+.readouts{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px 12px}
+.ro{display:flex;flex-direction:column;gap:2px;min-width:0}
+.ro small{font:600 10px/1 var(--f-mono);letter-spacing:.1em;color:var(--muted);text-transform:uppercase;white-space:nowrap}
+.ro output{font:600 16px/1.1 var(--f-mono);font-variant-numeric:tabular-nums;color:var(--ink);white-space:nowrap}
+.ro output.warn{color:var(--alarm)}
+.meter{display:flex;flex-direction:column;gap:4px}
+.meter .lab{display:flex;justify-content:space-between;font:600 10px/1 var(--f-mono);letter-spacing:.12em;color:var(--muted);text-transform:uppercase}
+.meter .lab b{font:600 13px/1 var(--f-mono);color:var(--ink);font-variant-numeric:tabular-nums}
+.bar{position:relative;height:12px;background:var(--panel-2);border:1px solid var(--line);border-radius:2px;overflow:hidden}
+.bar i{position:absolute;inset:0 auto 0 0;background:var(--ok);width:0}
+.bar.w i{background:var(--warn)} .bar.d i{background:var(--alarm)}
+.bar u{position:absolute;top:0;bottom:0;width:1px;background:var(--ink);opacity:.5}
+.alarms{display:flex;flex-wrap:wrap;gap:6px}
+.lamp{font:600 10px/1 var(--f-mono);letter-spacing:.08em;padding:6px 7px;border-radius:3px;border:1px solid var(--line);color:#5a6573;text-transform:uppercase}
+.lamp.on{color:#fff;background:var(--alarm);border-color:var(--alarm)}
+.lamp.on.good{background:var(--ok);border-color:var(--ok);color:#10261a}
+.lamp.on.mid{background:var(--warn);border-color:var(--warn);color:#2a1a04}
+#chart{width:100%;height:170px;display:block}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font:11px/1 var(--f-mono);color:var(--muted)}
+.legend span{display:flex;align-items:center;gap:6px}
+.legend i{display:inline-block;width:16px;height:2px;background:var(--amber)}
+.legend i.dash{background:repeating-linear-gradient(90deg,var(--muted) 0 4px,transparent 4px 7px)}
+.controls{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.group[hidden]{display:none}
+.group{display:flex;flex-direction:column;gap:4px;min-width:0}
+.group small{font:600 10px/1 var(--f-mono);letter-spacing:.1em;color:var(--muted);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.pad{font:700 17px/1 var(--f-display);height:42px;border-radius:4px;border:1px solid var(--line);background:var(--panel-2);color:var(--ink);cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;min-width:0}
+.pad:disabled{opacity:.35;cursor:not-allowed}
+.pad.held{background:var(--amber);color:var(--amber-ink);border-color:var(--amber)}
+.pad.hook{grid-column:1/-1;background:#3a2f12;border-color:#6b5520;color:var(--amber);letter-spacing:.08em;font-size:16px}
+.pad.hook:active{background:var(--amber);color:var(--amber-ink)}
+.pad.toggle{font-size:14px;letter-spacing:.03em}
+.pad.toggle[aria-pressed="true"]{background:#1f3a2a;border-color:var(--ok);color:var(--ok)}
+.toggles{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(78px,1fr));gap:5px}
+@media (max-width:420px){.controls{grid-template-columns:1fr 1fr}.toggles{grid-template-columns:1fr 1fr}.readouts{grid-template-columns:1fr 1fr}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Operador de <span>Grúa Móvil</span></h1>
+      <div class="sub" id="lvlname">Nivel 1</div>
+    </div>
+    <nav class="levels" id="levels" aria-label="Niveles"></nav>
+  </header>
+
+  <div class="stage">
+    <div class="view"><canvas id="top" aria-label="Vista en planta de la obra"></canvas><span class="vlabel">Planta</span></div>
+    <div class="view"><canvas id="side" aria-label="Vista lateral"></canvas><span class="vlabel" id="sidelabel">Lateral · plano de la pluma</span></div>
+    <div class="modal" id="modal" hidden><div class="card" id="card"></div></div>
+  </div>
+
+  <div class="console">
+    <section class="panel">
+      <div class="ptitle"><span>Instrumentos</span><span id="clock">00:00</span></div>
+      <div class="meter">
+        <div class="lab"><span>LMI · carga / capacidad nominal</span><b id="m-lmi">0 %</b></div>
+        <div class="bar" id="bar-lmi"><i></i><u style="left:72%"></u><u style="left:80%"></u></div>
+      </div>
+      <div class="meter">
+        <div class="lab"><span>Vuelco · momento / estabilidad</span><b id="m-stab">0 %</b></div>
+        <div class="bar" id="bar-stab"><i></i><u style="left:85%"></u></div>
+      </div>
+      <div class="readouts">
+        <div class="ro"><small>Giro</small><output id="r-slew">0°</output></div>
+        <div class="ro"><small>Ángulo pluma</small><output id="r-ang">0.0°</output></div>
+        <div class="ro" id="ro-len"><small>Long. pluma</small><output id="r-len">0.0 m</output></div>
+        <div class="ro"><small>Radio</small><output id="r-rad">0.0 m</output></div>
+        <div class="ro"><small>Altura gancho</small><output id="r-hook">0.0 m</output></div>
+        <div class="ro"><small>Carga / cap.</small><output id="r-load">0.0 / 0.0 t</output></div>
+        <div class="ro"><small>Balanceo</small><output id="r-sway">0.0°</output></div>
+        <div class="ro"><small>Viento</small><output id="r-wind">0.0 m/s</output></div>
+        <div class="ro"><small>Velocidad</small><output id="r-spd">0.0 km/h</output></div>
+        <div class="ro" id="ro-jib" hidden><small>Plumín</small><output id="r-jib">0°</output></div>
+      </div>
+      <div class="alarms">
+        <span class="lamp" id="l-out">Estabilizadores</span>
+        <span class="lamp" id="l-cw" hidden>Lastre</span>
+        <span class="lamp" id="l-yg" hidden>Arriostramiento</span>
+        <span class="lamp" id="l-mnt" hidden>Montaje</span>
+        <span class="lamp" id="l-lmi">Corte LMI</span>
+        <span class="lamp" id="l-atb">Anti dos bloques</span>
+        <span class="lamp" id="l-line">Línea eléctrica</span>
+        <span class="lamp" id="l-tilt">Inclinación</span>
+        <span class="lamp" id="l-landed">Carga apoyada</span>
+        <span class="lamp" id="l-zone">En zona</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="ptitle"><span>Tabla de carga</span><span id="chart-len">—</span></div>
+      <canvas id="chart" aria-label="Capacidad según radio en la dirección actual de la pluma"></canvas>
+      <div class="legend"><span><i></i><span id="lg-a">Con estabilizadores</span></span><span><i class="dash"></i><span id="lg-b">Sobre neumáticos</span></span></div>
+    </section>
+
+    <section class="panel">
+      <div class="ptitle"><span>Mandos</span><span id="cranename">—</span></div>
+      <div class="controls">
+        <div class="group"><small>Avance ↑↓</small>
+          <div class="pair"><button class="pad" data-k="bk" aria-label="Retroceder">◀</button><button class="pad" data-k="fw" aria-label="Avanzar">▶</button></div></div>
+        <div class="group"><small>Dirección ←→</small>
+          <div class="pair"><button class="pad" data-k="stl" aria-label="Girar volante a la izquierda">↺</button><button class="pad" data-k="str" aria-label="Girar volante a la derecha">↻</button></div></div>
+        <div class="group"><small>Giro A D</small>
+          <div class="pair"><button class="pad" data-k="sll" aria-label="Girar superestructura a la izquierda">⟲</button><button class="pad" data-k="slr" aria-label="Girar superestructura a la derecha">⟳</button></div></div>
+        <div class="group"><small>Pluma W S</small>
+          <div class="pair"><button class="pad" data-k="lu" aria-label="Subir pluma">▲</button><button class="pad" data-k="ld" aria-label="Bajar pluma">▼</button></div></div>
+        <div class="group"><small>Telescopio Q E</small>
+          <div class="pair"><button class="pad" data-k="ti" aria-label="Retraer pluma">−</button><button class="pad" data-k="to" aria-label="Extender pluma">+</button></div></div>
+        <div class="group" id="g-jib" hidden><small>Plumín T G</small>
+          <div class="pair"><button class="pad" data-k="ju" aria-label="Subir plumín">▲</button><button class="pad" data-k="jd" aria-label="Bajar plumín">▼</button></div></div>
+        <div class="group" id="g-sl" hidden><small>Superlift K L</small>
+          <div class="pair"><button class="pad" data-k="sli" aria-label="Acercar lastre superlift">−</button><button class="pad" data-k="slo" aria-label="Alejar lastre superlift">+</button></div></div>
+        <div class="group"><small>Gancho R F</small>
+          <div class="pair"><button class="pad" data-k="hu" aria-label="Subir gancho">▲</button><button class="pad" data-k="hd" aria-label="Bajar gancho">▼</button></div></div>
+        <div class="toggles">
+          <button class="pad toggle" id="b-out" aria-pressed="false">Estab. O</button>
+          <button class="pad toggle" id="b-fine" aria-pressed="false">Fina ⇧</button>
+          <button class="pad toggle" id="b-view">Vista V</button>
+          <button class="pad toggle" id="b-zoom" aria-pressed="false">Zoom Z</button>
+          <button class="pad toggle" id="b-cw" aria-pressed="false">Lastre B</button>
+          <button class="pad toggle" id="b-yg" aria-pressed="false">Arriostr. Y</button>
+          <button class="pad toggle" id="b-mnt" aria-pressed="false">Montaje M</button>
+        </div>
+        <button class="pad hook" id="b-hook">ENGANCHAR / SOLTAR · ESPACIO</button>
+      </div>
+      <div class="row"><button class="btn" id="b-restart">Reiniciar nivel</button></div>
+    </section>
+  </div>
+</div>
+
+<script>
+(() => {
+
+const D = Math.PI / 180, G = 9.81;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const CRANES = {
+  small: { id: 'small', ltm: true, name: 'City 25', size: 'Pequeña', color: '#f2c12e',
+    note: 'Compacta y ágil: dirección en las 4 ruedas, cabe en calles estrechas. Poca capacidad.',
+    len: [-4.4, 6.2], half: 1.25, deckLo: 0.65, deckHi: 1.8, axles: [-2.6, 2.6], wheelR: 0.67, wheelbase: 5.2, steerMax: 32 * D, allSteer: true,
+    mCar: 14, xCar: 0.6, piv: -0.9, foot: -1.5, pivH: 2.45, mSup: 3, xSup: -0.5, mCw: 4, xCw: -2.4, cwLen: 1.4,
+    out: { xf: 3.9, xr: -3.9, hw: 2.7, t: 2.5 }, tire: { xf: 2.6, xr: -2.6, hw: 1.15 },
+    boom: { min: 8, max: 26, kg: 0.09, angMin: 0, angMax: 80 * D, w: 0.6, lattice: false },
+    structMax: 25, structMin: 7, hookM: 0.25,
+    spd: { drive: 4.5, slew: 6 * D, luff: 5 * D, tele: 1.4, hoist: 2.6 } },
+  medium: { id: 'medium', ltm: true, name: 'AT 60', size: 'Mediana', color: '#f0bb27',
+    note: 'Todo terreno de 3 ejes. Buen equilibrio entre alcance, capacidad y tamaño.',
+    len: [-6.0, 6.3], half: 1.38, deckLo: 0.7, deckHi: 1.95, axles: [-4.0, -2.45, 3.4], wheelR: 0.73, wheelbase: 7.0, steerMax: 30 * D, allSteer: true,
+    mCar: 26, xCar: 0.8, piv: -1.8, foot: -2.1, pivH: 2.75, mSup: 6, xSup: -0.4, mCw: 11, xCw: -3.4, cwLen: 2.0,
+    out: { xf: 1.6, xr: -5.2, hw: 3.6, t: 3.5 }, tire: { xf: 3.4, xr: -4.0, hw: 1.25 },
+    boom: { min: 11, max: 42, kg: 0.17, angMin: 0, angMax: 80 * D, w: 0.85, lattice: false },
+    structMax: 60, structMin: 13, hookM: 0.4,
+    spd: { drive: 3.2, slew: 4 * D, luff: 3.5 * D, tele: 1.0, hoist: 2.1 } },
+  large: { id: 'large', ltm: true, name: 'AT 220', size: 'Grande', color: '#efb722',
+    note: 'Gran capacidad y pluma de 64 m. Pesada, lenta y necesita mucho espacio para los estabilizadores.',
+    len: [-8.6, 8.8], half: 1.5, deckLo: 0.75, deckHi: 2.0, axles: [-5.9, -4.3, -2.7, 4.3, 5.9], wheelR: 0.77, wheelbase: 10, steerMax: 26 * D, allSteer: true,
+    mCar: 48, xCar: 0.8, piv: -2.4, foot: -2.7, pivH: 2.98, mSup: 12, xSup: -0.6, mCw: 42, xCw: -5.2, cwLen: 3.0,
+    out: { xf: 2.4, xr: -7.2, hw: 4.8, t: 6 }, tire: { xf: 5.9, xr: -5.9, hw: 1.35 },
+    boom: { min: 14, max: 64, kg: 0.32, angMin: 0, angMax: 82 * D, w: 1.15, lattice: false },
+    structMax: 220, structMin: 32, hookM: 1.2,
+    spd: { drive: 2.2, slew: 2.2 * D, luff: 2.2 * D, tele: 0.6, hoist: 1.7 } },
+  sk: { id: 'sk', ltm: true, rim: '#d9dde1', name: 'SK 60', size: 'Grúa torre móvil', color: '#d8402f',
+    note: 'Grúa torre sobre camión de 6 ejes que se monta sola (M): torre de 37,2 m y pluma de 60 m con carro (Q/E). 10 t hasta 13,2 m y 1,7 t en la punta. La pluma se inclina hasta 30° (W/S).',
+    tower: { H: 37.2, H0: 18.6, J: 60, jibM: 7, t: 45, col: '#d8402f' },
+    len: [-8.0, 8.9], half: 1.375, deckLo: 0.75, deckHi: 1.95, axles: [-6.2, -4.6, -3.0, 3.4, 5.0, 6.6], wheelR: 0.7, wheelbase: 10, steerMax: 26 * D, allSteer: true,
+    mCar: 40, xCar: 1.0, piv: -3.6, foot: 0, pivH: 39.7, mSup: 26, xSup: 0, mCw: 26, xCw: -9, cwLen: 3,
+    out: { xf: 1.7, xr: -7.4, hw: 4.6, t: 4 }, tire: { xf: 6.6, xr: -6.2, hw: 1.2 },
+    boom: { min: 3, max: 60, kg: 0, angMin: 0, angMax: 30 * D, w: 1.2, lattice: true },
+    structMax: 10, structMin: 1.7, hookM: 0.3,
+    spd: { drive: 2.6, slew: 8 * D, luff: 2 * D, tele: 1.3, hoist: 1.7 } },
+  rt: { id: 'rt', ltm: true, rt: true, offroad: true, rim: '#2f3438', name: 'RT 90', size: 'Todo terreno RT', color: '#f0b51e',
+    note: 'Rough Terrain de 81,6 t: 2 ejes con neumáticos 29.5×25 de 1,8 m, dirección en las 4 ruedas y una sola cabina en la superestructura. Pluma de 11,3 a 43,9 m. Entra en el barro.',
+    len: [-5.3, 5.3], half: 1.67, deckLo: 0.95, deckHi: 2.15, axles: [-2.108, 2.108], wheelR: 0.9, wheelbase: 4.216, steerMax: 30 * D, allSteer: true,
+    mCar: 34, xCar: 0.3, piv: -0.4, foot: -1.8, pivH: 3.03, mSup: 7, xSup: -0.5, mCw: 16, xCw: -3.3, cwLen: 1.6,
+    out: { xf: 3.55, xr: -3.55, hw: 3.66, t: 3 }, tire: { xf: 2.108, xr: -2.108, hw: 1.4 },
+    boom: { min: 11.3, max: 43.9, kg: 0.3, angMin: 0, angMax: 76 * D, w: 1.0, lattice: false },
+    structMax: 81.6, structMin: 9, hookM: 0.9,
+    spd: { drive: 3.6, slew: 3.5 * D, luff: 3.5 * D, tele: 0.9, hoist: 2.1 } },
+  xl: { id: 'xl', rim: '#f0be22', name: 'AT 500-8', size: 'Gigante', color: '#f3c01d',
+    note: 'Todo terreno de 8 ejes y 500 t. Pluma de 50 m. En obra se monta el lastre de 165 t (B) y el arriostramiento en Y (Y), necesario para pluma larga.',
+    ltm: true, len: [-9.07, 9.07], half: 1.5, deckLo: 0.75, deckHi: 1.975, axles: [-6.81, -5.17, -2.88, -1.24, 0.40, 3.22, 4.89, 6.53], wheelR: 0.74, wheelbase: 13.3, steerMax: 24 * D, allSteer: true,
+    mCar: 96, xCar: 0.8, piv: -4.1, foot: -1.6, pivH: 3.15, mSup: 40, xSup: -0.8, mCw: 10, cwBase: 10, xCw: -5.4, cwLen: 2.4, cwWide: 4.12, ballast: { m: 165, t: 14 }, yguy: { t: 24, teleMax: 35 },
+    out: { xf: 1.82, xr: -8.23, hw: 4.8, t: 8 }, tire: { xf: 6.53, xr: -6.81, hw: 1.4 },
+    boom: { min: 16.1, max: 50, kg: 0.95, angMin: 0, angMax: 83 * D, w: 1.45, lattice: false },
+    structMax: 500, structMin: 95, hookM: 4,
+    spd: { drive: 1.8, slew: 1.5 * D, luff: 1.6 * D, tele: 0.45, hoist: 1.4 } },
+  at300: { id: 'at300', ltm: true, rim: '#f0be22', name: 'AT 300-6', size: 'Muy grande', color: '#f4c51f',
+    note: '6 ejes y 300 t. Pluma telescópica de 14,7 a 78 m, base de apoyo 8,9 × 8,5 m. Monta 86 t de lastre en obra (B).',
+    len: [-7.8, 7.8], half: 1.5, deckLo: 0.75, deckHi: 2.0, axles: [-5.4, -3.75, -1.2, 0.45, 3.6, 5.25], wheelR: 0.74, wheelbase: 9, steerMax: 26 * D, allSteer: true,
+    mCar: 40, xCar: 1.0, piv: -2.0, foot: -1.6, pivH: 3.05, mSup: 14, xSup: -0.8, mCw: 10, cwBase: 10, xCw: -4.3, cwLen: 2.6, ballast: { m: 86, t: 12 },
+    out: { xf: 1.9, xr: -7.0, hw: 4.27, t: 7 }, tire: { xf: 5.25, xr: -5.4, hw: 1.3 },
+    boom: { min: 14.7, max: 78, kg: 0.32, angMin: 0, angMax: 83 * D, w: 1.25, lattice: false },
+    structMax: 300, structMin: 22, hookM: 2.5,
+    spd: { drive: 2.4, slew: 2 * D, luff: 2.2 * D, tele: 0.55, hoist: 1.6 } },
+  at450: { id: 'at450', ltm: true, rim: '#f0be22', name: 'AT 450-8', size: 'Muy grande', color: '#f3c21e',
+    note: '8 ejes y 450 t. Pluma de 16,1 a 85 m, base 11 × 9,6 m. Lastre de 124 t en torre de placas redondas (B).',
+    len: [-9.95, 10.4], half: 1.5, deckLo: 0.75, deckHi: 2.0, axles: [-7.6, -6.0, -3.4, -1.8, -0.2, 4.6, 6.2, 7.8], wheelR: 0.78, wheelbase: 14, steerMax: 24 * D, allSteer: true,
+    mCar: 64, xCar: 1.5, piv: -3.6, foot: -1.8, pivH: 3.15, mSup: 22, xSup: -0.8, mCw: 10, cwBase: 10, xCw: -5.6, cwLen: 2.7, cwStyle: 'stack', ballast: { m: 124, t: 14 },
+    out: { xf: 2.1, xr: -8.9, hw: 4.8, t: 8 }, tire: { xf: 7.8, xr: -7.6, hw: 1.3 },
+    boom: { min: 16.1, max: 85, kg: 0.42, angMin: 0, angMax: 83 * D, w: 1.35, lattice: false },
+    structMax: 450, structMin: 24, hookM: 3.5,
+    spd: { drive: 1.9, slew: 1.6 * D, luff: 1.8 * D, tele: 0.5, hoist: 1.5 } },
+  at650: { id: 'at650', ltm: true, rim: '#f0be22', name: 'AT 650-8', size: 'Gigante', color: '#f3c21e',
+    note: '8 ejes y 700 t. Pluma de 54 m con arriostramiento en Y (Y), 155 t de lastre (B) y, en algunos trabajos, plumín abatible de celosía de 42 m (T/G).',
+    len: [-10.3, 8.9], half: 1.5, deckLo: 0.75, deckHi: 2.0, axles: [-8.2, -6.55, -4.9, -3.25, 0.55, 2.2, 4.65, 6.3], wheelR: 0.78, wheelbase: 13, steerMax: 24 * D, allSteer: true,
+    mCar: 70, xCar: 1.0, piv: -4.4, foot: -2.2, pivH: 3.25, mSup: 30, xSup: -0.8, mCw: 20, cwBase: 20, xCw: -6.4, cwLen: 3.0, cwStyle: 'stack', ballast: { m: 155, t: 16 }, yguy: { t: 26, teleMax: 35 },
+    jibDef: { len: 42, kg: 0.45, cap: 150, relMin: 0, relMax: 75 * D, spd: 1.5 * D, t: 32 },
+    out: { xf: 3.42, xr: -9.4, hw: 5.9, t: 9 }, tire: { xf: 6.3, xr: -8.2, hw: 1.3 },
+    boom: { min: 16, max: 54, kg: 0.9, angMin: 0, angMax: 84 * D, w: 1.55, lattice: false },
+    structMax: 700, structMin: 160, hookM: 5,
+    spd: { drive: 1.6, slew: 1.3 * D, luff: 1.4 * D, tele: 0.4, hoist: 1.3 } },
+  lr: { id: 'lr', name: 'LR 3000', size: 'Colosal', color: '#f2b632',
+    note: 'Grúa sobre orugas de 3.000 t: pluma de celosía de 108 m, mástil derrick de 60 m y 1.500 t de lastre superlift. Se monta en obra y apenas se mueve.',
+    len: [-9.9, 9.9], half: 7.0, deckLo: 1.6, deckHi: 3.2, crawler: true, trackW: 3.0, trackN: 2, carX: 5.0, ringR: 5.2, supW: 4.6, supFront: 7.5, cwW: 5.5,
+    mCar: 600, xCar: 0, piv: 0, foot: 2.5, pivH: 6.0, mSup: 400, xSup: -3, mCw: 750, xCw: -14, cwLen: 5.0,
+    derrick: { len: 60, kg: 2.0, foot: -2.0, ang: 75 * D }, superlift: { m: 1500, r: 22, r0: 22, rMin: 15, rMax: 30, w: 10, d: 7, h: 3.0 },
+    track: { xf: 9.9, xr: -9.9, hw: 7.0 },
+    boom: { min: 108, max: 108, kg: 3.2, angMin: 45 * D, angMax: 85 * D, w: 5.0, lattice: true },
+    structMax: 3000, structMin: 3000, hookM: 40,
+    spd: { drive: 0.45, turn: 1.2 * D, slew: 0.5 * D, luff: 0.5 * D, tele: 0, hoist: 0.7 } },
+  crawler: { id: 'crawler', name: 'LR 300', size: 'Sobre orugas', color: '#cf7f2a',
+    note: 'Pluma de celosía de 48 m fija. No usa estabilizadores: puede desplazarse con la carga colgada y cruzar terreno blando.',
+    len: [-4.8, 4.8], half: 3.7, deckLo: 1.3, deckHi: 2.3, crawler: true, trackW: 1.1,
+    mCar: 75, xCar: 0, piv: 0, foot: 1.3, pivH: 3.4, mSup: 25, xSup: -1.0, mCw: 70, xCw: -5.8, cwLen: 2.6,
+    track: { xf: 4.6, xr: -4.6, hw: 3.6 },
+    boom: { min: 48, max: 48, kg: 0.36, angMin: 25 * D, angMax: 84 * D, w: 1.6, lattice: true },
+    structMax: 120, structMin: 120, hookM: 1.5,
+    spd: { drive: 1.3, turn: 7 * D, slew: 1.8 * D, luff: 1.8 * D, tele: 0, hoist: 1.8 } },
+};
+const KF = { out: 0.85, tire: 0.66, move: 0.45, crawler: 0.75, crawlMove: 0.62 };
+const yNoGuy = Lb => Lb <= 25 ? 1 : Math.max(0.25, 1 - (Lb - 25) / 25 * 0.8);
+const jibAbs = (T, ang) => ang - (T.jibRel || 0);
+// radio medido desde el eje de giro: pie de pluma + pluma + plumín abatible
+const reach = (T, Lb, ang) => T.foot + Lb * Math.cos(ang) + (T.jib ? T.jib.len * Math.cos(jibAbs(T, ang)) : 0);
+const structCap = (T, Lb) => {
+  let c = (T.boom.max === T.boom.min ? T.structMax : T.structMax - (Lb - T.boom.min) / (T.boom.max - T.boom.min) * (T.structMax - T.structMin)) * (T.yguy && !T.yOn ? yNoGuy(Lb) : 1);
+  if (T.tower) c = Lb <= 13.2 ? T.structMax : (132 - (Lb - 13.2) * 0.641) / Lb;
+  return T.jib ? Math.min(c, T.jib.cap) : c;
+};
+function supportRect(T, md) { return T.crawler ? T.track : md === 'out' ? T.out : T.tire; }
+// masas en el marco del chasis: [m, x, y, soloEstabiliza]
+function craneMasses(T, Lb, ang, slew) {
+  const c = Math.cos(slew), s = Math.sin(slew), at = d => [T.piv + d * c, d * s];
+  const ms = [[T.mCar, T.xCar, 0], [T.mSup, ...at(T.xSup)], [T.mCw, ...at(T.xCw)], T.tower ? [T.tower.jibM, ...at(T.tower.J / 2 * Math.cos(ang))] : [T.boom.kg * Lb, ...at(T.foot + Lb / 2 * Math.cos(ang))]];
+  if (T.jib) ms.push([T.jib.kg * T.jib.len, ...at(T.foot + Lb * Math.cos(ang) + T.jib.len / 2 * Math.cos(jibAbs(T, ang)))]);
+  if (T.derrick) ms.push([T.derrick.kg * T.derrick.len, ...at(T.derrick.foot - T.derrick.len / 2 * Math.cos(T.derrick.ang))]);
+  // el lastre superlift apoya en el suelo: solo aporta momento estabilizador
+  if (T.superlift) ms.push([T.superlift.m, ...at(-T.superlift.r), 1]);
+  return ms;
+}
+function tipUtil(T, md, ms) {
+  const r = supportRect(T, md), E = [[1, 0, r.xf], [-1, 0, -r.xr], [0, 1, r.hw], [0, -1, r.hw]];
+  let u = 0;
+  for (const [nx, ny, c] of E) {
+    let o = 0, i = 0;
+    for (const [m, x, y, onlyRestore] of ms) { const d = nx * x + ny * y - c; if (d > 0) { if (!onlyRestore) o += m * d; } else i -= m * d; }
+    u = Math.max(u, o / Math.max(i, 1e-6));
+  }
+  return u;
+}
+function lmiStatic(T, md, Lb, ang, slew, m) {
+  const ms = craneMasses(T, Lb, ang, slew), R = reach(T, Lb, ang);
+  ms.push([m, T.piv + R * Math.cos(slew), R * Math.sin(slew)]);
+  return Math.max(tipUtil(T, md, ms) / KF[md], m / structCap(T, Lb));
+}
+function ratedCap(T, md, Lb, ang, slew) {
+  if (lmiStatic(T, md, Lb, ang, slew, 0) >= 1) return 0;
+  let lo = 0, hi = structCap(T, Lb);
+  if (lmiStatic(T, md, Lb, ang, slew, hi) < 1) return hi;
+  for (let k = 0; k < 26; k++) { const m = (lo + hi) / 2; if (lmiStatic(T, md, Lb, ang, slew, m) < 1) lo = m; else hi = m; }
+  return lo;
+}
+
+
+const SLING = 1.0, WINDK = 0.006, WW = 84, WD = 56;
+const KIND_COL = { building: '#69717a', wall: '#8e959c', pier: '#8a8378', pad: '#9a958c', bed: '#2b2f36', cab: '#c4473a', pole: '#5b4632', container: '#3d6f8f', rack: '#7a6a55', shelter: '#7d8a80', tank: '#8a8f96' };
+
+// ---------- niveles ----------
+const B = (x, z, w, d, h, kind = 'building', extra = {}) => ({ x, z, w, d, h, kind, ...extra });
+function truck(x, z, len, dir = 1) { return [B(x, z, len, 2.5, 1.4, 'bed'), B(x + dir * (len / 2 + 1.6), z, 3, 2.5, 3.2, 'cab')]; }
+function fence(x1, z1, x2, z2, h = 2.4, gap = null) {
+  const t = 0.3, out = [];
+  out.push(B((x1 + x2) / 2, z1, x2 - x1, t, h, 'wall'), B(x1, (z1 + z2) / 2, t, z2 - z1, h, 'wall'), B(x2, (z1 + z2) / 2, t, z2 - z1, h, 'wall'));
+  if (gap) { out.push(B((x1 + gap[0]) / 2, z2, gap[0] - x1, t, h, 'wall'), B((gap[1] + x2) / 2, z2, x2 - gap[1], t, h, 'wall')); }
+  else out.push(B((x1 + x2) / 2, z2, x2 - x1, t, h, 'wall'));
+  return out;
+}
+const CT = (x, z, m, label, color, extra = {}) => ({ x, z, w: 6.1, d: 2.44, h: 2.6, m, label, color, kind: 'container', ...extra });
+
+const LEVELS = [
+  { name: 'Patio de contenedores', type: 'Básico', par: 300, wind: [0, 0, 0], ground: '#3b3d41',
+    cranes: ['small', 'medium', 'rt'], rec: 'medium', why: { large: 'Demasiado grande para este patio', xl: 'Demasiado grande para este patio', crawler: 'No hace falta una grúa sobre orugas' },
+    start: { x: 10, z: 46, h: 0 },
+    brief: 'Mueve los dos contenedores a la zona de descarga. Aprende a usar las dos vistas: la planta para posicionar y la lateral para controlar la altura.',
+    tips: ['Conduce con las flechas, despliega los estabilizadores con O.', 'La capacidad cambia con la dirección de la pluma: suele ser mayor por delante y por detrás que por los lados.', 'En planta, la sombra de la carga se separa más cuanto más alta va.'],
+    boxes: [B(20, 9, 12.2, 2.5, 5.2, 'container', { color: '#7a3b33' }), B(20, 12, 12.2, 2.5, 7.8, 'container', { color: '#3d6f8f' }), B(64, 10, 12.2, 2.5, 5.2, 'container', { color: '#4f7a4a' }), B(64, 13, 12.2, 2.5, 2.6, 'container', { color: '#8a6a2a' }), B(40, 22, 0.6, 0.6, 14, 'pole')],
+    crates: [CT(44, 32, 4.5, 'MSKU-01', '#3d7ea6'), CT(44, 37, 3.8, 'TGHU-02', '#a8473a')],
+    zones: [{ x: 68, z: 42, w: 7.4, d: 6.4, y: 0, label: 'ZONA' }] },
+
+  { name: 'Calle estrecha', type: 'Urbano', par: 330, wind: [2, 1.5, 90], ground: '#36383c',
+    cranes: ['small', 'medium'], rec: 'small', why: { large: 'No cabe en la calle', xl: 'No cabe en la calle', crawler: 'No puede circular por la ciudad' },
+    start: { x: 6, z: 25, h: 0 },
+    brief: 'Sube la unidad de aire acondicionado del camión a la azotea de +12 m. La calle mide 8 m: comprueba que caben los estabilizadores y que el contrapeso no golpee las fachadas al girar.',
+    tips: ['Los estabilizadores de la AT 60 abren 7,2 m más los apoyos: aquí no caben.', 'Sobre neumáticos la capacidad lateral es muy baja.', 'El radio de cola (contrapeso) también choca con los edificios.'],
+    boxes: [B(11, 10.5, 22, 21, 18), B(31, 10.5, 18, 21, 12), B(62, 10.5, 44, 21, 24), B(18, 42.5, 36, 27, 15), B(60, 42.5, 48, 27, 9), B(25, 5, 4, 4, 16, 'tank'), ...truck(57, 25, 10, -1)],
+    crates: [{ x: 57, z: 25, w: 3, d: 2.2, h: 2.0, m: 2.8, label: 'HVAC', color: '#8b98a5', kind: 'hvac' }],
+    zones: [{ x: 31, z: 14, w: 6, d: 6, y: 12, label: 'AZOTEA' }] },
+
+  { name: 'Subestación', type: 'Eléctrico', par: 420, wind: [2, 1.5, 0], ground: '#3d3a33',
+    cranes: ['large', 'xl', 'crawler', 'at300', 'at450'], rec: 'large', why: { small: 'Alcance y capacidad insuficientes', medium: 'Alcance insuficiente desde terreno firme' },
+    start: { x: 10, z: 47, h: 0 },
+    brief: 'Coloca el transformador de 9 t en su base, dentro del recinto. Hay dos líneas energizadas y una zona de barro donde las grúas de ruedas no entran.',
+    tips: ['Línea de 34,5 kV: mínimo 3 m. Línea de 115 kV: mínimo 5 m. La alarma suena 2 m antes.', 'Cuenta la pluma, el cable y la carga.', 'La grúa sobre orugas sí puede entrar en el barro.'],
+    lines: [{ a: [0, 22], b: [84, 22], y: 11, kv: '34,5 kV', clear: 3, poles: [8, 42, 76] }, { a: [70, 0], b: [70, 56], y: 13, kv: '115 kV', clear: 5, poles: [4, 32, 52] }],
+    soft: [{ x: 48, z: 31, w: 28, d: 10, kind: 'mud' }],
+    boxes: [...fence(40, 2, 62, 18), B(52, 10, 5, 5, 0.3, 'pad'), B(45, 6, 3, 3, 3.5, 'tank'), B(45, 14, 3, 3, 3.5, 'tank'), ...truck(26, 42, 10, 1)],
+    crates: [{ x: 26, z: 42, w: 3.4, d: 2.4, h: 3.2, m: 9, label: 'TRAFO', color: '#6f7d6a', kind: 'trafo' }],
+    zones: [{ x: 52, z: 10, w: 5, d: 5, y: 0.3, label: 'BASE' }] },
+
+  { name: 'Puente sobre el río', type: 'Infraestructura', par: 480, wind: [3, 2, 10], ground: '#3e3b34',
+    cranes: ['large', 'xl', 'crawler', 'at300', 'at450', 'at650'], rec: 'large', why: { small: 'Capacidad insuficiente para 45 t', medium: 'Capacidad insuficiente para 45 t' },
+    start: { x: 10, z: 30, h: 0 },
+    brief: 'Coloca la viga de 22 m y 45 t sobre las dos pilas. Debe apoyar en ambas: tienes menos de un metro de margen a lo largo.',
+    tips: ['Ninguna grúa puede entrar al agua ni apoyar estabilizadores en ella.', 'Una carga larga choca fácilmente al girar: súbela antes de girar.', 'Gira despacio: 45 t balanceándose cambian mucho el momento de vuelco.'],
+    soft: [{ x: 44, z: 28, w: 16, d: 56, kind: 'water' }],
+    boxes: [B(34, 24, 2.5, 4, 8, 'pier'), B(54, 24, 2.5, 4, 8, 'pier'), B(16, 47, 24, 2.8, 1.4, 'bed'), B(29.6, 47, 3, 2.8, 3.4, 'cab'), B(64, 10, 6, 3, 3, 'shelter')],
+    crates: [{ x: 16, z: 47, w: 22, d: 1.6, h: 1.8, m: 45, label: 'VIGA 45 t', color: '#b5552f', kind: 'girder' }],
+    zones: [{ x: 44, z: 24, w: 23.4, d: 4, y: 8, label: 'PILAS' }] },
+
+  { name: 'Torre de telecomunicaciones', type: 'Precisión', par: 520, wind: [4, 3, 0], ground: '#3b3e38',
+    cranes: ['medium', 'large', 'xl', 'at300', 'rt', 'sk'], rec: 'medium', why: { small: 'Altura de gancho insuficiente', crawler: 'No cabe entre los árboles del acceso' },
+    start: { x: 8, z: 44, h: 0 },
+    brief: 'Monta los tres tramos de 9 m uno encima del otro sobre la base. Cada tramo debe quedar centrado a menos de medio metro.',
+    tips: ['El tercer tramo se apoya a +18,5 m: necesitas el gancho a más de 30 m.', 'Los tramos son altos y livianos: el viento los mueve mucho.', 'Usa la vista lateral desde el sur o el este para alinear.'],
+    boxes: [B(54, 26, 4, 4, 0.5, 'pad'), B(62, 34, 4, 3, 3, 'shelter'), ...fence(48, 20, 60, 32, 2, [52, 56])],
+    crates: [1, 2, 3].map(i => ({ x: 18 + i * 4.5, z: 12, w: 2.4, d: 2.4, h: 9, m: 2.6, label: `T${i}`, color: '#b44a3a', kind: 'tower' })),
+    zones: [0, 1, 2].map(i => ({ x: 54, z: 26, w: 3.4, d: 3.4, y: 0.5 + i * 9, label: `TRAMO ${i + 1}`, stack: i })) },
+
+  { name: 'Fachada de vidrio', type: 'Viento', par: 420, wind: [6, 4, 200], ground: '#37393d',
+    cranes: ['medium', 'large', 'xl', 'at300', 'at450', 'sk'], rec: 'medium', why: { small: 'No llega a +30 m', crawler: 'No puede circular por la ciudad' },
+    start: { x: 8, z: 46, h: 0 },
+    brief: 'Sube las dos cajas de vidrio a la azotea de +30 m con viento fuerte y racheado. Se rompen si tocan a más de 0,5 m/s.',
+    tips: ['Usa la velocidad fina para el último metro.', 'Espera a que pase la ráfaga antes de apoyar.', 'Las cajas grandes y livianas reciben mucho empuje del viento.'],
+    boxes: [B(56, 20, 24, 20, 30), B(26, 7, 16, 14, 16), B(78, 44, 12, 20, 12), B(52, 15, 3, 3, 33, 'tank')],
+    crates: [{ x: 22, z: 42, w: 3.2, d: 1.6, h: 2.4, m: 1.6, label: 'VIDRIO', color: '#a98454', kind: 'glass', fragile: 0.5 }, { x: 28, z: 42, w: 3.2, d: 1.6, h: 2.4, m: 1.6, label: 'VIDRIO', color: '#a98454', kind: 'glass', fragile: 0.5 }],
+    zones: [{ x: 56, z: 22, w: 8, d: 6, y: 30, label: 'AZOTEA +30' }] },
+
+  { name: 'Pick & carry en el barro', type: 'Orugas', par: 540, wind: [1.5, 1, 0], ground: '#3d3a33',
+    cranes: ['crawler', 'rt'], rec: 'crawler', why: { small: 'No puede entrar al barro', medium: 'No puede entrar al barro', large: 'No puede entrar al barro', xl: 'No puede entrar al barro' },
+    start: { x: 12, z: 46, h: 0 },
+    brief: 'Lleva el recipiente de 38 t hasta la cimentación del otro lado. Está fuera de alcance: tendrás que desplazarte con la carga colgada a través del barro.',
+    tips: ['Con la carga colgada la capacidad baja (tabla en desplazamiento).', 'Lleva la carga baja y cerca, con la pluma alineada con las orugas.', 'Rodea el rack de tuberías por el sur.'],
+    soft: [{ x: 43, z: 28, w: 38, d: 56, kind: 'mud' }],
+    boxes: [B(44, 20, 3, 24, 7, 'rack'), B(74, 28, 6, 6, 1.0, 'pad'), B(76, 8, 6, 6, 9, 'tank')],
+    crates: [{ x: 12, z: 26, w: 3.6, d: 3.6, h: 5, m: 38, label: 'V-101', color: '#7f8c8d', kind: 'vessel' }],
+    zones: [{ x: 74, z: 28, w: 6, d: 6, y: 1.0, label: 'CIMENTACIÓN' }] },
+
+  { name: 'Descarga contrarreloj', type: 'Contrarreloj', par: 240, time: 330, wind: [2.5, 2, 90], ground: '#3b3d41',
+    cranes: ['small', 'medium', 'rt'], rec: 'small', why: { large: 'Demasiado lenta para este trabajo', xl: 'Demasiado lenta para este trabajo', crawler: 'Demasiado lenta para este trabajo' },
+    start: { x: 8, z: 28, h: 0 },
+    brief: 'Descarga los cuatro palés de los dos camiones en la zona de acopio antes de 5:30. Elige bien dónde estacionar para no moverte.',
+    tips: ['Mover dos funciones a la vez reparte el caudal hidráulico.', 'Si el tiempo llega a cero, el nivel termina.'],
+    boxes: [...truck(26, 14, 10, 1), ...truck(26, 42, 10, 1), B(48, 28, 0.6, 0.6, 10, 'pole'), B(72, 12, 12.2, 2.5, 5.2, 'container', { color: '#7a3b33' })],
+    crates: [[23, 14, 1.5, 'P1'], [29, 14, 2.0, 'P2'], [23, 42, 1.8, 'P3'], [29, 42, 2.4, 'P4']].map(([x, z, m, l]) => ({ x, z, w: 2.4, d: 1.6, h: 1.6, m, label: l, color: '#8a6a3a', kind: 'pallet' })),
+    zones: [{ x: 64, z: 30, w: 10, d: 8, y: 0, label: 'ACOPIO' }] },
+
+  { name: 'Reactor de refinería', type: 'Izaje pesado', par: 720, wind: [3, 2, 300], ground: '#3a3c3f',
+    cranes: ['xl', 'at450', 'at650'], rec: 'xl', why: { at300: 'Capacidad lateral insuficiente para 240 t', small: 'Capacidad insuficiente para 240 t', medium: 'Capacidad insuficiente para 240 t', large: 'Capacidad insuficiente para 240 t', crawler: 'Capacidad insuficiente a ese radio' },
+    start: { x: 12, z: 28, h: 0 },
+    brief: 'Levanta el reactor de 240 t del transportador y colócalo en su cimentación al otro lado. Solo la AT 500-8 puede hacerlo, y solo con el lastre montado.',
+    tips: ['Estaciona entre el transportador y la cimentación: los dos izajes son por los lados, donde la grúa es más débil.', 'Con los estabilizadores puestos, monta el lastre con B (tarda unos segundos). Sin lastre la capacidad lateral cae a menos de la mitad.', 'El reactor mide 12 m: súbelo lo suficiente antes de girar.'],
+    boxes: [B(44, 16, 16, 5, 1.6, 'bed'), B(44, 40, 7, 7, 1.5, 'pad'), B(70, 28, 3, 44, 9, 'rack'), B(60, 46, 8, 8, 16, 'tank'), B(28, 46, 6, 6, 10, 'tank'), B(62, 8, 10, 6, 6, 'shelter')],
+    crates: [{ x: 44, z: 16, w: 5, d: 5, h: 12, m: 240, label: 'R-201', color: '#8c969e', kind: 'vessel' }],
+    zones: [{ x: 44, z: 40, w: 7, d: 7, y: 1.5, label: 'CIMENTACIÓN' }] },
+
+  { name: 'Enfriadora en azotea', type: 'Gran altura', par: 900, wind: [3.5, 2.5, 270], ground: '#37393d',
+    cranes: ['xl', 'at300', 'at450', 'at650'], rec: 'xl', why: { small: 'No llega a +32 m', medium: 'Capacidad insuficiente a ese radio', large: 'Capacidad insuficiente con pluma larga', crawler: 'No puede circular por la ciudad' },
+    start: { x: 12, z: 26, h: 0 },
+    brief: 'Sube la enfriadora de 70 t a la azotea de +32 m. Para pasar sobre el borde del edificio necesitas más de 40 m de pluma: tendrás que montar el lastre y el arriostramiento en Y.',
+    tips: ['Estabiliza, monta el lastre (B) y, con la pluma retraída del todo, monta el arriostramiento (Y). Tarda unos 24 s.', 'Sin arriostramiento tensado la pluma no pasa de 35 m y la capacidad estructural cae mucho.', 'Vigila que la pluma no toque el borde de la azotea: súbela antes de extenderla.'],
+    boxes: [B(58, 26, 26, 28, 32), B(64, 18, 4, 4, 36, 'tank'), B(66, 34, 6, 4, 35, 'shelter'), B(20, 8, 6, 6, 12, 'tank'), ...truck(26, 45, 10, 1)],
+    crates: [{ x: 26, z: 45, w: 6, d: 2.4, h: 2.8, m: 70, label: 'CHILLER', color: '#6e8a9a', kind: 'hvac' }],
+    zones: [{ x: 50.5, z: 26, w: 8, d: 8, y: 32, label: 'AZOTEA +32' }] },
+
+  { name: 'Sobre la nave', type: 'Plumín abatible', par: 1200, wind: [3, 2, 0], ground: '#3a3c3f', jib: true,
+    cranes: ['at650'], rec: 'at650', why: { lr: 'Demasiado grande para esta parcela' },
+    start: { x: 14, z: 26, h: 0 },
+    brief: 'Coloca la unidad de climatización de 45 t detrás de la nave de 28 m de alto. La pluma recta chocaría con la cubierta: usa el plumín abatible para pasar por encima y bajar al otro lado.',
+    tips: ['Prepara la grúa: estabilizadores (O), lastre (B) y, con la pluma retraída, arriostramiento (Y).', 'Monta el plumín (M) con la pluma retraída, casi horizontal y apuntando al oeste, donde hay 42 m libres para tenderlo en el suelo.', 'T sube el plumín y G lo baja. Plumín alto = radio corto; plumín bajo = mucho alcance pero menos capacidad.', 'Sube la pluma casi vertical antes de extenderla para no tocar la nave.'],
+    boxes: [B(50, 28, 14, 44, 28), B(50, 28, 3, 46, 30, 'rack'), ...truck(22, 46, 10, 1), B(76, 8, 8, 8, 12, 'tank'), B(78, 48, 6, 6, 9, 'shelter')],
+    crates: [{ x: 22, z: 46, w: 6, d: 2.6, h: 3, m: 45, label: 'AHU-2', color: '#7f9aa8', kind: 'hvac' }],
+    zones: [{ x: 68, z: 28, w: 8, d: 8, y: 0, label: 'PATIO TRASERO' }] },
+
+  { name: 'Patio interior', type: 'Grúa torre', par: 900, wind: [3, 2, 90], ground: '#36383c',
+    cranes: ['sk'], rec: 'sk', why: {},
+    start: { x: 10, z: 50.5, h: 0 },
+    brief: 'Mete los tres palés en el patio interior de la manzana, detrás de un edificio de 16 m. Desde la calle solo llega una grúa torre: estaciona, estabiliza y móntala.',
+    tips: ['Despliega los estabilizadores (O) y monta la torre (M): se levanta, se telescopa y despliega la pluma.', 'Q/E mueven el carro por la pluma; W/S inclinan la pluma hasta 30° si necesitas más altura.', 'La capacidad baja con el radio: 10 t hasta 13 m, menos de 2 t en la punta.'],
+    boxes: [B(14, 18, 28, 28, 18), B(70, 18, 28, 28, 24), B(42, 6, 28, 12, 20), B(42, 36, 28, 8, 16), ...truck(16, 44.6, 10, 1), B(78, 50, 10, 6, 6, 'shelter')],
+    crates: [[13, 2.0, 'P1'], [16, 1.8, 'P2'], [19, 2.2, 'P3']].map(([x, m, l]) => ({ x, z: 44.6, w: 2.4, d: 1.6, h: 1.6, m, label: l, color: '#8a6a3a', kind: 'pallet' })),
+    zones: [{ x: 42, z: 22, w: 10, d: 8, y: 0, label: 'PATIO' }] },
+
+  { name: 'Columna de destilación', type: 'Izaje extremo', par: 1800, wind: [1.5, 1, 0], ground: '#3a3c3f',
+    cranes: ['lr'], rec: 'lr', why: {},
+    start: { x: 40, z: 30, h: 0 },
+    brief: 'Levanta la columna de 1.200 t y 32 m del transportador y colócala de pie en su cimentación. La LR 3000 ya está montada en su posición: no hace falta moverla, pero todo es muy lento y el lastre superlift barre un círculo de 22 m.',
+    tips: ['El lastre superlift apoya en el suelo y solo suma cuando la carga intenta volcar la grúa.', 'Al girar, la bandeja de lastre pasa por detrás: vigila el círculo libre.', 'Con 1.200 t, cualquier balanceo multiplica el momento: mueve una función a la vez.'],
+    boxes: [B(40, 9, 22, 8, 1.8, 'bed'), B(68, 30, 11, 11, 2, 'pad'), B(8, 8, 8, 8, 18, 'tank'), B(78, 50, 8, 8, 14, 'tank'), B(80, 12, 6, 14, 8, 'rack')],
+    crates: [{ x: 40, z: 9, w: 7, d: 7, h: 32, m: 1200, label: 'C-301', color: '#9aa3aa', kind: 'vessel' }],
+    zones: [{ x: 68, z: 30, w: 11, d: 11, y: 2, label: 'CIMENTACIÓN' }] },
+];
+
+// ---------- estado ----------
+let L, T, S, boxes, crates, softs, lines, best = {}, picked = {};
+try { best = JSON.parse(localStorage.getItem('mcrane3-best') || '{}') || {}; } catch (e) { best = {}; }
+const saveBest = () => { try { localStorage.setItem('mcrane3-best', JSON.stringify(best)); } catch (e) {} };
+const inp = { sli: 0, slo: 0, ju: 0, jd: 0, fw: 0, bk: 0, stl: 0, str: 0, sll: 0, slr: 0, lu: 0, ld: 0, to: 0, ti: 0, hu: 0, hd: 0, fine: 0 };
+let fineToggle = false, viewMode = 'pluma', zoom = false;
+const VIEWS = { pluma: 'Lateral · plano de la pluma', sur: 'Lateral · desde el sur', este: 'Lateral · desde el este' };
+
+const ov = (a1, a2, b1, b2) => a1 < b2 && a2 > b1;
+function surface(x1, x2, z1, z2, ex) {
+  let s = 0;
+  for (const b of boxes) if (ov(x1, x2, b.x - b.w / 2, b.x + b.w / 2) && ov(z1, z2, b.z - b.d / 2, b.z + b.d / 2)) s = Math.max(s, b.h);
+  for (const c of crates) if (c !== ex && !c.held && ov(x1, x2, c.x - c.w / 2, c.x + c.w / 2) && ov(z1, z2, c.z - c.d / 2, c.z + c.d / 2)) s = Math.max(s, c.y + c.h);
+  return s;
+}
+const inBox = (x, z, b, m = 0) => Math.abs(x - b.x) < b.w / 2 + m && Math.abs(z - b.z) < b.d / 2 + m;
+
+function loadLevel(i, craneId) {
+  L = LEVELS[i];
+  T = CRANES[craneId || picked[i] || L.rec];
+  if (T.ballast) T.mCw = T.cwBase;
+  T.yOn = false;
+  T.jibAvail = !!(T.jibDef && L.jib); T.jib = null;
+  if (T.superlift) T.superlift.r = T.superlift.r0;
+  boxes = L.boxes.map(b => ({ ...b }));
+  lines = (L.lines || []).map(l => ({ ...l, warn: l.clear + 2 }));
+  for (const l of lines) for (const p of l.poles) {
+    const t = l.a[0] === l.b[0] ? [l.a[0], p] : [p, l.a[1]];
+    boxes.push(B(t[0], t[1], 0.6, 0.6, l.y + 1.2, 'pole'));
+  }
+  softs = (L.soft || []).map(s => ({ ...s }));
+  crates = [];
+  for (const c of L.crates) { const o = { ...c, held: false, broken: false }; o.y = surface(o.x - o.w / 2, o.x + o.w / 2, o.z - o.d / 2, o.z + o.d / 2, null); crates.push(o); }
+  S = { lvl: i, er: 0, erT: 0, jg: 0, jgT: 0, cwS: 0, cwT: 0, yg: 0, ygT: 0, cx: Math.max(L.start.x, 1.2 - (T.crawler ? T.track.xr : T.len[0])), cz: L.start.z, h: L.start.h, v: 0, steer: 0,
+    jibRel: 20 * D, jibV: 0, slew: 0, slewV: 0, ang: T.crawler ? 70 * D : 6 * D, angV: 0, Lb: T.boom.min, LbV: 0, L: 3, Ld: 0,
+    outS: 0, outT: 0, att: null, resting: false, t: 0, running: false, done: false,
+    hard: 0, bumps: 0, prox: 0, inProx: false, bumpCd: 0, msg: '', msgT: 0, parts: [], flags: {},
+    wind: 0, windDir: L.wind[2] * D, p: null, pv: { x: 0, y: 0, z: 0 }, tipPrev: null, tipV: { x: 0, y: 0, z: 0 }, tipA: { x: 0, y: 0, z: 0 },
+    Tt: 0, lmi: 0, stab: 0, maxLmi: 0, lineD: 99, rated: 0, phi: 0, phiV: 0, taut: true, range: null, rangeT: 0, sideC: null, shake: 0 };
+  if (T.tower) { S.ang = 0; S.Lb = T.boom.min; }
+  T.jibRel = S.jibRel;
+  const tp = tipPos();
+  S.L = Math.max(1.5, tp.y - 4);
+  S.p = { x: tp.x, y: tp.y - S.L, z: tp.z };
+  document.getElementById('lvlname').textContent = `Nivel ${i + 1} · ${L.name} · ${L.type} · ${T.name}`;
+  document.getElementById('cranename').textContent = `${T.name} · ${T.size}`;
+  document.getElementById('b-out').disabled = !!T.crawler;
+  document.getElementById('b-cw').disabled = !T.ballast;
+  document.getElementById('b-yg').disabled = !T.yguy;
+  document.getElementById('g-jib').hidden = !T.jibAvail;
+  document.getElementById('g-sl').hidden = !T.superlift;
+  document.getElementById('b-mnt').disabled = !(T.tower || T.jibAvail);
+  document.getElementById('b-mnt').setAttribute('aria-pressed', 'false');
+  document.getElementById('b-yg').setAttribute('aria-pressed', 'false'); document.getElementById('b-cw').setAttribute('aria-pressed', 'false');
+  renderChips(); syncOutBtn();
+}
+
+function windAt(t) {
+  const [base, gust] = L.wind;
+  if (!base && !gust) return 0;
+  const n = (Math.sin(0.31 * t) + 0.6 * Math.sin(0.83 * t + 1) + 0.3 * Math.sin(2.1 * t + 2)) / 1.9;
+  return Math.max(0, base * (0.8 + 0.2 * Math.sin(0.07 * t)) + gust * n);
+}
+
+// ---------- geometría ----------
+const lift = () => (!T.crawler && S.outS > 0.5) ? (S.outS - 0.5) / 0.5 * 0.3 : 0;
+function c2w(x, y, cx = S.cx, cz = S.cz, h = S.h) { const c = Math.cos(h), s = Math.sin(h); return [cx + x * c - y * s, cz + x * s + y * c]; }
+function w2c(X, Z) { const c = Math.cos(S.h), s = Math.sin(S.h), dx = X - S.cx, dz = Z - S.cz; return [dx * c + dz * s, -dx * s + dz * c]; }
+function slewCenter() { const [x, z] = c2w(T.piv, 0); return { x, z }; }
+// grúa torre: geometría según el avance del montaje (torre que se levanta, se telescopa y pluma que se despliega)
+function towerGeom(slew = S.slew) {
+  const tw = T.tower, e = S.er, sm = t => t * t * (3 - 2 * t);
+  const p1 = sm(clamp(e / 0.45, 0, 1)), p2 = sm(clamp((e - 0.45) / 0.25, 0, 1)), p3 = sm(clamp((e - 0.7) / 0.3, 0, 1));
+  const [bx, bz] = c2w(T.piv, 0), th = S.h + slew, f = [Math.cos(th), 0, Math.sin(th)];
+  const base = [bx, T.deckHi + lift() + 0.6, bz], tA = p1 * Math.PI / 2, hgt = tw.H0 + (tw.H - tw.H0) * p2;
+  const dir = [Math.cos(tA) * f[0], Math.sin(tA), Math.cos(tA) * f[2]];
+  const top = [base[0] + dir[0] * hgt, base[1] + dir[1] * hgt, base[2] + dir[2] * hgt];
+  const phi = (tA + Math.PI) + (2 * Math.PI + S.ang - (tA + Math.PI)) * p3;
+  const jd = [Math.cos(phi) * f[0], Math.sin(phi), Math.cos(phi) * f[2]];
+  const jf = Math.min(tw.J, hgt - 1.5), jl = jf + (tw.J - jf) * p3;
+  return { base, top, dir, hgt, jd, phi, f, jl, ready: e >= 1 };
+}
+function slewCenterY() { return T.deckHi + lift(); }
+function pivotPos(slew = S.slew) {
+  if (T.tower) { const g = towerGeom(slew); return { x: g.top[0], y: g.top[1] + (g.ready ? 0 : 1.0), z: g.top[2] }; }
+  const [x, z] = c2w(T.piv, 0), th = S.h + slew; return { x: x + T.foot * Math.cos(th), y: T.pivH + lift(), z: z + T.foot * Math.sin(th) };
+}
+function headPos(ang = S.ang, Lb = S.Lb, slew = S.slew) {
+  if (T.tower) { const g = towerGeom(slew), J = g.jl; return { x: g.top[0] + g.jd[0] * J, y: g.top[1] + g.jd[1] * J, z: g.top[2] + g.jd[2] * J }; }
+  const p = pivotPos(slew), th = S.h + slew, r = Lb * Math.cos(ang);
+  return { x: p.x + r * Math.cos(th), y: p.y + Lb * Math.sin(ang), z: p.z + r * Math.sin(th) };
+}
+function tipPos(ang = S.ang, Lb = S.Lb, slew = S.slew) {
+  if (T.tower) { const p = pivotPos(slew); if (S.er < 1) return p; const th = S.h + slew; return { x: p.x + Lb * Math.cos(ang) * Math.cos(th), y: p.y + Lb * Math.sin(ang), z: p.z + Lb * Math.cos(ang) * Math.sin(th) }; }
+  const hd = headPos(ang, Lb, slew);
+  if (!T.jib) return hd;
+  const ja = ang - S.jibRel, th = S.h + slew, r = T.jib.len * Math.cos(ja);
+  return { x: hd.x + r * Math.cos(th), y: hd.y + T.jib.len * Math.sin(ja), z: hd.z + r * Math.sin(th) };
+}
+function mode() {
+  if (T.crawler) return Math.abs(S.v) > 0.05 || (inp.stl || inp.str) && S.running ? 'crawlMove' : 'crawler';
+  return S.outS >= 1 ? 'out' : Math.abs(S.v) > 0.05 ? 'move' : 'tire';
+}
+const radius = () => Math.max(0, reach(T, S.Lb, S.ang));
+
+function say(m, t = 2.4) { S.msg = m; S.msgT = t; }
+function sayOnce(m) { if (S.msg !== m || S.msgT < 0.5) say(m, 1.9); }
+function puff(x, y, z, n) { for (let i = 0; i < n; i++) S.parts.push({ x: x + (Math.random() - .5) * 2, y: y + .1, z: z + (Math.random() - .5) * 2, vx: (Math.random() - .5) * 3, vz: (Math.random() - .5) * 3, vy: Math.random() * 1.2, life: 1 }); }
+function strike(m, x, y, z) { if (S.bumpCd <= 0) { S.bumps++; S.bumpCd = 1; say(m); if (x != null) puff(x, y, z, 6); S.shake = 0.3; } }
+
+function softAt(x, z, kinds) { return softs.find(s => kinds.includes(s.kind) && inBox(x, z, s)); }
+function obstacleAt(x, z, m = 0.15) {
+  for (const b of boxes) if (b.h > 0.35 && inBox(x, z, b, m)) return b;
+  for (const c of crates) if (!c.held && inBox(x, z, c, m)) return c;
+  return null;
+}
+function footprint(cx, cz, h) {
+  const pts = [], r = T.crawler ? T.track : { xf: T.len[1], xr: T.len[0], hw: T.half };
+  for (let x = r.xr; x <= r.xf + 0.01; x += (r.xf - r.xr) / 8) for (const y of [-r.hw, r.hw]) pts.push(c2w(x, y, cx, cz, h));
+  for (let y = -r.hw; y <= r.hw + 0.01; y += r.hw / 2) for (const x of [r.xr, r.xf]) pts.push(c2w(x, y, cx, cz, h));
+  return pts;
+}
+function carrierBlocked(cx, cz, h) {
+  for (const [x, z] of footprint(cx, cz, h)) {
+    if (x < 0.3 || z < 0.3 || x > WW - 0.3 || z > WD - 0.3) return 'Límite de la obra';
+    if (softAt(x, z, ['water'])) return 'No se puede entrar al agua';
+    if (!T.crawler && !T.offroad && softAt(x, z, ['mud'])) return 'Terreno blando: las ruedas se hundirían';
+    const o = obstacleAt(x, z); if (o) return 'El chasis toca un obstáculo';
+  }
+  return null;
+}
+function padPoints() { const o = T.out; return [[o.xf, o.hw], [o.xf, -o.hw], [o.xr, o.hw], [o.xr, -o.hw]].map(([x, y]) => c2w(x, y)); }
+function padsBlocked() {
+  for (const [x, z] of padPoints()) for (const [dx, dz] of [[0, 0], [0.6, 0.6], [-0.6, 0.6], [0.6, -0.6], [-0.6, -0.6]]) {
+    const px = x + dx, pz = z + dz;
+    if (px < 0 || pz < 0 || px > WW || pz > WD) return 'No hay espacio para los estabilizadores';
+    if (softAt(px, pz, ['water', 'mud'])) return 'Terreno blando bajo un estabilizador';
+    if (obstacleAt(px, pz, 0.05)) return 'Un obstáculo impide abrir los estabilizadores';
+  }
+  return null;
+}
+function boomHit() {
+  const segs = [[pivotPos(), headPos(), 'La pluma']];
+  if (T.tower) { const g = towerGeom(); segs.push([{ x: g.base[0], y: g.base[1] + 3, z: g.base[2] }, pivotPos(), 'La torre']); }
+  if (T.jib) segs.push([headPos(), tipPos(), 'El plumín']);
+  for (const [p, t, who] of segs) for (let k = 0.05; k <= 1.0001; k += 0.02) {
+    const x = p.x + (t.x - p.x) * k, y = p.y + (t.y - p.y) * k, z = p.z + (t.z - p.z) * k, mg = Math.max(0.35, T.boom.w * 0.4);
+    for (const b of boxes) if (y < b.h + mg && inBox(x, z, b, mg)) return { x, y, z, what: `${who} golpeó un obstáculo` };
+    for (const c of crates) if (!c.held && y < c.y + c.h + 0.3 && inBox(x, z, c, 0.3)) return { x, y, z, what: `${who} golpeó una carga` };
+  }
+  if (T.superlift) {
+    const sl = T.superlift, c0 = Math.cos(S.slew), s0 = Math.sin(S.slew);
+    for (const dx of [-sl.d / 2, 0, sl.d / 2]) for (const dy of [-sl.w / 2, 0, sl.w / 2]) {
+      const lx = -sl.r + dx, [x, z] = c2w(T.piv + lx * c0 - dy * s0, lx * s0 + dy * c0);
+      for (const b of boxes) if (inBox(x, z, b, 0.2)) return { x, y: 1, z, what: 'El lastre superlift golpeó un obstáculo' };
+    }
+  }
+  // radio de cola: contrapeso
+  if (T.tower) return null;
+  const yb = T.deckHi + lift() + 0.2, c = Math.cos(S.slew), s = Math.sin(S.slew), cd = cwDims();
+  for (const dx of [cd.x - cd.len / 2, cd.x, cd.x + cd.len / 2]) for (const dy of [-cd.w, 0, cd.w]) {
+    const [x, z] = c2w(T.piv + dx * c - dy * s, dx * s + dy * c);
+    for (const b of boxes) if (b.h > yb && inBox(x, z, b, 0.1)) return { x, y: yb, z, what: 'El contrapeso golpeó un obstáculo (radio de cola)' };
+  }
+  return null;
+}
+function toggleOutriggers() {
+  if (!S.running || S.done || T.crawler) return;
+  if (S.outT === 0) {
+    if (Math.abs(S.v) > 0.05) { say('Detén la grúa antes de estabilizar'); return; }
+    const r = padsBlocked(); if (r) { say(r); return; }
+    S.outT = 1; say('Desplegando estabilizadores', 1.5);
+  } else {
+    if (S.att && !S.resting) { say('Apoya la carga antes de recoger los estabilizadores'); return; }
+    if (S.cwS > 0 || S.cwT) { say('Desmonta el lastre antes de recoger los estabilizadores (B)'); return; }
+    if (S.yg > 0 || S.ygT) { say('Pliega el arriostramiento antes de recoger los estabilizadores (Y)'); return; }
+    if (S.er > 0 || S.jg > 0) { say('Desmonta la torre o el plumín antes de recoger los estabilizadores (M)'); return; }
+    if (!T.crawler && lmiStatic(T, 'tire', S.Lb, S.ang, S.slew, T.hookM) >= 1) { say('LMI: sobre neumáticos la grúa no es estable así. Gira o retrae la pluma.'); return; }
+    S.outT = 0; say('Recogiendo estabilizadores', 1.5);
+  }
+  syncOutBtn();
+}
+function toggleBallast() {
+  if (!S.running || S.done || !T.ballast) return;
+  if (!S.cwT) {
+    if (S.outS < 1) { say('Despliega los estabilizadores antes de montar el lastre'); return; }
+    S.cwT = 1; say(`Montando lastre · ${T.ballast.m} t`, 1.8);
+  } else {
+    if (S.att && !S.resting) { say('Apoya la carga antes de desmontar el lastre'); return; }
+    S.cwT = 0; say('Desmontando lastre', 1.5);
+  }
+  document.getElementById('b-cw').setAttribute('aria-pressed', S.cwT === 1);
+}
+function toggleMount() {
+  if (!S.running || S.done) return;
+  if (T.tower) {
+    if (S.outS < 1) { say('Despliega los estabilizadores antes de montar la grúa torre'); return; }
+    if (S.att) { say('Suelta la carga antes de mover la torre'); return; }
+    if (S.erT && (S.Lb > T.boom.min + 0.5 || S.ang > 2 * D)) { say('Para plegar: carro adentro (Q) y pluma horizontal (S)'); return; }
+    if (S.erT && Math.abs(Math.atan2(Math.sin(S.slew), Math.cos(S.slew))) > 3 * D) { say('Gira la pluma hacia delante (0°) antes de plegar'); return; }
+    S.erT = S.erT ? 0 : 1; say(S.erT ? 'Montando: levantar torre → telescopar → desplegar pluma' : 'Plegando la grúa torre', 2.4);
+  } else if (T.jibAvail) {
+    if (S.outS < 1) { say('Despliega los estabilizadores antes de montar el plumín'); return; }
+    if (S.att) { say('Suelta la carga antes de montar o desmontar el plumín'); return; }
+    if (S.Lb > T.boom.min + 0.3 || S.ang > 10 * D) { say('Para el plumín: pluma retraída del todo y casi horizontal (menos de 10°)'); return; }
+    if (S.jgT && S.jibRel < S.ang + 3 * D) { say('Baja el plumín hasta el suelo (G) antes de desmontarlo'); return; }
+    S.jgT = S.jgT ? 0 : 1; say(S.jgT ? 'Montaje del plumín: tramos en el suelo → bulonar → puntales → tensar' : 'Desmontando el plumín', 2.4);
+  } else return;
+  document.getElementById('b-mnt').setAttribute('aria-pressed', !!(S.erT || S.jgT));
+}
+function toggleYGuy() {
+  if (!S.running || S.done || !T.yguy) return;
+  if (S.outS < 1) { say('Despliega los estabilizadores antes de montar el arriostramiento'); return; }
+  if (S.Lb > T.boom.min + 0.3) { say('Retrae la pluma por completo para montar o plegar el arriostramiento'); return; }
+  if (S.att && !S.resting) { say('Apoya la carga antes de mover el arriostramiento'); return; }
+  S.ygT = S.ygT ? 0 : 1;
+  say(S.ygT ? 'Montando arriostramiento: brazos arriba → abrir → tensar' : 'Plegando arriostramiento', 2.2);
+  document.getElementById('b-yg').setAttribute('aria-pressed', S.ygT === 1);
+}
+const cwDims = () => T.cwStyle === 'stack' ? { len: T.cwLen, w: T.cwLen / 2, hgt: 0.9 + 4.4 * S.cwS, x: T.xCw }
+  : T.ballast ? { len: T.cwLen * (0.35 + 0.65 * S.cwS), w: 1.45 + ((T.cwWide || 2.05) - 1.45) * S.cwS, hgt: 1.0 + 1.6 * S.cwS, x: T.xCw + T.cwLen * 0.65 * (1 - S.cwS) / 2 }
+  : { len: T.cwLen, w: T.cwW || (T.crawler ? 2.2 : 1.45), hgt: T.crawler ? (T.id === 'lr' ? 6 : 2.4) : 1.7, x: T.xCw };
+function syncOutBtn() { document.getElementById('b-out').setAttribute('aria-pressed', S.outT === 1); }
+
+function segSeg(p1, q1, p2, q2) {
+  const d1 = [q1[0] - p1[0], q1[1] - p1[1], q1[2] - p1[2]], d2 = [q2[0] - p2[0], q2[1] - p2[1], q2[2] - p2[2]], r = [p1[0] - p2[0], p1[1] - p2[1], p1[2] - p2[2]];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const a = dot(d1, d1), e = dot(d2, d2), f = dot(d2, r);
+  let s, t;
+  if (a < 1e-9 && e < 1e-9) { s = t = 0; }
+  else if (a < 1e-9) { s = 0; t = clamp(f / e, 0, 1); }
+  else {
+    const c = dot(d1, r);
+    if (e < 1e-9) { t = 0; s = clamp(-c / a, 0, 1); }
+    else {
+      const b = dot(d1, d2), den = a * e - b * b;
+      s = den > 1e-9 ? clamp((b * f - c * e) / den, 0, 1) : 0;
+      t = (b * s + f) / e;
+      if (t < 0) { t = 0; s = clamp(-c / a, 0, 1); } else if (t > 1) { t = 1; s = clamp((b - c) / a, 0, 1); }
+    }
+  }
+  const c1 = [p1[0] + d1[0] * s, p1[1] + d1[1] * s, p1[2] + d1[2] * s], c2 = [p2[0] + d2[0] * t, p2[1] + d2[1] * t, p2[2] + d2[2] * t];
+  return Math.hypot(c1[0] - c2[0], c1[1] - c2[1], c1[2] - c2[2]);
+}
+
+// ---------- física ----------
+function step(dt) {
+  if (!S.running || S.done) return;
+  S.t += dt; S.bumpCd = Math.max(0, S.bumpCd - dt);
+  if (L.time && S.t > L.time) { fail('Se acabó el tiempo', 'No terminaste la descarga a tiempo. Busca una posición desde la que alcances ambos camiones y la zona sin volver a moverte.'); return; }
+  const f = S.flags = { lmi: false, atb: false, slack: false };
+  const fk = inp.fine || fineToggle ? 0.3 : 1;
+  const mLoad = (S.att ? S.att.m : 0) + T.hookM;
+  const susp = !!(S.att && !S.resting);
+  const mEval = susp ? mLoad : T.hookM;
+  const md0 = mode();
+  const L0 = lmiStatic(T, md0, S.Lb, S.ang, S.slew, mEval);
+  const prev = { cx: S.cx, cz: S.cz, h: S.h, slew: S.slew, ang: S.ang, Lb: S.Lb, jibRel: S.jibRel };
+  const tilted = S.phi > 0.002;
+
+  // conducción
+  let thr = inp.fw - inp.bk, str = inp.str - inp.stl;
+  if ((thr || (T.crawler && str)) && S.outS > 0) { thr = 0; str = 0; sayOnce('Recoge los estabilizadores para conducir (O)'); }
+  if (tilted) { thr = 0; str = T.crawler ? 0 : str; }
+  if ((thr || (T.crawler && str)) && susp && lmiStatic(T, T.crawler ? 'crawlMove' : 'move', S.Lb, S.ang, S.slew, mLoad) >= 1) { thr = 0; if (T.crawler) str = 0; f.lmi = true; sayOnce('LMI: con esta carga no puedes desplazarte. Acerca la carga (más ángulo).'); }
+  const vmax = T.spd.drive * fk * (susp ? (T.crawler ? 0.45 : 0.3) : 1);
+  const acc = thr ? 1.2 : 2.4;
+  S.v += clamp(thr * vmax - S.v, -acc * dt, acc * dt);
+  let dh;
+  if (T.crawler) dh = str * T.spd.turn * fk * (susp ? 0.5 : 1) * (S.v < -0.05 ? -1 : 1);
+  else {
+    S.steer += clamp(str * T.steerMax - S.steer, -0.8 * dt, 0.8 * dt);
+    dh = S.v * Math.tan(S.steer) / T.wheelbase * (T.allSteer ? 2 : 1);
+  }
+  if (Math.abs(S.v) > 1e-4 || Math.abs(dh) > 1e-5) {
+    const nh = S.h + dh * dt, nx = S.cx + Math.cos(nh) * S.v * dt, nz = S.cz + Math.sin(nh) * S.v * dt;
+    const why = carrierBlocked(nx, nz, nh);
+    if (why) { if (Math.abs(S.v) > 1.2 && why.includes('obstáculo')) strike('El chasis chocó con un obstáculo'); S.v = 0; sayOnce(why); }
+    else { S.cx = nx; S.cz = nz; S.h = nh; }
+  }
+
+  // estabilizadores
+  if (!T.crawler) S.outS += clamp(S.outT - S.outS, -dt / T.out.t, dt / T.out.t);
+  if (T.ballast) {
+    const before = S.cwS;
+    S.cwS += clamp(S.cwT - S.cwS, -dt / T.ballast.t, dt / T.ballast.t);
+    T.mCw = T.cwBase + T.ballast.m * S.cwS;
+    if (before < 1 && S.cwS >= 1) say('Lastre montado', 1.5);
+  }
+  if (T.yguy) {
+    const b0 = S.yg;
+    S.yg = clamp(S.yg + clamp(S.ygT - S.yg, -dt / T.yguy.t, dt / T.yguy.t), 0, 1);
+    T.yOn = S.yg >= 1;
+    if (b0 < 1 && S.yg >= 1) say('Arriostramiento tensado: pluma larga habilitada', 2);
+    if (b0 > 0 && S.yg <= 0) say('Arriostramiento plegado', 1.5);
+  }
+  if (T.tower) {
+    const e0 = S.er; S.er = clamp(S.er + clamp(S.erT - S.er, -dt / T.tower.t, dt / T.tower.t), 0, 1);
+    if (e0 < 1 && S.er >= 1) { say('Grúa torre montada', 1.8); S.L = Math.max(1.5, Math.min(S.L, 4)); }
+    if (e0 > 0 && S.er <= 0) say('Grúa torre plegada para transporte', 1.8);
+  }
+  if (T.jibAvail) {
+    const g0 = S.jg; S.jg = clamp(S.jg + clamp(S.jgT - S.jg, -dt / T.jibDef.t, dt / T.jibDef.t), 0, 1);
+    if (S.jg >= 1 && !T.jib) {
+      T.jib = T.jibDef; const hp = headPos();
+      S.jibRel = clamp(S.ang + Math.asin(clamp((hp.y - 0.7) / T.jib.len, 0, 1)), T.jib.relMin, T.jib.relMax); T.jibRel = S.jibRel; prev.jibRel = S.jibRel;
+      say('Plumín montado y tensado: súbelo con la pluma (W) y T/G', 2.4);
+    }
+    if (S.jg < 1 && T.jib) { T.jib = null; }
+    if (g0 > 0 && S.jg <= 0) say('Plumín desmontado', 1.5);
+  }
+  const md = mode();
+  const assembling = (T.tower && S.er < 1) || (T.jibAvail && S.jg > 0 && S.jg < 1);
+  if (assembling) { for (const k of ['sll', 'slr', 'lu', 'ld', 'ti', 'to', 'hu', 'hd', 'ju', 'jd']) if (inp[k]) { sayOnce(T.tower ? (S.er > 0 ? 'Espera a que termine el montaje' : 'Monta la grúa torre primero (M)') : 'Espera a que termine el montaje del plumín'); break; } }
+
+  // funciones de la grúa con corte LMI
+  const slw = assembling ? 0 : inp.slr - inp.sll, luf = assembling ? 0 : inp.lu - inp.ld;
+  let tel = !assembling && T.boom.max > T.boom.min ? inp.to - inp.ti : 0;
+  let hoi = assembling ? 0 : inp.hd - inp.hu;
+  const jib = T.jib ? inp.jd - inp.ju : 0;
+  const active = (slw ? 1 : 0) + (luf ? 1 : 0) + (tel ? 1 : 0) + (hoi ? 1 : 0) + (jib ? 1 : 0);
+  const share = [1, 1, 0.8, 0.65, 0.55, 0.5][active];
+  const lmiNow = () => lmiStatic(T, md, S.Lb, S.ang, S.slew, mEval);
+  const guard = (fn, undo) => { fn(); const n = lmiNow(); if (n >= 1 && n > L0 + 1e-6) { undo(); f.lmi = true; return false; } return true; };
+  // giro
+  S.slewV += clamp(slw * T.spd.slew * fk * share - S.slewV, -T.spd.slew * 0.7 * dt, T.spd.slew * 0.7 * dt);
+  if (tilted && Math.abs(S.slewV) > 0) S.slewV *= 0.9;
+  if (S.slewV) { const o = S.slew; if (!guard(() => { S.slew += S.slewV * dt; }, () => { S.slew = o; })) S.slewV = 0; }
+  // pluma
+  S.angV += clamp(luf * T.spd.luff * fk * share - S.angV, -T.spd.luff * 1.5 * dt, T.spd.luff * 1.5 * dt);
+  if (tilted) S.angV = Math.max(0, S.angV);
+  if (S.angV) { const o = S.ang; if (!guard(() => { S.ang = clamp(S.ang + S.angV * dt, T.boom.angMin, T.boom.angMax); }, () => { S.ang = o; })) S.angV = 0; if (S.ang === T.boom.angMin || S.ang === T.boom.angMax) S.angV = 0; }
+  // telescopio
+  if (T.yguy && tel !== 0 && S.yg > 0 && S.yg < 1) { tel = 0; S.LbV = 0; sayOnce('Telescopio bloqueado mientras se mueve el arriostramiento'); }
+  if (T.yguy && tel > 0 && S.yg < 1 && S.Lb >= T.yguy.teleMax) { tel = 0; S.LbV = Math.min(0, S.LbV); S.Lb = Math.min(S.Lb, T.yguy.teleMax); f.lmi = true; sayOnce(`Sin arriostramiento tensado la pluma solo llega a ${T.yguy.teleMax} m (Y)`); }
+  S.LbV += clamp(tel * T.spd.tele * fk * share - S.LbV, -1.5 * dt, 1.5 * dt);
+  if (tilted) S.LbV = Math.min(0, S.LbV);
+  if (S.LbV) { const o = S.Lb; if (!guard(() => { S.Lb = clamp(S.Lb + S.LbV * dt, T.boom.min, T.boom.max); }, () => { S.Lb = o; })) S.LbV = 0; if (S.Lb === T.boom.min || S.Lb === T.boom.max) S.LbV = 0; }
+  // radio del lastre superlift (LR 3000)
+  if (T.superlift) {
+    const sv2 = (inp.slo - inp.sli) * 0.5 * fk;
+    if (sv2) { const sl = T.superlift, o = sl.r; if (!guard(() => { sl.r = clamp(sl.r + sv2 * dt, sl.rMin, sl.rMax); }, () => { sl.r = o; })) {} else if (boomHit()) { sl.r = o; sayOnce('El lastre superlift tocaría un obstáculo'); } }
+  }
+  // plumín abatible
+  if (T.jib) {
+    S.jibV += clamp(jib * T.jib.spd * fk * share - S.jibV, -T.jib.spd * 1.5 * dt, T.jib.spd * 1.5 * dt);
+    if (tilted) S.jibV = Math.min(0, S.jibV);
+    if (S.jibV) { const o = S.jibRel; if (!guard(() => { S.jibRel = clamp(S.jibRel + S.jibV * dt, T.jib.relMin, T.jib.relMax); T.jibRel = S.jibRel; }, () => { S.jibRel = o; T.jibRel = o; })) S.jibV = 0; if (S.jibRel === T.jib.relMin || S.jibRel === T.jib.relMax) S.jibV = 0; }
+  }
+  // colisión de pluma y contrapeso
+  const hit = boomHit();
+  if (hit) { Object.assign(S, prev); T.jibRel = S.jibRel; S.v = 0; S.slewV = 0; S.angV = 0; S.LbV = 0; strike(hit.what, hit.x, hit.y, hit.z); }
+
+  // malacate
+  let tip = tipPos();
+  const pd = Math.hypot(S.p.x - tip.x, S.p.y - tip.y, S.p.z - tip.z);
+  if (hoi < 0 && S.att && lmiStatic(T, md, S.Lb, S.ang, S.slew, mLoad) >= 1) { hoi = 0; f.lmi = true; sayOnce('LMI: la carga supera la capacidad en esta posición'); }
+  if (hoi < 0 && S.L <= 1.55) { hoi = 0; f.atb = true; }
+  if (hoi > 0 && S.L > pd + 0.8) { hoi = 0; f.slack = true; }
+  const hs = Math.max(0.6, T.spd.hoist - 0.012 * (S.att ? S.att.m : 0)) * fk * share;
+  S.Ld += clamp(hoi * hs - S.Ld, -3 * dt, 3 * dt);
+  S.L = clamp(S.L + S.Ld * dt, 1.5, tip.y + 3);
+
+  // cinemática de la punta (suavizada)
+  if (!S.tipPrev) S.tipPrev = tip;
+  const tv = { x: (tip.x - S.tipPrev.x) / dt, y: (tip.y - S.tipPrev.y) / dt, z: (tip.z - S.tipPrev.z) / dt };
+  for (const k of ['x', 'y', 'z']) { S.tipA[k] = clamp(S.tipA[k] * 0.8 + 0.2 * (tv[k] - S.tipV[k]) / dt, -6, 6); S.tipV[k] = tv[k]; }
+  S.tipPrev = tip;
+
+  // péndulo 3D (Verlet con cable inextensible que puede aflojarse)
+  S.wind = windAt(S.t);
+  const area = S.att ? Math.max(S.att.w, S.att.d) * S.att.h * 0.75 : 0.4;
+  const wa = WINDK * S.wind * S.wind * area / mLoad, wx = Math.cos(S.windDir) * wa, wz = Math.sin(S.windDir) * wa;
+  const pp = { ...S.p };
+  S.p.x += S.pv.x * dt + wx * dt * dt; S.p.y += S.pv.y * dt - G * dt * dt; S.p.z += S.pv.z * dt + wz * dt * dt;
+  let dx = S.p.x - tip.x, dy = S.p.y - tip.y, dz = S.p.z - tip.z, dist = Math.hypot(dx, dy, dz);
+  S.taut = dist >= S.L - 0.01;
+  if (dist > S.L) { const k = S.L / dist; S.p.x = tip.x + dx * k; S.p.y = tip.y + dy * k; S.p.z = tip.z + dz * k; }
+
+  // contacto con superficies
+  const hw = S.att ? S.att.w / 2 : 0.3, hd = S.att ? S.att.d / 2 : 0.3, lh = S.att ? S.att.h : 0;
+  const sfcAt = (x, z) => surface(x - hw + 0.04, x + hw - 0.04, z - hd + 0.04, z + hd - 0.04, S.att);
+  let sfc = sfcAt(S.p.x, S.p.z), bottom = S.p.y - SLING - lh;
+  const wasResting = S.resting;
+  if (bottom < sfc) {
+    if (sfc - bottom > 0.45) {
+      S.p.x = pp.x; S.p.z = pp.z;
+      if (S.att && Math.hypot(S.pv.x, S.pv.z) > 0.25) strike('La carga chocó con un obstáculo', pp.x, bottom + lh / 2, pp.z);
+      sfc = sfcAt(S.p.x, S.p.z);
+    }
+    if (bottom < sfc) {
+      const vy = (pp.y - S.p.y) / dt;
+      if (!wasResting && S.att && vy > 0.15) impact(vy, S.p.x, sfc, S.p.z);
+      S.p.y = sfc + SLING + lh;
+      S.p.x = pp.x + (S.p.x - pp.x) * 0.5; S.p.z = pp.z + (S.p.z - pp.z) * 0.5;
+      S.resting = true;
+    }
+  } else if (bottom > sfc + 0.03) S.resting = false;
+  S.pv = { x: (S.p.x - pp.x) / dt * (1 - 0.02 * dt), y: (S.p.y - pp.y) / dt, z: (S.p.z - pp.z) / dt * (1 - 0.02 * dt) };
+  if (S.done) return;
+  S.hookVy = S.pv.y;
+
+  // tensión del cable y estabilidad dinámica
+  dx = S.p.x - tip.x; dy = S.p.y - tip.y; dz = S.p.z - tip.z; dist = Math.hypot(dx, dy, dz) || 1;
+  let Tt, gp;
+  if (S.resting) { Tt = S.att ? T.hookM : (S.taut ? T.hookM : 0); gp = [S.p.x, S.p.z]; }
+  else if (!S.taut) { Tt = 0; gp = [tip.x, tip.z]; }
+  else {
+    const ux = dx / dist, uy = dy / dist, uz = dz / dist;
+    const rx = S.pv.x - S.tipV.x, ry = S.pv.y - S.tipV.y, rz = S.pv.z - S.tipV.z, vr = rx * ux + ry * uy + rz * uz;
+    const vt2 = Math.max(0, rx * rx + ry * ry + rz * rz - vr * vr);
+    const ae = (wx - S.tipA.x) * ux + (-G - S.tipA.y) * uy + (wz - S.tipA.z) * uz;
+    Tt = Math.max(0, mLoad * (vt2 / S.L + ae) / G);
+    const k = tip.y / Math.max(0.5, tip.y - S.p.y);
+    let gx = dx * k, gz = dz * k; const gl = Math.hypot(gx, gz); if (gl > 10) { gx *= 10 / gl; gz *= 10 / gl; }
+    gp = [tip.x + gx, tip.z + gz];
+  }
+  S.Tt = Tt;
+  const ms = craneMasses(T, S.Lb, S.ang, S.slew);
+  ms.push([Tt, ...w2c(gp[0], gp[1])]);
+  const u = tipUtil(T, md, ms);
+  S.stab = u;
+  S.lmi = Math.max(u / KF[md], Tt / structCap(T, S.Lb));
+  S.rated = ratedCap(T, md, S.Lb, S.ang, S.slew);
+  if (susp) S.maxLmi = Math.max(S.maxLmi, S.lmi);
+  if (u > 1 || S.phi > 0) {
+    S.phiV += (u > 1 ? (u - 1) * 2.5 : -0.6) * dt; S.phiV *= 0.99; S.phi += S.phiV * dt;
+    if (S.phi <= 0) { S.phi = 0; S.phiV = 0; }
+  }
+  if (S.phi > 0.06) { fail('La grúa volcó', `El momento de vuelco superó la estabilidad (${Math.round(u * 100)} %). Reduce el radio, trabaja por la zona fuerte de la tabla de carga y evita que la carga se balancee hacia fuera.`); return; }
+
+  // líneas eléctricas
+  if (lines.length) {
+    const pv3 = pivotPos(), P = [pv3.x, pv3.y, pv3.z], Tp = [tip.x, tip.y, tip.z], H = [S.p.x, S.p.y, S.p.z];
+    let dmin = 99;
+    for (const l of lines) {
+      const A = [l.a[0], l.y, l.a[1]], Bp = [l.b[0], l.y, l.b[1]];
+      const hp = headPos(), Hd = [hp.x, hp.y, hp.z];
+      let d = Math.min(segSeg(P, Hd, A, Bp), segSeg(Hd, Tp, A, Bp), segSeg(Tp, H, A, Bp));
+      if (S.att) { const top = S.p.y - SLING, bot = top - lh; d = Math.min(d, segSeg([S.p.x, bot, S.p.z], [S.p.x, top, S.p.z], A, Bp) - Math.hypot(hw, hd)); }
+      d -= l.clear;
+      dmin = Math.min(dmin, d);
+    }
+    S.lineD = dmin;
+    if (dmin < 2) { if (!S.inProx) { S.prox++; S.inProx = true; say('¡Alarma de proximidad a línea eléctrica!'); } } else S.inProx = false;
+    if (dmin < 0) { fail('Contacto eléctrico', 'El equipo invadió la distancia mínima de seguridad del conductor energizado. Mantén la pluma, el cable y la carga fuera de la franja roja.'); return; }
+  }
+}
+
+function impact(vy, x, y, z) {
+  const c = S.att;
+  puff(x, y, z, Math.min(18, 4 + vy * 6));
+  if (c.fragile && vy > c.fragile) { c.broken = true; fail('Vidrio roto', `La caja tocó a ${vy.toFixed(2)} m/s. El vidrio necesita menos de ${c.fragile} m/s: usa velocidad fina antes de apoyar.`); return; }
+  if (vy > 1.4) { S.hard++; say(`Aterrizaje duro · ${vy.toFixed(1)} m/s`); S.shake = 0.25; }
+  else say(`Apoyada · ${vy.toFixed(2)} m/s`, 1.4);
+}
+
+function hookAction() {
+  if (!S.running || S.done) return;
+  const h = S.p;
+  if (!S.att) {
+    const ty = h.y - SLING;
+    const c = crates.find(c => !c.held && Math.hypot(c.x - h.x, c.z - h.z) < 1.0 && Math.abs(c.y + c.h - ty) < 0.45 &&
+      !crates.some(d => d !== c && !d.held && Math.abs(d.y - (c.y + c.h)) < 0.05 && ov(d.x - d.w / 2, d.x + d.w / 2, c.x - c.w / 2, c.x + c.w / 2) && ov(d.z - d.d / 2, d.z + d.d / 2, c.z - c.d / 2, c.z + c.d / 2)));
+    if (!c) { say('Baja el gancho sobre el centro de la carga para engancharla'); return; }
+    if (Math.hypot(S.pv.x, S.pv.z) > 0.6) { say('Estabiliza el gancho antes de enganchar'); return; }
+    c.held = true; S.att = c; S.resting = true;
+    S.p.x = c.x; S.p.z = c.z; S.p.y = c.y + c.h + SLING; S.pv = { x: 0, y: 0, z: 0 };
+    const rc = ratedCap(T, mode(), S.Lb, S.ang, S.slew);
+    if (c.m + T.hookM > rc) say(`${c.label}: ${c.m} t supera la capacidad de ${rc.toFixed(1)} t aquí`, 3);
+    else say(`Enganchada ${c.label} · ${c.m} t`);
+  } else {
+    if (!S.resting) { say('Apoya la carga antes de soltarla'); return; }
+    const c = S.att;
+    c.x = h.x; c.z = h.z; c.y = surface(c.x - c.w / 2 + 0.04, c.x + c.w / 2 - 0.04, c.z - c.d / 2 + 0.04, c.z + c.d / 2 - 0.04, c);
+    c.held = false; S.att = null;
+    S.p.y = c.y + c.h + SLING;
+    say(`${c.label} soltada`, 1.4);
+    checkWin();
+  }
+}
+
+function inZone(c, z) { return !c.held && c.x - c.w / 2 >= z.x - z.w / 2 - 0.01 && c.x + c.w / 2 <= z.x + z.w / 2 + 0.01 && c.z - c.d / 2 >= z.z - z.d / 2 - 0.01 && c.z + c.d / 2 <= z.z + z.d / 2 + 0.01 && Math.abs(c.y - z.y) < 0.06; }
+function checkWin() {
+  if (!crates.every(c => L.zones.some(z => inZone(c, z)))) return;
+  S.done = true; S.running = false;
+  const stars = Math.max(1, 3 - (S.hard > 0 ? 1 : 0) - (S.bumps + S.prox > 0 ? 1 : 0) - (S.t > L.par ? 1 : 0));
+  const key = S.lvl;
+  if (!best[key] || stars > best[key]) { best[key] = stars; saveBest(); }
+  renderChips();
+  const next = S.lvl + 1 < LEVELS.length;
+  openCard(`<div class="eyebrow">Nivel ${S.lvl + 1} completado · ${T.name}</div><h2>${L.name}</h2>
+    <div class="stars" aria-label="${stars} de 3 estrellas">${'★'.repeat(stars)}<span class="off">${'★'.repeat(3 - stars)}</span></div>
+    <div class="stats"><span>Tiempo (par ${fmt(L.par)})</span><b>${fmt(S.t)}</b><span>Aterrizajes duros</span><b>${S.hard}</b>
+    <span>Golpes</span><b>${S.bumps}</b><span>Alarmas de línea</span><b>${S.prox}</b><span>LMI máximo</span><b>${Math.round(S.maxLmi * 100)} %</b></div>
+    <div class="row">${next ? '<button class="btn primary" id="c-next">Siguiente nivel</button>' : ''}<button class="btn${next ? '' : ' primary'}" id="c-retry">Repetir</button></div>
+    ${next ? '' : '<p>Era el último trabajo. Vuelve por las tres estrellas en cada nivel o prueba otras grúas.</p>'}`, false);
+  bindCard();
+}
+function fail(title, text) {
+  S.done = true; S.running = false;
+  openCard(`<div class="eyebrow">Nivel ${S.lvl + 1} fallido · ${T.name}</div><h2>${title}</h2><p>${text}</p><div class="row"><button class="btn primary" id="c-retry">Repetir</button></div>`, true);
+  bindCard();
+}
+function showBrief(i) {
+  const Lv = LEVELS[i];
+  let sel = picked[i] && Lv.cranes.includes(picked[i]) ? picked[i] : Lv.rec;
+  const render = () => {
+    openCard(`<div class="eyebrow"><span class="tag">${Lv.type}</span>Nivel ${i + 1} de ${LEVELS.length} · viento ${Lv.wind[0]} m/s · par ${fmt(Lv.par)}${Lv.time ? ` · límite ${fmt(Lv.time)}` : ''}</div>
+      <h2>${Lv.name}</h2><p>${Lv.brief}</p><ul>${Lv.tips.map(t => `<li>${t}</li>`).join('')}</ul>
+      <div class="eyebrow">Elige la grúa</div>
+      <div class="cranes">${Object.values(CRANES).sort((a, b) => a.structMax - b.structMax).map(c => {
+        const ok = Lv.cranes.includes(c.id);
+        return `<button class="copt" data-c="${c.id}" aria-pressed="${sel === c.id}" ${ok ? '' : 'disabled'}>
+          <small>${c.size}${c.id === Lv.rec ? ' · recomendada' : ''}</small><b>${c.name}</b>
+          <small>${c.structMax} t máx · pluma ${c.boom.min === c.boom.max ? c.boom.min + ' m fija' : c.boom.min + '–' + c.boom.max + ' m'}</small>
+          <em class="${ok ? '' : 'why'}">${ok ? c.note : Lv.why[c.id] || (c.structMax >= 300 ? 'Demasiado grande para esta obra' : 'Capacidad o alcance insuficientes')}</em></button>`; }).join('')}</div>
+      <div class="keys"><kbd>↑</kbd><kbd>↓</kbd> avanzar · <kbd>←</kbd><kbd>→</kbd> dirección · <kbd>O</kbd> estabilizadores · <kbd>B</kbd> lastre · <kbd>Y</kbd> arriostramiento · <kbd>T</kbd><kbd>G</kbd> plumín · <kbd>M</kbd> montaje · <kbd>K</kbd><kbd>L</kbd> superlift · <kbd>A</kbd><kbd>D</kbd> giro · <kbd>W</kbd><kbd>S</kbd> pluma · <kbd>Q</kbd><kbd>E</kbd> telescopio · <kbd>R</kbd><kbd>F</kbd> gancho · <kbd>Espacio</kbd> enganchar · <kbd>Shift</kbd> fino · <kbd>V</kbd> vista lateral · <kbd>Z</kbd> zoom</div>
+      <div class="row"><button class="btn primary" id="c-start">Empezar turno</button></div>`, false);
+    card.querySelectorAll('.copt').forEach(b => b.onclick = () => { sel = b.dataset.c; picked[i] = sel; loadLevel(i, sel); render(); });
+    const st = document.getElementById('c-start');
+    st.onclick = () => { closeCard(); S.running = true; };
+    st.focus({ preventScroll: true });
+  };
+  loadLevel(i, sel);
+  render();
+}
+const modal = document.getElementById('modal'), card = document.getElementById('card');
+function openCard(html, isFail) { card.innerHTML = html; card.classList.toggle('fail', !!isFail); modal.hidden = false; modal.scrollTop = 0; }
+function closeCard() { modal.hidden = true; }
+function bindCard() {
+  const n = document.getElementById('c-next'), r = document.getElementById('c-retry');
+  if (n) { n.onclick = () => showBrief(S.lvl + 1); n.focus({ preventScroll: true }); }
+  if (r) { r.onclick = () => showBrief(S.lvl); if (!n) r.focus({ preventScroll: true }); }
+}
+const fmt = t => `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+function renderChips() {
+  const nav = document.getElementById('levels'); nav.innerHTML = '';
+  LEVELS.forEach((Lv, i) => {
+    const b = document.createElement('button'); b.className = 'chip'; b.type = 'button';
+    b.disabled = false;
+    b.setAttribute('aria-current', i === S.lvl ? 'true' : 'false');
+    const st = best[i] || 0;
+    b.innerHTML = `${i + 1}<span class="st">${'★'.repeat(st)}${'·'.repeat(3 - st)}</span>`;
+    b.title = `${Lv.name} · ${Lv.type}`;
+    b.onclick = () => showBrief(i);
+    nav.appendChild(b);
+  });
+}
+
+// ---------- rango de trabajo (planta) ----------
+function workRange() {
+  const m = (S.att ? S.att.m : 0) + T.hookM, md = mode(), pts = [];
+  for (let k = 0; k < 48; k++) {
+    const sl = k / 48 * Math.PI * 2;
+    let r;
+    if (lmiStatic(T, md, S.Lb, T.boom.angMax, sl, m) >= 1) r = 0;
+    else if (lmiStatic(T, md, S.Lb, T.boom.angMin, sl, m) < 1) r = reach(T, S.Lb, T.boom.angMin);
+    else { let lo = T.boom.angMin, hi = T.boom.angMax; for (let j = 0; j < 14; j++) { const a = (lo + hi) / 2; if (lmiStatic(T, md, S.Lb, a, sl, m) < 1) hi = a; else lo = a; } r = Math.max(0, reach(T, S.Lb, hi)); }
+    pts.push([r, sl]);
+  }
+  return pts;
+}
+
+// ---------- dibujo: planta ----------
+const tv = document.getElementById('top'), tc = tv.getContext('2d');
+const sv = document.getElementById('side'), sc2 = sv.getContext('2d');
+let DPR = 1;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  tv.width = Math.round(tv.clientWidth * DPR); tv.height = Math.round(tv.clientWidth * 2 / 3 * DPR);
+  sv.width = Math.round(sv.clientWidth * DPR); sv.height = Math.round(sv.clientHeight * DPR);
+  sizeChart();
+}
+const mono = (px, wt = 600) => `${wt} ${px * DPR}px "IBM Plex Mono", ui-monospace, monospace`;
+let TK = 1, TOX = 0, TOY = 0;
+function topCam() {
+  const k0 = tv.width / WW;
+  if (!zoom) { TK = k0; TOX = 0; TOY = (tv.height - WD * k0) / 2; return; }
+  TK = k0 * 2.2;
+  const vw = tv.width / TK, vh = tv.height / TK;
+  const cx = clamp(S.p.x, vw / 2, WW - vw / 2), cz = clamp(S.p.z, vh / 2, WD - vh / 2);
+  TOX = tv.width / 2 - cx * TK; TOY = tv.height / 2 - cz * TK;
+}
+const TX = x => TOX + x * TK, TZ = z => TOY + z * TK;
+function tText(x, z, s, col, px = 10, align = 'center', wt = 600) { tc.font = mono(px, wt); tc.fillStyle = col; tc.textAlign = align; tc.textBaseline = 'middle'; tc.fillText(s, TX(x), TZ(z)); }
+
+function drawTop() {
+  const ctx = tc, W = tv.width, H = tv.height;
+  topCam();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#1b1f25'; ctx.fillRect(0, 0, W, H);
+  ctx.save();
+  if (S.shake > 0) ctx.translate((Math.random() - .5) * 6 * S.shake * DPR, (Math.random() - .5) * 6 * S.shake * DPR);
+  ctx.translate(TOX, TOY); ctx.scale(TK, TK);
+  const px = 1 / TK;
+  ctx.fillStyle = L.ground; ctx.fillRect(0, 0, WW, WD);
+  ctx.strokeStyle = 'rgba(255,255,255,.045)'; ctx.lineWidth = px;
+  ctx.beginPath(); for (let x = 5; x < WW; x += 5) { ctx.moveTo(x, 0); ctx.lineTo(x, WD); } for (let z = 5; z < WD; z += 5) { ctx.moveTo(0, z); ctx.lineTo(WW, z); } ctx.stroke();
+  // terreno blando y agua
+  for (const s of softs) {
+    const x0 = s.x - s.w / 2, z0 = s.z - s.d / 2;
+    ctx.fillStyle = s.kind === 'water' ? '#28465e' : '#54432f'; ctx.fillRect(x0, z0, s.w, s.d);
+    ctx.save(); ctx.beginPath(); ctx.rect(x0, z0, s.w, s.d); ctx.clip();
+    ctx.strokeStyle = s.kind === 'water' ? 'rgba(160,200,230,.18)' : 'rgba(120,95,65,.6)'; ctx.lineWidth = 2 * px;
+    if (s.kind === 'water') { ctx.beginPath(); for (let z = z0 + 1.5; z < z0 + s.d; z += 2.5) for (let x = x0; x < x0 + s.w; x += 3) { ctx.moveTo(x, z); ctx.quadraticCurveTo(x + 0.75, z - 0.4, x + 1.5, z); } ctx.stroke(); }
+    else { ctx.beginPath(); for (let z = z0; z < z0 + s.d + s.w; z += 1.6) { ctx.moveTo(x0, z); ctx.lineTo(x0 + s.w, z - s.w); } ctx.stroke(); }
+    ctx.restore();
+  }
+  // zonas
+  for (const z of L.zones) {
+    if (z.stack > 0) continue;
+    ctx.fillStyle = 'rgba(242,182,50,.13)'; ctx.fillRect(z.x - z.w / 2, z.z - z.d / 2, z.w, z.d);
+  }
+  // líneas: franja de seguridad (debajo)
+  for (const l of lines) {
+    ctx.strokeStyle = S.lineD < 2 ? 'rgba(232,87,63,.32)' : 'rgba(232,87,63,.14)'; ctx.lineWidth = l.clear * 2; ctx.lineCap = 'butt';
+    ctx.beginPath(); ctx.moveTo(l.a[0], l.a[1]); ctx.lineTo(l.b[0], l.b[1]); ctx.stroke();
+  }
+  // cajas estáticas (ordenadas por altura)
+  const bs = [...boxes].sort((a, b) => a.h - b.h);
+  for (const b of bs) drawBoxTop(b, px);
+  // cargas en el suelo
+  for (const c of crates) if (!c.held) drawCrateTop(c, c.x, c.z, px, 0);
+  // zonas (borde)
+  for (const z of L.zones) {
+    if (z.stack > 0) continue;
+    ctx.setLineDash([0.8, 0.6]); ctx.strokeStyle = '#f2b632'; ctx.lineWidth = 2 * px; ctx.strokeRect(z.x - z.w / 2, z.z - z.d / 2, z.w, z.d); ctx.setLineDash([]);
+  }
+  // rango de trabajo
+  if (S.range && S.att) {
+    const pv = slewCenter();
+    ctx.beginPath();
+    S.range.forEach(([r, sl], k) => { const a = S.h + sl, x = pv.x + r * Math.cos(a), z = pv.z + r * Math.sin(a); k ? ctx.lineTo(x, z) : ctx.moveTo(x, z); });
+    ctx.closePath(); ctx.fillStyle = 'rgba(116,198,144,.06)'; ctx.fill();
+    ctx.setLineDash([0.7, 0.5]); ctx.strokeStyle = 'rgba(116,198,144,.7)'; ctx.lineWidth = 1.5 * px; ctx.stroke(); ctx.setLineDash([]);
+  }
+  // plano de la vista lateral
+  if (viewMode === 'pluma') {
+    const pv = pivotPos(), a = S.h + S.slew;
+    ctx.strokeStyle = 'rgba(235,230,218,.12)'; ctx.lineWidth = px; ctx.setLineDash([1.2, 1]);
+    ctx.beginPath(); ctx.moveTo(pv.x - Math.cos(a) * 200, pv.z - Math.sin(a) * 200); ctx.lineTo(pv.x + Math.cos(a) * 200, pv.z + Math.sin(a) * 200); ctx.stroke(); ctx.setLineDash([]);
+  }
+  drawCraneTop(px, S.model || craneModel());
+  // carga colgada con sombra
+  const h = S.p;
+  const tip = tipPos();
+  if (S.att) {
+    const c = S.att, clr = Math.max(0, h.y - SLING - c.h - surface(h.x - c.w / 2, h.x + c.w / 2, h.z - c.d / 2, h.z + c.d / 2, c));
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(h.x - c.w / 2 + clr * 0.3, h.z - c.d / 2 + clr * 0.45, c.w, c.d);
+    drawCrateTop(c, h.x, h.z, px, 1);
+  }
+  ctx.strokeStyle = '#d0d3d8'; ctx.lineWidth = 1.5 * px; ctx.beginPath(); ctx.moveTo(tip.x, tip.z); ctx.lineTo(h.x, h.z); ctx.stroke();
+  { const hs = 0.55 * hookScale(); ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(h.x - hs + 0.25, h.z - hs * 0.6 + 0.3, 2 * hs, 1.2 * hs);
+    ctx.fillStyle = '#f2b632'; ctx.fillRect(h.x - hs, h.z - hs * 0.6, 2 * hs, 1.2 * hs); ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.lineWidth = px; ctx.strokeRect(h.x - hs, h.z - hs * 0.6, 2 * hs, 1.2 * hs);
+    ctx.fillStyle = '#9aa1a9'; ctx.fillRect(h.x - hs * 0.8, h.z - hs * 0.15, hs * 1.6, hs * 0.3); }
+  // cables eléctricos (encima)
+  for (const l of lines) {
+    ctx.strokeStyle = S.lineD < 2 ? '#e8573f' : '#d9c27a'; ctx.lineWidth = 2 * px;
+    for (const off of [-1.2, 0, 1.2]) { const nx = l.a[0] === l.b[0] ? off : 0, nz = l.a[0] === l.b[0] ? 0 : off; ctx.beginPath(); ctx.moveTo(l.a[0] + nx, l.a[1] + nz); ctx.lineTo(l.b[0] + nx, l.b[1] + nz); ctx.stroke(); }
+  }
+  for (const p of S.parts) { ctx.fillStyle = `rgba(200,180,150,${p.life * 0.45})`; ctx.beginPath(); ctx.arc(p.x, p.z, (1.4 - p.life) * 0.7 + 0.2, 0, 7); ctx.fill(); }
+  ctx.restore();
+
+  // textos en pantalla
+  for (const b of boxes) if (b.kind === 'building' || b.kind === 'pier' || b.kind === 'tank' || b.kind === 'rack') tText(b.x, b.z, `+${b.h} m`, 'rgba(235,230,218,.75)', 10);
+  for (const z of L.zones) if (!z.stack) tText(z.x, z.z - z.d / 2 - 0.9, `${z.label}${z.y ? ' +' + z.y + ' m' : ''}`, '#f2b632', 10);
+  for (const l of lines) { const vx = l.a[0] === l.b[0]; tText(vx ? l.a[0] + 3 : 4, vx ? WD - 4 : l.a[1] - 2.6, `⚡ ${l.kv} · ${l.clear} m`, S.lineD < 2 ? '#e8573f' : '#d9c27a', 10, 'left'); }
+  if (S.att) {
+    const c = S.att, clr = Math.max(0, h.y - SLING - c.h - surface(h.x - c.w / 2, h.x + c.w / 2, h.z - c.d / 2, h.z + c.d / 2, c));
+    tText(h.x + c.w / 2 + 0.8, h.z - c.d / 2 - 0.6, `↕ ${clr.toFixed(1)} m`, '#ebe6da', 11, 'left');
+  }
+  // brújula y viento
+  ctx.save(); ctx.translate(W - 34 * DPR, 34 * DPR);
+  ctx.fillStyle = 'rgba(20,24,30,.75)'; ctx.beginPath(); ctx.arc(0, 0, 26 * DPR, 0, 7); ctx.fill();
+  ctx.fillStyle = '#ebe6da'; ctx.font = mono(9); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('N', 0, -18 * DPR);
+  if (S.wind > 0.2) { ctx.rotate(S.windDir); ctx.strokeStyle = '#e8573f'; ctx.lineWidth = 2 * DPR; ctx.beginPath(); ctx.moveTo(-14 * DPR, 0); ctx.lineTo(12 * DPR, 0); ctx.lineTo(6 * DPR, -5 * DPR); ctx.moveTo(12 * DPR, 0); ctx.lineTo(6 * DPR, 5 * DPR); ctx.stroke(); }
+  ctx.restore();
+  // ojo de la vista lateral
+  const sc = sideCam();
+  ctx.save(); ctx.translate(W - 34 * DPR, 76 * DPR);
+  ctx.fillStyle = 'rgba(20,24,30,.75)'; ctx.beginPath(); ctx.arc(0, 0, 14 * DPR, 0, 7); ctx.fill();
+  ctx.rotate(Math.atan2(sc.n[1], sc.n[0])); ctx.fillStyle = '#9cc4d8';
+  ctx.beginPath(); ctx.moveTo(9 * DPR, 0); ctx.lineTo(-6 * DPR, -6 * DPR); ctx.lineTo(-6 * DPR, 6 * DPR); ctx.closePath(); ctx.fill();
+  ctx.restore();
+  // escala
+  ctx.fillStyle = 'rgba(235,230,218,.7)'; ctx.fillRect(12 * DPR, H - 16 * DPR, 10 * TK, 2 * DPR);
+  ctx.font = mono(9); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillText('10 m', 12 * DPR, H - 22 * DPR);
+  // aviso
+  if (S.msgT > 0) {
+    ctx.globalAlpha = Math.min(1, S.msgT * 2);
+    ctx.font = mono(12); const tw = ctx.measureText(S.msg).width + 24 * DPR;
+    ctx.fillStyle = 'rgba(20,24,30,.9)'; ctx.fillRect(W / 2 - tw / 2, H - 46 * DPR, tw, 28 * DPR);
+    ctx.fillStyle = '#f2b632'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(S.msg, W / 2, H - 32 * DPR);
+    ctx.globalAlpha = 1;
+  }
+}
+function shade(hex, f) { const n = parseInt(hex.slice(1), 16); let r = n >> 16, g = (n >> 8) & 255, b = n & 255; r = clamp(Math.round(r * f), 0, 255); g = clamp(Math.round(g * f), 0, 255); b = clamp(Math.round(b * f), 0, 255); return `rgb(${r},${g},${b})`; }
+function drawBoxTop(b, px) {
+  const ctx = tc, x0 = b.x - b.w / 2, z0 = b.z - b.d / 2, col = b.color || KIND_COL[b.kind] || '#69717a';
+  if (b.kind === 'pole') { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(b.x, b.z, 0.45, 0, 7); ctx.fill(); ctx.fillStyle = '#4a3828'; ctx.fillRect(b.x - 1.6, b.z - 0.15, 3.2, 0.3); return; }
+  if (b.h > 0.6) { ctx.fillStyle = 'rgba(0,0,0,.28)'; const o = Math.min(3, b.h * 0.08); ctx.fillRect(x0 + o * 0.6, z0 + o, b.w, b.d); }
+  ctx.fillStyle = b.kind === 'building' ? shade(col, 0.8 + Math.min(0.5, b.h / 60)) : col; ctx.fillRect(x0, z0, b.w, b.d);
+  ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 1.5 * px; ctx.strokeRect(x0, z0, b.w, b.d);
+  if (b.kind === 'building') { ctx.strokeStyle = 'rgba(0,0,0,.18)'; ctx.lineWidth = px; ctx.strokeRect(x0 + 0.8, z0 + 0.8, b.w - 1.6, b.d - 1.6); }
+  if (b.kind === 'container') { ctx.strokeStyle = 'rgba(0,0,0,.25)'; ctx.lineWidth = px; ctx.beginPath(); for (let x = x0 + 0.4; x < x0 + b.w; x += 0.4) { ctx.moveTo(x, z0); ctx.lineTo(x, z0 + b.d); } ctx.stroke(); }
+  if (b.kind === 'bed') { ctx.strokeStyle = '#596372'; ctx.lineWidth = 2 * px; ctx.strokeRect(x0 + 0.2, z0 + 0.2, b.w - 0.4, b.d - 0.4); }
+  if (b.kind === 'cab') { ctx.fillStyle = '#9fc2d6'; ctx.fillRect(b.x - 0.4, z0 + 0.3, 0.8, b.d - 0.6); }
+  if (b.kind === 'rack') { ctx.strokeStyle = '#a89070'; ctx.lineWidth = 2 * px; ctx.beginPath(); for (let z = z0; z < z0 + b.d; z += 3) { ctx.moveTo(x0, z); ctx.lineTo(x0 + b.w, z); } ctx.stroke(); }
+}
+function drawCrateTop(c, x, z, px, held) {
+  const ctx = tc, x0 = x - c.w / 2, z0 = z - c.d / 2;
+  ctx.fillStyle = c.broken ? '#4c5a63' : c.color; ctx.fillRect(x0, z0, c.w, c.d);
+  ctx.strokeStyle = held ? '#f2b632' : 'rgba(0,0,0,.45)'; ctx.lineWidth = (held ? 2 : 1.5) * px; ctx.strokeRect(x0, z0, c.w, c.d);
+  if (c.kind === 'container' || c.kind === 'girder') { ctx.strokeStyle = 'rgba(0,0,0,.22)'; ctx.lineWidth = px; ctx.beginPath(); for (let k = x0 + 0.5; k < x0 + c.w; k += 0.5) { ctx.moveTo(k, z0); ctx.lineTo(k, z0 + c.d); } ctx.stroke(); }
+  if (c.kind === 'glass') { ctx.fillStyle = '#a9d3e6'; ctx.fillRect(x0 + 0.25, z0 + 0.25, c.w - 0.5, c.d - 0.5); }
+  if (c.kind === 'vessel' || c.kind === 'tower') { ctx.fillStyle = 'rgba(255,255,255,.15)'; ctx.beginPath(); ctx.arc(x, z, Math.min(c.w, c.d) * 0.36, 0, 7); ctx.fill(); }
+  ctx.strokeStyle = '#4a7bd0'; ctx.lineWidth = 1.2 * px; ctx.beginPath(); ctx.moveTo(x0 + 0.2, z0 + 0.2); ctx.lineTo(x0 + c.w - 0.2, z0 + c.d - 0.2); ctx.moveTo(x0 + c.w - 0.2, z0 + 0.2); ctx.lineTo(x0 + 0.2, z0 + c.d - 0.2); ctx.stroke();
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.font = mono(9); ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(`${c.label}`, TX(x), TZ(z) - 6 * DPR); ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.fillText(`${c.m} t`, TX(x), TZ(z) + 6 * DPR);
+  ctx.restore();
+}
+// ---------- arriostramiento en Y (modelo 3D) ----------
+// Montado sobre la sección base: mástil corto, dos brazos abiertos en V con cabrestantes en las puntas,
+// cables de arriostramiento hacia la cabeza de la pluma y hacia el pie de la sección base.
+function yGuyModel() {
+  const pv = pivotPos(), th = S.h + S.slew, ca = Math.cos(S.ang), sa = Math.sin(S.ang);
+  const u = [ca * Math.cos(th), sa, ca * Math.sin(th)], nu = [-sa * Math.cos(th), ca, -sa * Math.sin(th)], la = [-Math.sin(th), 0, Math.cos(th)];
+  const top = T.boom.w / 2;
+  const P = (d, up, side) => [pv.x + u[0] * d + nu[0] * up + la[0] * side, pv.y + u[1] * d + nu[1] * up + la[1] * side, pv.z + u[2] * d + nu[2] * up + la[2] * side];
+  const dm = 6.8, el = [];
+  const add = (type, a, b, side, extra = {}) => el.push({ type, a, b, side, ...extra });
+  // soporte en la sección base y mástil
+  add('frame', P(dm - 0.9, top, -0.55), P(dm + 0.9, top, -0.55), -0.55, { w: 0.35 });
+  add('frame', P(dm - 0.9, top, 0.55), P(dm + 0.9, top, 0.55), 0.55, { w: 0.35 });
+  add('mast', P(dm, top, 0), P(dm + 0.15, top + 1.3, 0), 0, { w: 0.7 });
+  // fases: 0–0.5 levantar brazos (plegados hacia atrás sobre la pluma), 0.5–0.8 abrir en V, 0.8–1 tensar cables
+  const ease = t => t * t * (3 - 2 * t), g = S.yg;
+  const pA = ease(clamp(g / 0.5, 0, 1)), pB = ease(clamp((g - 0.5) / 0.3, 0, 1)), pC = clamp((g - 0.8) / 0.2, 0, 1);
+  const al = (8 + 87 * pA) * D, be = 31 * pB * D, La = 6.9;
+  const tips = [];
+  for (const sg of [-1, 1]) {
+    const r0 = [dm + 0.15, top + 1.3, sg * 0.35];
+    const dir = [-Math.cos(al) * Math.cos(be), Math.sin(al) * Math.cos(be), sg * Math.sin(be)];
+    const tl = [r0[0] + dir[0] * La, r0[1] + dir[1] * La, r0[2] + dir[2] * La];
+    const ml = [r0[0] + dir[0] * La * 0.45, r0[1] + dir[1] * La * 0.45, r0[2] + dir[2] * La * 0.45];
+    const root = P(...r0), tip = P(...tl), mid = P(...ml);
+    tips.push(tip);
+    add('arm', root, tip, sg * (0.35 + 1.5 * pB), { w: 0.55 });
+    // cilindros hidráulicos de elevación y apertura
+    add('brace', P(dm - 1.6, top, sg * 0.6), mid, sg * (0.6 + 0.6 * pB), { w: 0.2 });
+    add('brace', P(dm + 1.6, top, sg * 0.6), mid, sg * (0.6 + 0.6 * pB), { w: 0.2 });
+    // cables: punta del brazo → cabeza de la pluma y → pie de la sección base (con comba hasta tensar)
+    const sag = 1.6 * (1 - pC) * (0.3 + 0.7 * pA);
+    add('rope', tip, P(S.Lb - 1.1, top * 0.75, sg * 0.35), sg * 1.6, { sag, slack: pC < 1 });
+    add('rope', tip, P(1.4, top, sg * 0.6), sg * 1.6, { sag: sag * 0.6, slack: pC < 1 });
+    add('winch', tip, tip, sg * (0.35 + 3.5 * pB));
+  }
+  if (pB > 0.05) add('rope', tips[0], tips[1], 0, { thin: true, sag: 0.5 * (1 - pC), slack: pC < 1 });
+  return el;
+}
+// ---------- modelo 3D de la grúa (cajas, cilindros y celosía) ----------
+const V = { add: (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]], sub: (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], mul: (a, s) => [a[0] * s, a[1] * s, a[2] * s],
+  dot: (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], cross: (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]],
+  norm: a => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; } };
+const LIGHT = V.norm([-0.45, 0.8, -0.4]);
+const GLASS = '#5f8fa8', STEEL = '#8a929b', CHROME = '#d4d8dc', BLACK = '#1d2125', DGREY = '#2f353d', MGREY = '#3a3f45';
+const shadeCache = new Map();
+function shadeC(col, f) { const k = col + (Math.round(f * 40) / 40); let v = shadeCache.get(k); if (!v) { v = shade(col, Math.round(f * 40) / 40); shadeCache.set(k, v); } return v; }
+function pBox(c, ax, h, col, extra = {}) {
+  const faces = [];
+  for (let i = 0; i < 3; i++) for (const s of [-1, 1]) {
+    const j = (i + 1) % 3, k = (i + 2) % 3, n = V.mul(ax[i], s), fc = V.add(c, V.mul(ax[i], s * h[i]));
+    const A = V.mul(ax[j], h[j]), Bv = V.mul(ax[k], h[k]);
+    faces.push({ n, pts: [V.add(V.add(fc, A), Bv), V.add(V.sub(fc, A), Bv), V.sub(V.sub(fc, A), Bv), V.sub(V.add(fc, A), Bv)] });
+  }
+  return { k: 'poly', c, faces, col, edge: true, ...extra };
+}
+function frameBox(o, f, l, u, x0, x1, l0, l1, u0, u1, col, extra) {
+  const c = V.add(o, V.add(V.mul(f, (x0 + x1) / 2), V.add(V.mul(l, (l0 + l1) / 2), V.mul(u, (u0 + u1) / 2))));
+  return pBox(c, [f, l, u], [Math.abs(x1 - x0) / 2, Math.abs(l1 - l0) / 2, Math.abs(u1 - u0) / 2], col, extra);
+}
+function pCyl(a, b, r, col, n = 12, extra = {}) {
+  const d = V.norm(V.sub(b, a)), ref = Math.abs(d[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+  const p1 = V.norm(V.cross(d, ref)), p2 = V.cross(d, p1);
+  const rn = Array.from({ length: n }, (_, i) => { const t = i / n * Math.PI * 2; return V.add(V.mul(p1, Math.cos(t)), V.mul(p2, Math.sin(t))); });
+  const ra = rn.map(q => V.add(a, V.mul(q, r))), rb = rn.map(q => V.add(b, V.mul(q, r))), faces = [];
+  for (let i = 0; i < n; i++) { const j = (i + 1) % n; faces.push({ n: V.norm(V.add(rn[i], rn[j])), vn: [rn[i], rn[j], rn[j], rn[i]], pts: [ra[i], ra[j], rb[j], rb[i]], side: true }); }
+  faces.push({ n: V.mul(d, -1), pts: [...ra].reverse(), cap: true, capCol: extra.capCol }, { n: d, pts: rb, cap: true, capCol: extra.capCol });
+  return { k: 'poly', c: V.mul(V.add(a, b), 0.5), faces, col, ...extra };
+}
+const pLine = (pts, w, col, extra = {}) => ({ k: 'line', pts, w, col, c: V.mul(pts.reduce((s, p) => V.add(s, p), [0, 0, 0]), 1 / pts.length), ...extra });
+const pGroup = (items, c) => ({ k: 'group', items, c: c || V.mul(items.reduce((s, p) => V.add(s, p.c), [0, 0, 0]), 1 / items.length) });
+
+// intervalos libres en [a, b] quitando los ocupados
+function gaps(a, b, occ) {
+  const s = [...occ].sort((p, q) => p[0] - q[0]), out = []; let x = a;
+  for (const [o0, o1] of s) { if (o1 <= x) continue; if (o0 > x) out.push([x, Math.min(o0, b)]); x = Math.max(x, o1); if (x >= b) break; }
+  if (x < b) out.push([x, b]);
+  return out.filter(([p, q]) => q - p > 0.05);
+}
+
+function craneModel() {
+  const prims = [], lf = lift(), h = S.h, push = (...p) => prims.push(...p);
+  const F = [Math.cos(h), 0, Math.sin(h)], Lt = [-Math.sin(h), 0, Math.cos(h)], U = [0, 1, 0];
+  const O = [S.cx, 0, S.cz];
+  const cb = (x0, x1, l0, l1, u0, u1, col, ex) => frameBox(O, F, Lt, U, x0, x1, l0, l1, u0, u1, col, ex);
+  const cp = (x, l, u) => V.add(O, V.add(V.mul(F, x), V.add(V.mul(Lt, l), V.mul(U, u))));
+  if (T.crawler) {
+    const r = T.track, tw = T.trackW, nT = T.trackN || 1, kk = T.id === 'lr' ? 1.55 : 1;
+    for (const s of [-1, 1]) for (let ti = 0; ti < nT; ti++) {
+      const wT = (tw - 0.3 * (nT - 1)) / nT, base = s * (r.hw - tw);
+      const l0 = base + s * ti * (wT + 0.3), l1 = l0 + s * wT, lm = (l0 + l1) / 2;
+      push(cb(r.xr + 0.6 * kk, r.xf - 0.6 * kk, l0 + s * 0.12, l1 - s * 0.12, 0.35 * kk, 1.05 * kk, DGREY));
+      push(pCyl(cp(r.xr + 0.65 * kk, l0 + s * 0.08, 0.68 * kk), cp(r.xr + 0.65 * kk, l1 - s * 0.08, 0.68 * kk), 0.6 * kk, '#30353b', 16, { capCol: '#4a5058' }));
+      push(pCyl(cp(r.xf - 0.65 * kk, l0 + s * 0.08, 0.68 * kk), cp(r.xf - 0.65 * kk, l1 - s * 0.08, 0.68 * kk), 0.58 * kk, '#30353b', 16, { capCol: '#4a5058' }));
+      for (let x = r.xr + 1.6 * kk; x < r.xf - 1.4 * kk; x += 1.25 * kk) push(pCyl(cp(x, l0 + s * 0.2, 0.32 * kk), cp(x, l1 - s * 0.2, 0.32 * kk), 0.24 * kk, '#454b52', 8));
+      for (let x = r.xr + 0.75 * kk; x < r.xf - 0.6 * kk; x += 0.5 * kk) push(cb(x - 0.2 * kk, x + 0.2 * kk, l0, l1, 1.28 * kk, 1.42 * kk, '#1b1e22'), cb(x - 0.2 * kk, x + 0.2 * kk, l0, l1, 0, 0.12 * kk, '#1b1e22'));
+      for (const xe of [r.xr + 0.65 * kk, r.xf - 0.65 * kk]) for (let a = 0; a < 6; a++) {
+        const t = (a + 0.5) / 6 * Math.PI, sgn = xe < 0 ? -1 : 1, x = xe + sgn * Math.sin(t) * 0.71 * kk, y = (0.71 - Math.cos(t) * 0.71) * kk;
+        push(cb(x - 0.16 * kk, x + 0.16 * kk, l0, l1, y - 0.08 * kk, y + 0.08 * kk, '#1b1e22'));
+      }
+      push(cb(r.xr + kk, r.xf - kk, lm - 0.02, lm + 0.02, 1.05 * kk, 1.28 * kk, MGREY, { edge: false }));
+    }
+    const cxb = T.carX || 2.6;
+    push(cb(-cxb, cxb, -(r.hw - tw), r.hw - tw, 0.75 * kk, T.deckHi, DGREY));
+    if (T.id === 'lr') for (const x of [-cxb, cxb]) push(cb(x - 0.6, x + 0.6, -(r.hw - 0.2), r.hw - 0.2, 0.9 * kk, T.deckHi - 0.3, shade(T.color, 0.9)));
+    push(pCyl(cp(0, 0, T.deckHi - 0.2), cp(0, 0, T.deckHi), T.ringR || 2.2, MGREY, 20));
+  } else {
+    const L0 = T.len[0], L1 = T.len[1], hf = T.half, wR = T.wheelR, dLo = T.deckLo + lf, dHi = T.deckHi + lf, wz = wR + lf * 0.15;
+    const Y = T.color, Yd = shade(Y, 0.88), GR = '#9aa0a6', GRd = '#7c838a', GRk = '#5d646b', RIM = T.rim || '#b9bfc5';
+    // extrusión de un perfil (x, altura) a lo largo del eje lateral del chasis
+    const ext = (prof, l0, l1, col, ex) => {
+      const faces = [], P = (x, u, l) => cp(x, l, u), n = prof.length;
+      faces.push({ n: Lt, pts: prof.map(([x, u]) => P(x, u, l1)) }, { n: V.mul(Lt, -1), pts: [...prof].reverse().map(([x, u]) => P(x, u, l0)) });
+      for (let i = 0; i < n; i++) { const [x1, u1] = prof[i], [x2, u2] = prof[(i + 1) % n], dx = x2 - x1, du = u2 - u1, L = Math.hypot(dx, du) || 1;
+        faces.push({ n: V.add(V.mul(F, du / L), V.mul(U, -dx / L)), pts: [P(x1, u1, l0), P(x2, u2, l0), P(x2, u2, l1), P(x1, u1, l1)] }); }
+      const c = P(prof.reduce((s, p) => s + p[0], 0) / n, prof.reduce((s, p) => s + p[1], 0) / n, (l0 + l1) / 2);
+      return { k: 'poly', c, faces, col, ...ex };
+    };
+    const wheelOcc = T.axles.map(a => [a - wR - 0.12, a + wR + 0.12]);
+    const groups = []; [...T.axles].sort((p, q) => p - q).forEach(a => { const g = groups[groups.length - 1]; if (g && a - g[g.length - 1] < 2.0) g.push(a); else groups.push([a]); });
+    const groupOcc = groups.map(g => [g[0] - wR - 0.2, g[g.length - 1] + wR + 0.2]);
+    const outOcc = [T.out.xf, T.out.xr].map(x => [x - 0.6, x + 0.6]);
+    let cabX0 = L1 - 3.0, cabTop = Math.max(dHi + 0.8, wz + wR + 1.9);
+    const fenderTop = wz + wR + 0.2, tireFront = Math.max(...T.axles) + wR + 0.12;
+    if (T.rt) { cabX0 = L1 - 0.4; cabTop = dHi; } else if (T.ltm) { cabX0 = Math.max(L1 - 2.05, tireFront, T.out.xf + 0.6 > tireFront && T.out.xf < L1 ? T.out.xf + 0.6 : -99); cabTop = T.tower ? dHi + 0.9 : T.pivH + lf - T.boom.w * 0.63 - 0.12; }
+    const tailR = Math.abs(T.xCw) + T.cwLen / 2 + 0.35, engX0 = T.ltm ? cabX0 : Math.max(cabX0 - 1.9, T.piv + tailR), front0 = Math.min(cabX0, engX0);
+    // en el estilo LTM el motor va bajo la cubierta, en el hueco libre más largo entre ejes
+    const freeGaps = gaps(L0 + 0.2, front0 - 0.1, [...groupOcc, ...outOcc]).sort((p, q) => (q[1] - q[0]) - (p[1] - p[0]));
+    const engGap = T.ltm && freeGaps[0] && freeGaps[0][1] - freeGaps[0][0] > 1.2 ? freeGaps[0] : null;
+    const cabOverAxle = T.axles.some(a => a + wR > cabX0 - 0.1);
+    const cabLow = T.ltm ? dLo - 0.15 : cabOverAxle ? fenderTop + 0.05 : dLo + 0.2;
+    // bastidor principal (viga cajón gris) y travesaños
+    push(ext([[L0 + 0.35, dLo + 0.1], [L1 - 0.5, dLo + 0.1], [L1 - 0.5, dLo + 1.0], [L0 + 0.35, dLo + 1.0]], -0.8, 0.8, GR));
+    for (const a of T.axles) {
+      push(cb(a - 0.12, a + 0.12, -(hf - 0.62), hf - 0.62, wz - 0.12, wz + 0.12, '#2b2f34'));
+      for (const s of [-1, 1]) push(pCyl(cp(a + 0.3, s * 0.95, wz + 0.05), cp(a + 0.12, s * 0.78, dLo + 0.45), 0.11, GRk, 10), pCyl(cp(a - 0.3, s * 0.95, wz + 0.05), cp(a - 0.12, s * 0.78, dLo + 0.45), 0.07, '#c3c8cd', 8));
+    }
+    // ruedas: neumático con hombro, llanta, disco y buje
+    for (const a of T.axles) for (const s of [-1, 1]) {
+      const st = a > 0 ? S.steer * (a / T.axles[T.axles.length - 1]) : (T.allSteer && a < -2 ? -S.steer * (Math.abs(a) / Math.abs(T.axles[0])) * 0.8 : 0);
+      const ax = [Math.cos(h + st + Math.PI / 2), 0, Math.sin(h + st + Math.PI / 2)];
+      const tw2 = wR > 0.85 ? 0.38 : wR > 0.72 ? 0.27 : 0.25, c = cp(a, s * (hf - 0.07 - tw2), wz), hw = tw2, so = V.mul(ax, s);
+      push(pGroup([
+        pCyl(V.sub(c, V.mul(ax, hw)), V.add(c, V.mul(ax, hw)), wR, '#17191c', 24, { capCol: '#202327' }),
+        pCyl(V.add(c, V.mul(so, hw - 0.06)), V.add(c, V.mul(so, hw + 0.012)), wR * 0.9, '#2a2d31', 24),
+        pCyl(V.add(c, V.mul(so, hw - 0.04)), V.add(c, V.mul(so, hw + 0.02)), wR * 0.64, RIM, 20),
+        pCyl(V.add(c, V.mul(so, hw - 0.02)), V.add(c, V.mul(so, hw + 0.035)), wR * 0.46, shade(RIM, 0.8), 16),
+        pCyl(V.add(c, V.mul(so, hw)), V.add(c, V.mul(so, hw + 0.11)), wR * 0.17, '#4a5058', 10)
+      ], c));
+    }
+    // guardabarros curvos sobre cada rueda
+    for (const a of T.axles) for (const s of [-1, 1]) {
+      const r0 = wR + 0.07, r1 = wR + 0.15, nseg = 9, l0 = s * (hf - 0.66), l1 = s * (hf - 0.02);
+      for (let i = 0; i < nseg; i++) {
+        const t0 = (18 + 144 * i / nseg) * D, t1 = (18 + 144 * (i + 1) / nseg) * D;
+        const p = (r, t) => [a + Math.cos(t) * r, wz + Math.sin(t) * r];
+        const prof = [p(r1, t0), p(r1, t1), p(r0, t1), p(r0, t0)];
+        push(ext(prof.reverse(), Math.min(l0, l1), Math.max(l0, l1), '#3d4349', { edge: false }));
+      }
+    }
+    // cubierta: plataforma con canto amarillo sobre las ruedas
+    push(ext([[L0 + 0.1, dHi - 0.3], [cabX0, dHi - 0.3], [cabX0, dHi], [L0 + 0.1, dHi]], -hf, hf, Y));
+    push(ext([[L0 + 0.3, dHi], [cabX0 - 0.1, dHi], [cabX0 - 0.1, dHi + 0.04], [L0 + 0.3, dHi + 0.04]], -hf + 0.12, hf - 0.12, '#5a6067', { edge: false }));
+    for (const s of [-1, 1]) push(cb(L0 + 0.1, cabX0, s * hf, s * (hf + 0.02), dHi - 0.12, dHi - 0.08, '#2a2d31', { edge: false }));
+    // cofres laterales en los huecos entre grupos de ejes, con puertas en relieve
+    for (const s of [-1, 1]) for (const [x0, x1] of gaps(L0 + 0.2, front0 - 0.1, [...groupOcc, ...outOcc])) {
+      if (x1 - x0 < 0.7 || (engGap && Math.abs(x0 - engGap[0]) < 0.01)) continue;
+      const lo = dLo + 0.25, hi = dHi - 0.3;
+      push(cb(x0, x1, s * (hf - 0.7), s * (hf - 0.04), lo, hi, Yd));
+      const nd = Math.max(1, Math.round((x1 - x0) / 1.1)), dw = (x1 - x0) / nd;
+      for (let i = 0; i < nd; i++) {
+        const a0 = x0 + i * dw + 0.05, a1 = x0 + (i + 1) * dw - 0.05;
+        push(cb(a0, a1, s * (hf - 0.04), s * (hf - 0.01), lo + 0.06, hi - 0.06, Y));
+        push(cb((a0 + a1) / 2 - 0.1, (a0 + a1) / 2 + 0.1, s * (hf - 0.01), s * (hf + 0.03), hi - 0.32, hi - 0.25, '#3a3f45', { edge: false }));
+      }
+    }
+    // depósito de combustible bajo la cubierta en el hueco más largo
+    const fr = gaps(L0 + 0.5, front0 - 0.5, [...groupOcc, ...outOcc]).sort((p, q) => (q[1] - q[0]) - (p[1] - p[0]))[engGap ? 1 : 0];
+    if (engGap) {
+      // motor del chasis: bloque grande con rejillas a ambos lados, silenciador y salida lateral del escape
+      const [e0, e1] = [engGap[0] + 0.1, engGap[1] - 0.1], eh0 = dLo - 0.05, eh1 = dHi - 0.32;
+      push(cb(e0, e1, -hf + 0.05, hf - 0.05, eh0, eh1, '#5a6067'));
+      for (const s2 of [-1, 1]) {
+        const nl = Math.max(3, Math.floor((e1 - e0 - 0.4) / 0.2));
+        for (let i = 0; i < nl; i++) { const x = e0 + 0.2 + i * (e1 - e0 - 0.4) / nl; push(cb(x, x + 0.1, s2 * (hf - 0.05), s2 * (hf - 0.02), eh0 + 0.25, eh1 - 0.15, '#2a2e33', { edge: false })); }
+        push(cb(e0 + 0.05, e1 - 0.05, s2 * (hf - 0.05), s2 * (hf - 0.03), eh1 - 0.12, eh1 - 0.05, Y, { edge: false }));
+      }
+      push(pCyl(cp(e0 + 0.2, hf - 0.45, eh0 - 0.15), cp(e1 - 0.2, hf - 0.45, eh0 - 0.15), 0.26, '#8a929b', 14));
+      push(pCyl(cp(e1 - 0.35, hf - 0.45, eh0 - 0.15), cp(e1 - 0.35, hf + 0.15, eh0 - 0.15), 0.08, '#4a5058', 8));
+    }
+    if (fr && fr[1] - fr[0] > 1.6) { const m = (fr[0] + fr[1]) / 2, hl = Math.min(1.1, (fr[1] - fr[0]) / 2 - 0.3); push(pCyl(cp(m - hl, -hf + 0.45, dLo + 0.35), cp(m + hl, -hf + 0.45, dLo + 0.35), 0.32, '#c3c8cd', 18)); }
+    // cajones de estabilizadores con franjas de advertencia
+    for (const x of [T.out.xf, T.out.xr]) {
+      push(cb(x - 0.55, x + 0.55, -hf - 0.04, hf + 0.04, dLo + 0.05, dLo + 1.1, GRd));
+      push(cb(x - 0.58, x + 0.58, -hf - 0.06, hf + 0.06, dLo + 1.1, dLo + 1.2, GRk));
+      for (const s of [-1, 1]) for (let i = 0; i < 6; i++) { const z0 = x - 0.5 + i * (1 / 6); push(cb(z0, z0 + 1 / 6, s * (hf + 0.04), s * (hf + 0.06), dLo + 0.2, dLo + 0.95, i % 2 ? '#1d2125' : '#f2b632', { edge: false })); }
+      if (S.outS === 0) for (const s of [-1, 1]) {
+        push(pCyl(cp(x, s * (hf + 0.3), dLo - 0.02), cp(x, s * (hf + 0.3), dLo + 1.15), 0.22, GRk, 12));
+        push(pCyl(cp(x, s * (hf + 0.3), dLo - 0.28), cp(x, s * (hf + 0.3), dLo - 0.12), 0.46, '#f2b632', 18));
+        push(pCyl(cp(x, s * (hf + 0.3), dLo - 0.12), cp(x, s * (hf + 0.3), dLo - 0.02), 0.12, CHROME, 8));
+      }
+    }
+    // cabina del conductor estilo europeo (frente plano, baja, sin capó), lado izquierdo
+    if (!T.rt) {
+    const cw0 = -hf, cw1 = T.ltm ? 0.55 : 0.25;
+    if (T.ltm && tireFront < L1 - 0.3 && cabLow > dLo + 0.4) push(ext([[Math.max(cabX0, tireFront), dLo + 0.1], [L1, dLo + 0.1], [L1, cabLow + 0.02], [Math.max(cabX0, tireFront), cabLow + 0.02]], -hf, hf, Y));
+    push(ext([[cabX0, cabLow], [L1, cabLow], [L1, cabTop - 0.16], [L1 - 0.14, cabTop], [cabX0, cabTop]], cw0, cw1, Y));
+    push(cb(L1, L1 + 0.03, cw0 + 0.1, cw1 - 0.08, cabTop - 1.0, cabTop - 0.2, GLASS, { edge: false }));
+    push(cb(L1, L1 + 0.035, cw0 + 0.06, cw1 - 0.04, cabTop - 1.06, cabTop - 1.0, '#1d2125', { edge: false }));
+    const dX = T.ltm ? cabX0 + 0.12 : cabX0 + 1.25;
+    push(cb(T.ltm ? cabX0 + 0.25 : cabX0 + 1.35, L1 - 0.12, cw0 - 0.03, cw0, cabTop - 0.92, cabTop - 0.18, GLASS, { edge: false }));
+    if (!T.ltm) push(cb(cabX0 + 0.25, cabX0 + 1.2, cw0 - 0.03, cw0, cabTop - 0.7, cabTop - 0.18, GLASS, { edge: false }));
+    push(cb(dX, dX + 0.03, cw0 - 0.04, cw0, cabLow + 0.1, cabTop - 0.1, '#7a5c0c', { edge: false }));
+    push(cb(dX + 0.25, dX + 0.5, cw0 - 0.05, cw0, cabTop - 1.1, cabTop - 1.02, '#3a3f45', { edge: false }));
+    for (let i = 0; i < 2; i++) push(cb(dX + 0.1, dX + 0.75, cw0 - 0.25, cw0 + 0.05, cabLow - 0.42 - i * 0.38, cabLow - 0.35 - i * 0.38, '#3a3f45'));
+    push(cb(cabX0 + 0.05, L1 - 0.2, cw0 + 0.05, cw1 - 0.05, cabTop, cabTop + 0.06, Yd));
+    push(pCyl(cp(cabX0 + 0.4, -0.6, cabTop + 0.06), cp(cabX0 + 0.4, -0.6, cabTop + 0.24), 0.1, '#e67e22', 10));
+    // retrovisores tipo autobús delante de la cabina
+    push(pCyl(cp(L1 - 0.05, cw0 + 0.1, cabTop - 0.15), cp(L1 + 0.3, cw0 - 0.25, cabTop - 0.05), 0.03, '#1d2125', 6));
+    push(cb(L1 + 0.22, L1 + 0.32, cw0 - 0.42, cw0 - 0.18, cabTop - 0.75, cabTop - 0.1, '#1d2125'));
+    if (T.ltm) {
+      push(ext([[cabX0, cabLow], [L1, cabLow], [L1, dHi - 0.1], [L1 - 0.12, dHi + 0.02], [cabX0, dHi + 0.02]], cw1, hf, Yd));
+      for (let i = 0; i < 3; i++) push(cb(cabX0 + 0.3 + i * 0.32, cabX0 + 0.45 + i * 0.32, hf, hf + 0.02, cabLow + 0.15, dHi - 0.2, '#2a2e33', { edge: false }));
+    } else {
+    // motor grande: compartimento a la derecha de la cabina, fuera del radio de cola
+      const eTop = cabTop - 0.08, el0 = cw1 + 0.05;
+      push(ext([[engX0, dLo + 0.2], [L1, dLo + 0.2], [L1, eTop - 0.2], [L1 - 0.2, eTop], [engX0 + 0.2, eTop], [engX0, eTop - 0.2]], el0, hf, Yd));
+      // rejillas de ventilación del motor en el costado
+      const nl = Math.max(4, Math.floor((L1 - engX0 - 0.9) / 0.22));
+      for (let i = 0; i < nl; i++) { const x = engX0 + 0.45 + i * 0.22; push(cb(x, x + 0.12, hf, hf + 0.025, dHi - 0.2, eTop - 0.3, '#2a2e33', { edge: false })); }
+      push(cb(engX0 + 0.4, engX0 + 0.45 + nl * 0.22, hf, hf + 0.02, dLo + 0.35, dHi - 0.35, Y, { edge: false }));
+      // radiador al frente, filtro de aire y escape vertical cromado
+      push(cb(L1, L1 + 0.04, el0 + 0.1, hf - 0.1, dHi - 0.6, eTop - 0.3, '#23272b', { edge: false }));
+      for (let i = 0; i < 6; i++) push(cb(L1 + 0.04, L1 + 0.06, el0 + 0.15, hf - 0.15, dHi - 0.55 + i * 0.18, dHi - 0.5 + i * 0.18, GRk, { edge: false }));
+      push(pCyl(cp(engX0 + 0.55, hf - 0.45, eTop), cp(engX0 + 0.55, hf - 0.45, eTop + 0.45), 0.3, '#3a3f45', 14));
+      push(pCyl(cp(engX0 + 0.25, hf - 0.2, eTop - 0.3), cp(engX0 + 0.25, hf - 0.2, eTop + 0.9), 0.13, CHROME, 12));
+      push(pCyl(cp(engX0 + 0.25, hf - 0.2, eTop + 0.9), cp(engX0 + 0.35, hf - 0.2, eTop + 1.0), 0.13, CHROME, 12));
+      push(cb(engX0 + 0.9, L1 - 0.5, el0 + 0.2, hf - 0.2, eTop, eTop + 0.06, shade(Y, 0.8), { edge: false }));
+    }
+    }
+    // frente: parrilla, faros y parachoques en cuña
+    if (!T.rt) push(cb(L1, L1 + 0.03, -hf + 0.2, hf - 0.2, cabLow + 0.1, cabTop - 1.12, '#23272b', { edge: false }));
+    if (T.rt) push(ext([[L1 - 0.4, dLo - 0.2], [L1, dLo + 0.2], [L1, dHi - 0.1], [L1 - 0.4, dHi]], -hf + 0.2, hf - 0.2, Y));
+    if (!T.rt) for (let i = 0; i < 3; i++) push(cb(L1 + 0.03, L1 + 0.05, -hf + 0.3, hf - 0.3, cabLow + 0.18 + i * 0.18, cabLow + 0.24 + i * 0.18, GRk, { edge: false }));
+    push(ext([[L1 - 0.3, dLo - 0.25], [L1 + 0.22, dLo - 0.25], [L1 + 0.3, dLo + 0.05], [L1 + 0.2, dLo + 0.4], [L1 - 0.3, dLo + 0.4]], -hf, hf, GR));
+    for (const s of [-1, 1]) {
+      push(cb(L1 + 0.18, L1 + 0.24, s * (hf - 0.55), s * (hf - 0.12), dLo - 0.05, dLo + 0.12, '#f3ecd0', { edge: false }));
+      push(cb(L1 + 0.16, L1 + 0.22, s * (hf - 0.55), s * (hf - 0.35), dLo + 0.15, dLo + 0.25, '#e67e22', { edge: false }));
+    }
+    push(cb(L1 + 0.3, L1 + 0.42, -0.35, 0.35, dLo - 0.15, dLo + 0.05, '#2a2e33'));
+    // trasera: voladizo achaflanado, panel de advertencia, pilotos y escape
+    push(ext([[L0, dLo + 0.2], [L0 + 0.45, dLo - 0.15], [L0 + 0.9, dLo - 0.15], [L0 + 0.9, dHi - 0.3], [L0, dHi - 0.3]], -hf, hf, GR));
+    for (let i = 0; i < 8; i++) push(cb(L0 - 0.03, L0, -hf + i * hf / 4, -hf + (i + 1) * hf / 4, dLo + 0.3, dLo + 0.75, i % 2 ? '#1d2125' : '#f2b632', { edge: false }));
+    for (const s of [-1, 1]) push(cb(L0 - 0.05, L0, s * (hf - 0.45), s * (hf - 0.1), dLo + 0.85, dLo + 1.1, '#c0392b', { edge: false }));
+    push(pCyl(cp(L0 + 0.7, -hf + 0.3, dHi), cp(L0 + 0.7, -hf + 0.3, dHi + 1.0), 0.12, '#4a5058', 8));
+    // equipo sobre la cubierta delantera y apoyo de pluma
+    const supFront = T.piv + (T.structMax >= 300 ? 3.4 : T.id === 'large' ? 3.0 : 2.7);
+    const fr0 = supFront + 0.2, fr1 = front0 - 0.6;
+    if (fr1 - fr0 > 1.4) {
+      const tx = fr0 + 0.9;
+      push(cb(tx - 0.7, tx + 0.7, 0.1, hf - 0.25, dHi, dHi + 0.75, Yd));
+      push(pCyl(cp(tx, 0.6, dHi + 0.75), cp(tx, 0.6, dHi + 1.2), 0.32, '#c3c8cd', 16));
+      push(pCyl(cp(tx - 0.3, -0.7, dHi), cp(tx - 0.3, -0.7, dHi + 1.1), 0.18, '#5d646c', 10));
+      push(cb(tx + 0.2, tx + 0.9, -hf + 0.3, -0.3, dHi, dHi + 0.45, '#2f353d'));
+    }
+    const restX = front0 - 0.35, restH = T.tower ? dHi + 1.0 : T.pivH + lf - T.boom.w * 0.63 - 0.03;
+    for (const s of [-1, 1]) push(cb(restX - 0.12, restX + 0.12, s * 0.45, s * 0.7, dHi, restH - 0.25, Yd));
+    push(cb(restX - 0.2, restX + 0.2, -0.75, 0.75, restH - 0.3, restH - 0.1, Yd), cb(restX - 0.15, restX + 0.15, -0.5, 0.5, restH - 0.1, restH, '#1d2125'));
+    // estabilizadores desplegados: viga, gato hidráulico y zapata
+    if (S.outS > 0) {
+      const o = T.out, e = clamp(S.outS * 1.6, 0, 1), padY = S.outS >= 0.5 ? 0 : T.deckLo * 0.8 * (1 - S.outS / 0.5);
+      for (const x of [o.xf, o.xr]) for (const s of [-1, 1]) {
+        const y = s * (hf + (o.hw - hf) * e);
+        push(cb(x - 0.28, x + 0.28, s * (hf - 0.2), y, dLo + 0.35, dLo + 0.85, GR));
+        push(pCyl(cp(x, y, dLo + 0.25), cp(x, y, dLo + 1.25), 0.3, GRk, 14));
+        push(pCyl(cp(x, y, padY + 0.2), cp(x, y, dLo + 0.3), 0.16, CHROME, 10));
+        push(pCyl(cp(x, y, padY), cp(x, y, padY + 0.2), 0.72, S.outS >= 1 ? '#f2b632' : '#7d858f', 20));
+      }
+    }
+  }
+  // superestructura
+  const th = h + S.slew, SF = [Math.cos(th), 0, Math.sin(th)], SL = [-Math.sin(th), 0, Math.cos(th)];
+  const pv = pivotPos(), sc0 = slewCenter(), So = [sc0.x, 0, sc0.z], yd = T.deckHi + lf, ft = T.foot;
+  const sb = (x0, x1, l0, l1, u0, u1, col, ex) => frameBox(So, SF, SL, U, x0, x1, l0, l1, u0, u1, col, ex);
+  const sp = (x, l, u) => V.add(So, V.add(V.mul(SF, x), V.add(V.mul(SL, l), V.mul(U, u))));
+  const latt = (A, dir, nrm, side, len, w0, w1, col, thick = 0.12) => {
+    const out = [], hw = t => (w0 + (w1 - w0) * t) / 2, P = (d, a, b) => V.add(A, V.add(V.mul(dir, d), V.add(V.mul(nrm, a), V.mul(side, b))));
+    const cn = [[1, 1], [1, -1], [-1, -1], [-1, 1]], bay = Math.max(1.4, w0 * 1.1);
+    for (const [a, b] of cn) out.push(pLine([P(0, a * hw(0), b * hw(0)), P(len, a * hw(1), b * hw(1))], thick, col));
+    for (let d = 0, i = 0; d < len - 0.2; d += bay, i++) { const d2 = Math.min(len, d + bay), t1 = d / len, t2 = d2 / len, z = i % 2;
+      for (let f = 0; f < 4; f++) { const [a1, b1] = cn[f], [a2, b2] = cn[(f + 1) % 4]; out.push(pLine([P(d, (z ? a1 : a2) * hw(t1), (z ? b1 : b2) * hw(t1)), P(d2, (z ? a2 : a1) * hw(t2), (z ? b2 : b1) * hw(t2))], thick * 0.55, shade(col, 0.9))); } }
+    return { items: out, end: P(len, 0, 0), P };
+  };
+  if (T.tower) {
+    // grúa torre móvil: corona sobre el camión, torre de celosía, pluma con carro y contrapluma con lastre
+    const g = towerGeom(), tw = T.tower, col = tw.col;
+    push(pCyl(sp(0, 0, yd), sp(0, 0, yd + 0.35), 1.5, MGREY, 20));
+    push(sb(-1.4, 1.4, -1.25, 1.25, yd + 0.35, yd + 0.6, DGREY));
+    const tn = V.norm(V.cross(g.dir, SL));
+    const mast = latt(g.base, g.dir, tn, SL, g.hgt, 1.9, 1.9, col, 0.16);
+    push(pGroup(mast.items, V.add(g.base, V.mul(g.dir, g.hgt / 2))));
+    // tramo telescópico interior (se ve más estrecho al extenderse)
+    const top = g.top;
+    push(pBox(top, [g.dir, SL, tn], [0.5, 1.1, 1.1], DGREY));
+    // pluma
+    const jn = V.norm(V.cross(g.jd, SL)), jib = latt(V.add(top, V.mul(jn, 0.3)), g.jd, jn, SL, g.jl, 1.4, 0.7, col, 0.13);
+    push(pGroup(jib.items, V.add(top, V.mul(g.jd, g.jl / 2))));
+    // contrapluma con bloques de lastre
+    const cd2 = V.mul(g.jd, -1), cj = latt(V.add(top, V.mul(jn, 0.3)), cd2, V.mul(jn, -1), SL, 9, 1.4, 1.2, col, 0.13);
+    push(pGroup(cj.items, V.add(top, V.mul(cd2, 4.5))));
+    for (let i = 0; i < 3; i++) push(pBox(V.add(top, V.add(V.mul(cd2, 7.2 + i * 0.6), V.mul(jn, -0.6))), [cd2, SL, jn], [0.28, 1.1, 0.9], i % 2 ? '#62666c' : '#55595f'));
+    // cúspide y tirantes
+    const peak = V.add(top, V.mul(g.dir, 6));
+    push(pCyl(top, peak, 0.25, col, 8));
+    push(pLine([peak, V.add(top, V.mul(g.jd, g.jl * 0.55))], 0.05, '#d6d9dd'), pLine([peak, V.add(top, V.mul(cd2, 9))], 0.05, '#d6d9dd'));
+    // carro y cable
+    if (g.ready) { const tp = V.add(top, V.mul(g.jd, S.Lb)); push(pBox(V.add(tp, [0, -0.3, 0]), [g.jd, SL, jn], [0.5, 0.75, 0.25], '#2f353d')); }
+    // cabina del operador en la base de la torre
+    push(sb(1.5, 2.9, 1.0, 2.1, yd + 0.35, yd + 2.3, '#d8962a'), sb(2.9, 2.93, 1.1, 2.0, yd + 1.1, yd + 2.15, GLASS, { edge: false }));
+    return prims;
+  }
+  const big = T.structMax >= 300 && !T.crawler;
+  const wide = T.supW || (T.crawler ? 1.7 : big || T.id === 'xl' ? 1.5 : 1.3), front = T.supFront || (T.crawler ? 3.2 : big || T.id === 'xl' ? 3.0 : 2.4);
+  const cd = cwDims(), cww = cd.w;
+  push(pCyl(sp(0, 0, yd), sp(0, 0, yd + 0.3), T.ringR || (T.crawler ? 2.3 : 1.35), MGREY, 20));
+  push(sb(cd.x - cd.len / 2 + 0.2, front, -wide, wide, yd + 0.3, yd + 0.75, DGREY));
+  push(sb(cd.x + cd.len / 2, front - 0.2, -wide, wide * 0.55, yd + 0.75, yd + 1.45, T.color));
+  push(sb(cd.x + cd.len / 2, ft + 1.2, -wide, wide, yd + 1.45, T.pivH + lf - 0.35, shade(T.color, 0.95)));
+  for (let i = 0; i < 6; i++) { const x = ft + 1.4 + i * 0.3; if (x > front - 0.6) break; push(sb(x, x + 0.12, -wide - 0.03, -wide - 0.01, yd + 0.9, yd + 1.3, '#4a5058', { edge: false })); }
+  // cabrestante principal, cable de elevación y escape de la superestructura
+  // cabrestante principal: detrás del pie de pluma, sobre la superestructura (no sobre el contrapeso)
+  const wx = ft - 0.95, wy = Math.min(T.pivH + lf - 0.35, yd + 1.45), drum = [sp(wx, -0.85, wy), sp(wx, 0.85, wy)];
+  push(sb(wx - 0.55, wx + 0.55, -1.0, -0.9, yd + 0.75, wy + 0.45, DGREY), sb(wx - 0.55, wx + 0.55, 0.9, 1.0, yd + 0.75, wy + 0.45, DGREY));
+  push(pCyl(drum[0], drum[1], 0.42, '#5a4a3a', 14, { capCol: '#3a3f45' }));
+  push(pCyl(sp(ft + 2.0, -wide + 0.3, yd + 1.45), sp(ft + 2.0, -wide + 0.3, yd + 2.4), 0.11, '#4a5058', 8));
+  const bw = T.boom.w;
+  for (const s of [-1, 1]) push(sb(ft - 0.9, ft + 1.1, s * (bw / 2 + 0.1), s * (bw / 2 + 0.36), yd + 0.75, T.pivH + lf + 0.4, shade(T.color, 0.85)));
+  push(pCyl(sp(ft, -(bw / 2 + 0.45), T.pivH + lf), sp(ft, bw / 2 + 0.45, T.pivH + lf), 0.22, '#5d646c', 10));
+  // cabina del operador
+  const cl0 = wide + 0.05, cl1 = wide + 1.0;
+  push(sb(0.2, 2.25, cl0, cl1, yd + 0.4, yd + 2.25, '#d8962a'));
+  push(sb(2.25, 2.29, cl0 + 0.1, cl1 - 0.1, yd + 1.05, yd + 2.1, GLASS, { edge: false }));
+  push(sb(0.55, 2.05, cl1, cl1 + 0.04, yd + 1.15, yd + 2.05, GLASS, { edge: false }));
+  push(sb(0.15, 2.3, cl0, cl1, yd + 2.25, yd + 2.33, MGREY));
+  push(pCyl(sp(1.2, (cl0 + cl1) / 2, yd + 2.33), sp(1.2, (cl0 + cl1) / 2, yd + 2.5), 0.1, '#e67e22', 8));
+  // contrapeso en placas
+  if (T.cwStyle === 'stack') {
+    // torre de placas redondas (VarioBallast) sobre una placa base
+    push(sb(cd.x - cd.len / 2 - 0.2, cd.x + cd.len / 2 + 0.2, -cww - 0.2, cww + 0.2, yd + 0.75, yd + 1.15, '#4a4e54'));
+    const np = Math.max(1, Math.round(cd.hgt / 0.42));
+    for (let i = 0; i < np; i++) push(pCyl(sp(cd.x, 0, yd + 1.15 + i * 0.42), sp(cd.x, 0, yd + 1.15 + (i + 1) * 0.42 - 0.05), cd.len / 2, i % 2 ? '#7d838a' : '#70767d', 22));
+  } else {
+    const n = T.ballast ? 1 + Math.round(4 * S.cwS) : T.crawler ? (T.id === 'lr' ? 8 : 4) : 3, shh = cd.hgt / n;
+    for (let i = 0; i < n; i++) push(sb(cd.x - cd.len / 2, cd.x + cd.len / 2, -cww, cww, yd + 0.75 + i * shh, yd + 0.75 + (i + 1) * shh - 0.07, i % 2 ? '#62666c' : '#55595f'));
+  }
+  // pluma
+  const ca = Math.cos(S.ang), sa = Math.sin(S.ang);
+  const u = [ca * SF[0], sa, ca * SF[2]], nu = [-sa * SF[0], ca, -sa * SF[2]], la = SL;
+  const P0 = [pv.x, pv.y, pv.z];
+  const bp = (d, up = 0, side = 0) => V.add(P0, V.add(V.mul(u, d), V.add(V.mul(nu, up), V.mul(la, side))));
+  const bb = (d0, d1, wl, hu, col, ex, up = 0) => pBox(bp((d0 + d1) / 2, up), [u, la, nu], [(d1 - d0) / 2, wl / 2, hu / 2], col, ex);
+  let headTop;
+  if (T.boom.lattice) {
+    const items = [], wl = bw, Lb = S.Lb, half = t => (wl / 2) * (1 - 0.55 * t);
+    items.push(bb(-0.6, 2.4, wl * 1.02, wl * 1.02, '#d0951f'));
+    const cn = [[1, 1], [1, -1], [-1, -1], [-1, 1]];
+    for (const [a, b] of cn) items.push(pLine([bp(2.4, a * half(2.4 / Lb), b * half(2.4 / Lb)), bp(Lb - 0.8, a * half(1), b * half(1))], 0.16 * Math.max(1, bw / 2), '#e3a52a'));
+    const bay = Math.max(1.8, bw * 1.1);
+    for (let d = 2.4, i = 0; d < Lb - 1.2; d += bay, i++) {
+      const d2 = Math.min(Lb - 0.8, d + bay), t1 = d / Lb, t2 = d2 / Lb;
+      for (let f = 0; f < 4; f++) {
+        const [a1, b1] = cn[f], [a2, b2] = cn[(f + 1) % 4], z = i % 2;
+        items.push(pLine([bp(d, (z ? a1 : a2) * half(t1), (z ? b1 : b2) * half(t1)), bp(d2, (z ? a2 : a1) * half(t2), (z ? b2 : b1) * half(t2))], 0.08 * Math.max(1, bw / 2.5), '#d39a28'));
+      }
+    }
+    items.push(bb(Lb - 0.9, Lb + 0.3, wl * 0.6, wl * 0.6, '#3a4048'));
+    items.push(pCyl(bp(Lb + 0.1, 0, -0.35), bp(Lb + 0.1, 0, 0.35), 0.5, STEEL, 14));
+    push(pGroup(items, bp(Lb / 2)));
+    const mt = sp(-2.4, 0, yd + 7.5);
+    if (!T.derrick) push(pCyl(sp(-2.2, -0.9, yd + 0.75), mt, 0.18, '#7d858f', 8), pCyl(sp(-2.2, 0.9, yd + 0.75), mt, 0.18, '#7d858f', 8));
+    if (!T.derrick) push(pLine([mt, bp(Lb - 0.6, half(1), 0)], 0.06, '#c9cdd2'), pLine([mt, sp(cd.x, 0, yd + 2.8)], 0.06, '#c9cdd2'));
+    headTop = bp(Lb + 0.1, 0.5);
+  } else {
+    const items = [], min = T.boom.min, ext = S.Lb - min, hu = bw * 1.25;
+    for (let k = 3; k >= 1; k--) {
+      const d1 = min + ext * k / 3, d0 = Math.max(0.6, d1 - (min - 1.2)), f = 1 - 0.13 * k;
+      items.push(bb(d0, d1, bw * f, hu * f, shade(T.color, k % 2 ? 1.04 : 0.97)));
+      items.push(bb(d1 - 0.35, d1 - 0.05, bw * f + 0.06, hu * f + 0.06, shade(T.color, 0.8)));
+    }
+    items.push(bb(-1.0, min, bw, hu, T.color));
+    items.push(bb(min - 0.45, min, bw + 0.08, hu + 0.08, shade(T.color, 0.8)));
+    items.push(bb(0.5, min - 0.8, bw * 0.36, 0.05, '#2a2f35', { edge: false }, hu / 2 + 0.02));
+    // cabeza con poleas
+    const ns = T.structMax > 100 ? 6 : 4, sr = 0.45 + bw * 0.25;
+    for (const s2 of [-1, 1]) items.push(pBox(bp(S.Lb - 0.2, 0, s2 * (ns * 0.065 + 0.06)), [u, la, nu], [0.85, 0.04, hu * 0.55], T.color));
+    for (let i = 0; i < ns; i++) { const z = (i - (ns - 1) / 2) * 0.13; items.push(pCyl(bp(S.Lb + 0.2, -hu * 0.05, z - 0.05), bp(S.Lb + 0.2, -hu * 0.05, z + 0.05), sr, i % 2 ? '#a8afb6' : STEEL, 18)); }
+    items.push(pCyl(bp(S.Lb + 0.2, -hu * 0.05, -(ns * 0.065 + 0.12)), bp(S.Lb + 0.2, -hu * 0.05, ns * 0.065 + 0.12), 0.12, '#5d646c', 8));
+    push(pGroup(items, bp((S.Lb - 1) / 2)));
+    // cilindro de elevación: camisa y vástago
+    const A = sp(front - 0.9, 0, yd + 0.55), Bp = bp(min * 0.45, -hu / 2), mid = V.add(A, V.mul(V.sub(Bp, A), 0.56));
+    push(pCyl(A, mid, T.id === 'xl' ? 0.45 : 0.32, '#6d757f', 14), pCyl(V.add(A, V.mul(V.sub(Bp, A), 0.5)), Bp, T.id === 'xl' ? 0.24 : 0.17, CHROME, 12));
+    headTop = bp(S.Lb + 0.2, -hu * 0.05 + sr);
+  }
+  // celosía genérica entre dos puntos (para plumín y derrick)
+  const lattice = (A, dir, nrm, side, len, w0, w1, col) => {
+    const out = [], hw = t => (w0 + (w1 - w0) * t) / 2, P = (d, a, b) => V.add(A, V.add(V.mul(dir, d), V.add(V.mul(nrm, a), V.mul(side, b))));
+    const cn = [[1, 1], [1, -1], [-1, -1], [-1, 1]], bay = Math.max(1.6, w0 * 1.1);
+    for (const [a, b] of cn) out.push(pLine([P(0, a * hw(0), b * hw(0)), P(len, a * hw(1), b * hw(1))], 0.12 * Math.max(1, w0 / 2), col));
+    for (let d = 0, i = 0; d < len - 0.2; d += bay, i++) { const d2 = Math.min(len, d + bay), t1 = d / len, t2 = d2 / len, z = i % 2;
+      for (let f = 0; f < 4; f++) { const [a1, b1] = cn[f], [a2, b2] = cn[(f + 1) % 4]; out.push(pLine([P(d, (z ? a1 : a2) * hw(t1), (z ? b1 : b2) * hw(t1)), P(d2, (z ? a2 : a1) * hw(t2), (z ? b2 : b1) * hw(t2))], 0.06 * Math.max(1, w0 / 2), shade(col, 0.92))); } }
+    return { items: out, end: P(len, 0, 0), P };
+  };
+  const dirAt = a => [Math.cos(a) * SF[0], Math.sin(a), Math.cos(a) * SF[2]], nrmAt = a => [-Math.sin(a) * SF[0], Math.cos(a), -Math.sin(a) * SF[2]];
+  let ropeEnd = headTop;
+  if (T.jibAvail && !T.jib && S.jg > 0) {
+    // montaje del plumín: tramos en el suelo, bulonado a la cabeza, puntales que se levantan y cables que se tensan
+    const sm = t => t * t * (3 - 2 * t), J = T.jibDef.len, g0 = S.jg;
+    const head = bp(S.Lb + 0.3, 0), gStart = [head[0] + SF[0] * 1.5, 0.75, head[2] + SF[2] * 1.5];
+    const nSec = 5, shown = Math.min(nSec, Math.ceil(clamp(g0 / 0.45, 0, 1) * nSec)), sl2 = J / nSec;
+    const pinned = g0 >= 0.45, A0 = pinned ? head : gStart;
+    const endP = [gStart[0] + SF[0] * (J - 1.5), 0.75, gStart[2] + SF[2] * (J - 1.5)];
+    const dJ = V.norm(V.sub(endP, A0)), nJ = V.norm(V.cross(dJ, la)), lenJ = Math.hypot(...V.sub(endP, A0));
+    if (!pinned) for (let i = 0; i < shown; i++) { const L2 = latt(V.add(gStart, V.mul(SF, i * sl2 + 0.15)), SF, U, la, sl2 - 0.3, 1.5, 1.5, '#f0b43a'); push(pGroup(L2.items, V.add(gStart, V.mul(SF, (i + 0.5) * sl2)))); }
+    else { const L2 = latt(A0, dJ, nJ, la, lenJ, 1.5, 0.9, '#f0b43a'); push(pGroup(L2.items, V.add(A0, V.mul(dJ, lenJ / 2)))); }
+    if (pinned) {
+      const ps = sm(clamp((g0 - 0.6) / 0.25, 0, 1)), baseAng = Math.atan2(dJ[1], Math.hypot(dJ[0], dJ[2]));
+      const sF = V.add(head, V.mul(dirAt(baseAng + ps * 78 * D), 9)), sB = V.add(head, V.mul(dirAt(baseAng + ps * 105 * D), 10.5));
+      for (const zz of [-0.45, 0.45]) { const o = V.mul(la, zz); push(pCyl(V.add(head, o), V.add(sF, o), 0.2, '#f0b43a', 8), pCyl(V.add(head, o), V.add(sB, o), 0.2, '#f0b43a', 8)); }
+      if (g0 >= 0.85) { const pc = clamp((g0 - 0.85) / 0.15, 0, 1), sag = (1 - pc) * 2.5, mid = (a, b) => V.add(V.mul(V.add(a, b), 0.5), [0, -sag, 0]);
+        push(pLine([sF, mid(sF, endP), endP], 0.06, '#d6d9dd'), pLine([sB, mid(sB, sF), sF], 0.06, '#d6d9dd'), pLine([sB, mid(sB, bp(2.0, bw * 0.63)), bp(2.0, bw * 0.63)], 0.06, '#d6d9dd')); }
+    }
+  }
+  if (T.jib) {
+    // plumín abatible de celosía con sus dos puntales y tirantes
+    const ja = S.ang - S.jibRel, H0 = bp(S.Lb + 0.3, 0), jl = lattice(H0, dirAt(ja), nrmAt(ja), la, T.jib.len, 1.5, 0.9, '#f0b43a');
+    push(pGroup(jl.items, jl.P(T.jib.len / 2, 0, 0)));
+    const jt = jl.end;
+    push(pBox(jl.P(0.6, 0, 0), [dirAt(ja), la, nrmAt(ja)], [0.8, 0.85, 0.85], shade(T.color, 0.85)));
+    for (const z of [-0.2, 0, 0.2]) push(pCyl(V.add(jt, V.mul(la, z - 0.05)), V.add(jt, V.mul(la, z + 0.05)), 0.45, STEEL, 14));
+    const sF = V.add(H0, V.mul(dirAt(ja + 78 * D), 9)), sB = V.add(H0, V.mul(dirAt(Math.max(ja + 100 * D, S.ang + 55 * D)), 10.5));
+    for (const zz of [-0.45, 0.45]) { const o = V.mul(la, zz); push(pCyl(V.add(H0, o), V.add(sF, o), 0.2, '#f0b43a', 8), pCyl(V.add(H0, o), V.add(sB, o), 0.2, '#f0b43a', 8)); }
+    push(pLine([sF, jt], 0.06, '#d6d9dd'), pLine([sB, sF], 0.06, '#d6d9dd'), pLine([sB, bp(2.0, bw * 0.63)], 0.06, '#d6d9dd'));
+    ropeEnd = V.add(jt, [0, 0.45, 0]);
+  }
+  if (T.derrick) {
+    // mástil derrick hacia atrás, tirantes a la cabeza de pluma y bandeja de lastre superlift
+    const dg = T.derrick, da = Math.PI - dg.ang, D0 = sp(dg.foot, 0, yd + 2.2);
+    const dl = lattice(D0, dirAt(da), nrmAt(da), la, dg.len, 3.2, 1.6, '#e8a92a');
+    push(pGroup(dl.items, dl.P(dg.len / 2, 0, 0)));
+    const dt2 = dl.end, sl = T.superlift;
+    push(pBox(dt2, [dirAt(da), la, nrmAt(da)], [0.9, 1.0, 0.9], '#3a4048'));
+    for (const zz of [-1.2, 1.2]) push(pLine([V.add(dt2, V.mul(la, zz)), bp(S.Lb - 0.8, 0, zz)], 0.14, '#d6d9dd'));
+    // bandeja y placas de lastre apoyadas en el suelo
+    push(sb(-sl.r - sl.d / 2, -sl.r + sl.d / 2, -sl.w / 2, sl.w / 2, 0, 0.5, '#3a3f45'));
+    const npl = 6; for (let i = 0; i < npl; i++) push(sb(-sl.r - sl.d / 2 + 0.3, -sl.r + sl.d / 2 - 0.3, -sl.w / 2 + 0.3, sl.w / 2 - 0.3, 0.5 + i * (sl.h - 0.5) / npl, 0.5 + (i + 1) * (sl.h - 0.5) / npl - 0.06, i % 2 ? '#7d838a' : '#70767d'));
+    for (const [dx, dz] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) push(pLine([V.add(dt2, V.mul(la, dz * 0.8)), sp(-sl.r + dx * (sl.d / 2 - 0.6), dz * (sl.w / 2 - 0.6), sl.h)], 0.1, '#c9ccd0'));
+    push(pLine([V.add(dt2, [0, -0.5, 0]), sp(cd.x, 0, yd + 0.75 + cd.hgt)], 0.12, '#c9ccd0'));
+  }
+  // cable de elevación desde el cabrestante hasta la cabeza (y al plumín si lo hay)
+  push(pLine([sp(wx, 0, wy + 0.42), bp(1.0, (T.boom.lattice ? bw / 2 : bw * 0.63) + 0.15), headTop, ...(T.jib ? [ropeEnd] : [])], 0.05, '#c9ccd0'));
+  // arriostramiento en Y
+  if (T.yguy) {
+    for (const e of yGuyModel()) {
+      if (e.type === 'rope') {
+        const pts = e.sag > 0.02 ? [e.a, V.add(V.mul(V.add(e.a, e.b), 0.5), [0, -e.sag * 1.2, 0]), e.b] : [e.a, e.b];
+        push(pLine(pts, e.thin ? 0.04 : 0.06, e.slack ? '#b9bdc2' : '#e6e8eb'));
+      } else if (e.type === 'winch') push(pBox(e.a, [u, la, nu], [0.4, 0.45, 0.4], DGREY));
+      else if (e.type === 'frame') push(pCyl(e.a, e.b, 0.17, '#3a4048', 8));
+      else push(pCyl(e.a, e.b, e.type === 'brace' ? 0.11 : e.w / 2, e.type === 'brace' ? CHROME : '#f0b43a', e.type === 'brace' ? 8 : 12));
+    }
+  }
+  return prims;
+}
+
+// ---------- render WebGL propio (z-buffer: sin solapes) ----------
+const VS = `attribute vec3 p; attribute vec3 n; attribute vec3 c; uniform mat4 M; uniform vec3 L; uniform vec3 Vd; varying vec3 vc;
+void main(){ gl_Position = M * vec4(p, 1.0); vec3 nn = normalize(n); float f = dot(nn, Vd); if (f < 0.0) { nn = -nn; f = -f; }
+  float d = max(dot(nn, L), 0.0); vc = c * (0.8 + 0.32 * d) * (0.88 + 0.14 * f); }`;
+const FS = `precision mediump float; varying vec3 vc; void main(){ gl_FragColor = vec4(min(vc, vec3(1.0)), 1.0); }`;
+function glMake() {
+  try {
+    const cv = document.createElement('canvas'), gl = cv.getContext('webgl', { alpha: true, antialias: true, premultipliedAlpha: true });
+    if (!gl) return null;
+    const sh = (t, src) => { const s = gl.createShader(t); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
+    const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(pr);
+    if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error('link');
+    const g = { cv, gl, pr, buf: { p: gl.createBuffer(), n: gl.createBuffer(), c: gl.createBuffer() }, loc: {} };
+    for (const a of ['p', 'n', 'c']) g.loc[a] = gl.getAttribLocation(pr, a);
+    for (const u of ['M', 'L', 'Vd']) g.loc[u] = gl.getUniformLocation(pr, u);
+    return g;
+  } catch (e) { return null; }
+}
+const GLV = { tried: false, top: null, side: null, data: null, count: 0, cap: 0 };
+function glReady() { if (!GLV.tried) { GLV.tried = true; GLV.top = glMake(); GLV.side = GLV.top && glMake(); } return !!(GLV.top && GLV.side); }
+const colCache = new Map();
+function rgb(col) {
+  let v = colCache.get(col); if (v) return v;
+  if (col[0] === '#') { const n = parseInt(col.slice(1), 16); v = [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; }
+  else { const m = col.match(/[\d.]+/g).map(Number); v = [m[0] / 255, m[1] / 255, m[2] / 255]; }
+  colCache.set(col, v); return v;
+}
+function glBuild(prims) {
+  let cap = GLV.cap || 60000, P = GLV.bp, N = GLV.bn, Cc = GLV.bc, i = 0;
+  if (!P) { P = new Float32Array(cap * 3); N = new Float32Array(cap * 3); Cc = new Float32Array(cap * 3); }
+  const grow = need => { if (need <= cap) return; cap = Math.ceil(need * 1.5); const p2 = new Float32Array(cap * 3), n2 = new Float32Array(cap * 3), c2 = new Float32Array(cap * 3); p2.set(P); n2.set(N); c2.set(Cc); P = p2; N = n2; Cc = c2; };
+  const face = (pts, n, vn, col) => {
+    const c = rgb(col), m = pts.length;
+    grow(i + (m - 2) * 3);
+    for (let t = 1; t < m - 1; t++) for (const k of [0, t, t + 1]) {
+      const q = pts[k], nn = vn ? vn[k] : n, o = i * 3;
+      P[o] = q[0]; P[o + 1] = q[1]; P[o + 2] = q[2]; N[o] = nn[0]; N[o + 1] = nn[1]; N[o + 2] = nn[2]; Cc[o] = c[0]; Cc[o + 1] = c[1]; Cc[o + 2] = c[2]; i++;
+    }
+  };
+  const each = p => {
+    if (p.k === 'group') { p.items.forEach(each); return; }
+    if (p.k === 'line') { for (let j = 0; j < p.pts.length - 1; j++) each(pCyl(p.pts[j], p.pts[j + 1], p.w / 2, p.col, 6)); return; }
+    for (const f of p.faces) face(f.pts, f.n, f.vn, f.cap && f.capCol ? f.capCol : p.col);
+  };
+  prims.forEach(each);
+  GLV.bp = P; GLV.bn = N; GLV.bc = Cc; GLV.cap = cap; GLV.count = i;
+  GLV.data = { p: P.subarray(0, i * 3), n: N.subarray(0, i * 3), c: Cc.subarray(0, i * 3) };
+}
+function glDraw(g, w, h, M, view) {
+  const gl = g.gl;
+  if (g.cv.width !== w || g.cv.height !== h) { g.cv.width = w; g.cv.height = h; }
+  gl.viewport(0, 0, w, h); gl.clearColor(0, 0, 0, 0); gl.clearDepth(1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
+  gl.useProgram(g.pr);
+  for (const a of ['p', 'n', 'c']) { gl.bindBuffer(gl.ARRAY_BUFFER, g.buf[a]); gl.bufferData(gl.ARRAY_BUFFER, GLV.data[a], gl.DYNAMIC_DRAW); gl.enableVertexAttribArray(g.loc[a]); gl.vertexAttribPointer(g.loc[a], 3, gl.FLOAT, false, 0, 0); }
+  gl.uniformMatrix4fv(g.loc.M, false, new Float32Array(M)); gl.uniform3fv(g.loc.L, LIGHT); gl.uniform3fv(g.loc.Vd, view);
+  gl.drawArrays(gl.TRIANGLES, 0, GLV.count);
+  return g.cv;
+}
+
+// render 2D de respaldo (si no hay WebGL)
+function renderPrims(ctx, prims, proj, view, keyFn, lineScale, onePx) {
+  const flat = [...prims].sort((a, b) => keyFn(b.c) - keyFn(a.c));
+  const drawPrim = p => {
+    if (p.k === 'group') { p.items.forEach(drawPrim); return; }
+    if (p.k === 'line') {
+      ctx.strokeStyle = p.col; ctx.lineWidth = Math.max(onePx, p.w * lineScale); ctx.lineCap = 'round';
+      ctx.beginPath(); p.pts.forEach((q, i) => { const [x, y] = proj(q); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.stroke(); ctx.lineCap = 'butt';
+      return;
+    }
+    for (const f of p.faces) {
+      const vis = V.dot(f.n, view);
+      if (vis <= 1e-3) continue;
+      const lit = 0.6 + 0.45 * Math.max(0, V.dot(f.n, LIGHT)) + 0.15 * vis;
+      ctx.fillStyle = shadeC(f.cap && f.capCol ? f.capCol : p.col.startsWith('#') ? p.col : '#888888', Math.min(1.25, lit));
+      ctx.beginPath(); f.pts.forEach((q, i) => { const [x, y] = proj(q); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = f.side ? ctx.fillStyle : 'rgba(10,12,15,.45)'; ctx.lineWidth = onePx; ctx.stroke();
+    }
+  };
+  flat.forEach(drawPrim);
+}
+function hull(pts) {
+  pts.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = [], up = [];
+  for (const p of pts) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
+  for (let i = pts.length - 1; i >= 0; i--) { const p = pts[i]; while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], p) <= 0) up.pop(); up.push(p); }
+  return lo.slice(0, -1).concat(up.slice(0, -1));
+}
+const shadowCv = document.createElement('canvas'), shadowCtx = shadowCv.getContext('2d');
+function drawCraneShadow(ctx, prims) {
+  if (shadowCv.width !== tv.width || shadowCv.height !== tv.height) { shadowCv.width = tv.width; shadowCv.height = tv.height; }
+  const s = shadowCtx; s.setTransform(1, 0, 0, 1, 0, 0); s.clearRect(0, 0, shadowCv.width, shadowCv.height);
+  s.setTransform(ctx.getTransform()); s.fillStyle = '#000'; s.strokeStyle = '#000';
+  const g = p => [p[0] - p[1] * LIGHT[0] / LIGHT[1], p[2] - p[1] * LIGHT[2] / LIGHT[1]];
+  const each = p => {
+    if (p.k === 'group') { p.items.forEach(each); return; }
+    if (p.k === 'line') { s.lineWidth = Math.max(0.08, p.w); s.beginPath(); p.pts.forEach((q, i) => { const [x, z] = g(q); i ? s.lineTo(x, z) : s.moveTo(x, z); }); s.stroke(); return; }
+    const pts = []; for (const f of p.faces) for (const q of f.pts) pts.push(g(q));
+    const hp = hull(pts); s.beginPath(); hp.forEach(([x, z], i) => i ? s.lineTo(x, z) : s.moveTo(x, z)); s.closePath(); s.fill();
+  };
+  prims.forEach(each);
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 0.3; ctx.drawImage(shadowCv, 0, 0); ctx.restore();
+}
+function drawCraneTop(px, prims) {
+  drawCraneShadow(tc, prims);
+  if (glReady()) {
+    const W = tv.width, H = tv.height;
+    // planta: x → pantalla, z → abajo, y (altura) → profundidad (más alto, más cerca)
+    const M = [2 * TK / W, 0, 0, 0, 0, 0, -1 / 90, 0, 0, -2 * TK / H, 0, 0, 2 * TOX / W - 1, 1 - 2 * TOY / H, 40 / 90, 1];
+    const cv = glDraw(GLV.top, W, H, M, [0, 1, 0]);
+    const m = tc.getTransform();
+    tc.save(); tc.setTransform(1, 0, 0, 1, m.e - TOX * (m.a / TK), m.f - TOY * (m.d / TK)); tc.drawImage(cv, 0, 0); tc.restore();
+    return;
+  }
+  renderPrims(tc, prims, q => [q[0], q[2]], [0, 1, 0], c => -c[1], 1, px);
+}
+function drawCraneSide(cam, prims) {
+  const ctx = sc2;
+  ctx.save();
+  if (S.phi > 0) { const [gx, gy] = cam.P(S.cx, 0, S.cz); ctx.translate(gx, gy); ctx.rotate(S.phi * (Math.cos(S.h + S.slew) * cam.e[0] + Math.sin(S.h + S.slew) * cam.e[1] >= 0 ? 1 : -1)); ctx.translate(-gx, -gy); }
+  if (glReady()) {
+    const W = sv.width, H = sv.height, k = cam.k, pv = pivotPos(), e = cam.e, n = cam.n;
+    const bx = 2 * (cam.ox - k * (pv.x * e[0] + pv.z * e[1])) / W - 1;
+    // lateral: U (a lo largo de e) → pantalla, y → arriba, profundidad a lo largo de n
+    const M = [2 * k * e[0] / W, 0, n[0] / 400, 0, 0, 2 * k / H, 0, 0, 2 * k * e[1] / W, 0, n[1] / 400, 0, bx, 1 - 2 * cam.oy / H, 0, 1];
+    ctx.drawImage(glDraw(GLV.side, W, H, M, [-n[0], 0, -n[1]]), 0, 0);
+  } else renderPrims(ctx, prims, q => cam.P(q[0], q[1], q[2]), [-cam.n[0], 0, -cam.n[1]], c => cam.depth(c[0], c[2]), cam.k, 1);
+  ctx.restore();
+}
+
+// ---------- dibujo: lateral ----------
+function sideCam() {
+  const pv = pivotPos();
+  let e;
+  if (viewMode === 'pluma') { const a = S.h + S.slew; e = [Math.cos(a), Math.sin(a)]; }
+  else if (viewMode === 'sur') e = [1, 0]; else e = [0, -1];
+  const n = [e[1], -e[0]];
+  const span = T.crawler ? T.track.xf - T.track.xr : T.len[1] - T.len[0];
+  const want = zoom ? span * 1.45 + 6 : Math.max(36, (S.Lb + (T.jib ? T.jib.len * 0.7 : 0)) * 1.15 + 14, (tipPos().y + 6) / 0.95, T.superlift ? (T.superlift.r + 12) / 0.22 : 0, T.tower ? Math.max(T.tower.J * 1.2 + 16, (pivotPos().y + 8) / 0.95) : 0);
+  S.sideW = S.sideW ? S.sideW + (want - S.sideW) * 0.08 : want;
+  const uw = S.sideW;
+  const U = (x, z) => (x - pv.x) * e[0] + (z - pv.z) * e[1];
+  let u0;
+  if (zoom) { const c = U(S.cx, S.cz); S.sideC = S.sideC == null ? c : S.sideC + (c - S.sideC) * 0.1; u0 = S.sideC - uw / 2; }
+  else if (viewMode === 'pluma') u0 = -(6 + 0.16 * uw);
+  else {
+    const c = (U(S.p.x, S.p.z) + 0) / 2;
+    S.sideC = S.sideC == null ? c : S.sideC + (c - S.sideC) * 0.05;
+    u0 = S.sideC - uw / 2;
+  }
+  const k = Math.min(sv.width / uw, sv.height / (uw * 0.95));
+  const ox = -u0 * k, oy = sv.height - Math.max(14 * DPR, sv.height * 0.05);
+  return { e, n, k, ox, oy, U, P: (x, y, z) => [ox + U(x, z) * k, oy - y * k], depth: (x, z) => x * n[0] + z * n[1] };
+}
+function uRange(cam, pts) { let a = 1e9, b = -1e9; for (const [x, z] of pts) { const u = cam.U(x, z); a = Math.min(a, u); b = Math.max(b, u); } return [a, b]; }
+const corners = (x, z, w, d) => [[x - w / 2, z - d / 2], [x + w / 2, z - d / 2], [x + w / 2, z + d / 2], [x - w / 2, z + d / 2]];
+
+function drawSide() {
+  const ctx = sc2, W = sv.width, H = sv.height, cam = sideCam(), k = cam.k;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const g = ctx.createLinearGradient(0, 0, 0, cam.oy);
+  g.addColorStop(0, '#16202f'); g.addColorStop(0.7, '#2b3a52'); g.addColorStop(1, '#5d5560');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.save();
+  if (S.shake > 0) ctx.translate((Math.random() - .5) * 6 * S.shake * DPR, (Math.random() - .5) * 6 * S.shake * DPR);
+  // escala de alturas
+  ctx.strokeStyle = 'rgba(255,255,255,.06)'; ctx.lineWidth = 1; ctx.font = mono(9, 400); ctx.fillStyle = 'rgba(235,230,218,.5)'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  const stepH = cam.oy / k > 45 ? 10 : 5;
+  for (let y = stepH; cam.oy - y * k > 34 * DPR; y += stepH) { const sy = cam.oy - y * k; ctx.beginPath(); ctx.moveTo(30 * DPR, sy); ctx.lineTo(W, sy); ctx.stroke(); ctx.fillText(`${y} m`, 4 * DPR, sy); }
+  // suelo
+  ctx.fillStyle = '#3f3a33'; ctx.fillRect(0, cam.oy, W, H - cam.oy);
+  ctx.fillStyle = '#56503f'; ctx.fillRect(0, cam.oy, W, 2 * DPR);
+  // agua/barro en el corte
+  for (const s of softs) {
+    const [a, b] = uRange(cam, corners(s.x, s.z, s.w, s.d));
+    ctx.fillStyle = s.kind === 'water' ? 'rgba(60,110,150,.55)' : 'rgba(110,85,55,.6)';
+    ctx.fillRect(cam.ox + a * k, cam.oy, (b - a) * k, 6 * DPR);
+  }
+  // radios en vista de la pluma
+  if (viewMode === 'pluma') {
+    ctx.fillStyle = 'rgba(235,230,218,.55)'; ctx.font = mono(9, 400); ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    const st = cam.oy / k > 45 ? 10 : 5;
+    for (let r = st; r <= T.boom.max; r += st) { const sx = cam.ox + r * k; ctx.fillRect(sx, cam.oy, 1, 5 * DPR); ctx.fillText(`${r}`, sx, cam.oy + 6 * DPR); }
+  }
+  // objetos ordenados por profundidad
+  const cD = cam.depth(S.cx, S.cz);
+  const items = [];
+  for (const b of boxes) items.push({ d: cam.depth(b.x, b.z), f: () => drawBoxSide(cam, b, cam.depth(b.x, b.z) < cD - 1) });
+  for (const c of crates) if (!c.held) items.push({ d: cam.depth(c.x, c.z), f: () => drawCrateSide(cam, c, c.x, c.y, c.z, cam.depth(c.x, c.z) < cD - 1) });
+  items.push({ d: cD, f: () => drawCraneSide(cam, S.model || craneModel()) });
+  if (S.att) items.push({ d: cam.depth(S.p.x, S.p.z) - 0.01, f: () => drawCrateSide(cam, S.att, S.p.x, S.p.y - SLING - S.att.h, S.p.z, false) });
+  items.push({ d: cam.depth(S.p.x, S.p.z) - 0.02, f: () => drawHookSide(cam) });
+  items.sort((a, b) => b.d - a.d);
+  // zonas (marcas)
+  for (const z of L.zones) {
+    const [a, b] = uRange(cam, corners(z.x, z.z, z.w, z.d)), sy = cam.oy - z.y * k;
+    ctx.fillStyle = 'rgba(242,182,50,.85)'; ctx.fillRect(cam.ox + a * k, sy - 2 * DPR, (b - a) * k, 3 * DPR);
+  }
+  for (const it of items) it.f();
+  for (const z of L.zones) {
+    const [a, b] = uRange(cam, corners(z.x, z.z, z.w, z.d)), sy = cam.oy - z.y * k;
+    ctx.setLineDash([3 * DPR, 3 * DPR]); ctx.strokeStyle = 'rgba(242,182,50,.75)'; ctx.lineWidth = 1.5 * DPR;
+    ctx.beginPath(); ctx.moveTo(cam.ox + a * k, sy); ctx.lineTo(cam.ox + b * k, sy); ctx.stroke(); ctx.setLineDash([]);
+    if (z.stack === undefined || z.stack === 0) { ctx.font = mono(9); ctx.fillStyle = '#f2b632'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText(z.label, cam.ox + (a + b) / 2 * k, sy - 4 * DPR); }
+  }
+  // líneas eléctricas
+  for (const l of lines) {
+    const pa = cam.U(l.a[0], l.a[1]), pb = cam.U(l.b[0], l.b[1]), sy = cam.oy - l.y * k;
+    const col = S.lineD < 2 ? '#e8573f' : '#d9c27a';
+    if (Math.abs(pa - pb) < 1.5) {
+      // la línea se ve de frente: círculo de distancia mínima
+      const sx = cam.ox + (pa + pb) / 2 * k;
+      ctx.fillStyle = S.lineD < 2 ? 'rgba(232,87,63,.25)' : 'rgba(232,87,63,.12)'; ctx.beginPath(); ctx.arc(sx, sy, l.clear * k, 0, 7); ctx.fill();
+      ctx.setLineDash([3 * DPR, 3 * DPR]); ctx.strokeStyle = 'rgba(232,87,63,.5)'; ctx.beginPath(); ctx.arc(sx, sy, (l.clear + 2) * k, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = col; ctx.beginPath(); ctx.arc(sx, sy, 3 * DPR, 0, 7); ctx.fill();
+      ctx.font = mono(9); ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(`⚡ ${l.kv}`, sx + (l.clear + 2) * k + 4 * DPR, sy);
+    } else {
+      const a = Math.min(pa, pb), b = Math.max(pa, pb);
+      ctx.fillStyle = S.lineD < 2 ? 'rgba(232,87,63,.22)' : 'rgba(232,87,63,.1)'; ctx.fillRect(cam.ox + a * k, sy - l.clear * k, (b - a) * k, 2 * l.clear * k);
+      ctx.strokeStyle = col; ctx.lineWidth = 1.5 * DPR; ctx.beginPath(); ctx.moveTo(cam.ox + a * k, sy); ctx.lineTo(cam.ox + b * k, sy); ctx.stroke();
+      ctx.font = mono(9); ctx.fillStyle = col; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; ctx.fillText(`⚡ ${l.kv}`, 36 * DPR, sy - l.clear * k - 3 * DPR);
+    }
+  }
+  for (const p of S.parts) { const [x, y] = cam.P(p.x, p.y, p.z); ctx.fillStyle = `rgba(200,180,150,${p.life * 0.45})`; ctx.beginPath(); ctx.arc(x, y, ((1.4 - p.life) * 0.7 + 0.2) * k, 0, 7); ctx.fill(); }
+  ctx.restore();
+  // altura y despeje
+  const h = S.p;
+  ctx.font = mono(10); ctx.fillStyle = '#ebe6da'; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+  ctx.fillText(`gancho ${Math.max(0, h.y).toFixed(1)} m · radio ${radius().toFixed(1)} m`, W - 8 * DPR, (W < 560 * DPR ? 34 : 8) * DPR);
+}
+function drawBoxSide(cam, b, near) {
+  const ctx = sc2, k = cam.k, [a, c] = uRange(cam, corners(b.x, b.z, b.w, b.d));
+  const x0 = cam.ox + a * k, w = (c - a) * k, y0 = cam.oy - b.h * k, hh = b.h * k;
+  const col = b.color || KIND_COL[b.kind] || '#69717a';
+  ctx.globalAlpha = near ? 0.38 : 1;
+  if (b.kind === 'pole') { ctx.fillStyle = col; ctx.fillRect(cam.ox + (a + c) / 2 * k - 0.2 * k, y0, 0.4 * k, hh); ctx.fillStyle = '#4a3828'; ctx.fillRect(cam.ox + (a + c) / 2 * k - 1.6 * k, y0 + 0.6 * k, 3.2 * k, 0.3 * k); ctx.globalAlpha = 1; return; }
+  if (b.kind === 'bed') { ctx.fillStyle = col; ctx.fillRect(x0, cam.oy - b.h * k, w, (b.h - 0.6) * k); ctx.fillStyle = '#596372'; ctx.fillRect(x0, y0, w, 0.25 * k); ctx.fillStyle = '#121418'; for (const t of [0.15, 0.3, 0.85]) { ctx.beginPath(); ctx.arc(x0 + w * t, cam.oy - 0.5 * k, 0.5 * k, 0, 7); ctx.fill(); } ctx.globalAlpha = 1; return; }
+  ctx.fillStyle = b.kind === 'building' ? '#59616b' : col; ctx.fillRect(x0, y0, w, hh);
+  if (b.kind === 'building') {
+    ctx.fillStyle = '#2b3139';
+    for (let y = 1.2; y < b.h - 1; y += 3.2) for (let x = 0.8; x < (c - a) - 1.2; x += 2.6) ctx.fillRect(x0 + x * k, cam.oy - (y + 2) * k, 1.6 * k, 1.8 * k);
+    ctx.fillStyle = '#7d858f'; ctx.fillRect(x0 - 0.2 * k, y0, w + 0.4 * k, 0.4 * k);
+  } else if (b.kind === 'container') {
+    ctx.strokeStyle = 'rgba(0,0,0,.25)'; ctx.lineWidth = 1; for (let y = 2.6; y < b.h; y += 2.6) { ctx.beginPath(); ctx.moveTo(x0, cam.oy - y * k); ctx.lineTo(x0 + w, cam.oy - y * k); ctx.stroke(); }
+  } else if (b.kind === 'cab') { ctx.fillStyle = '#9fc2d6'; ctx.fillRect(x0 + w * 0.25, y0 + 0.4 * k, w * 0.5, 0.9 * k); }
+  else if (b.kind === 'rack') { ctx.fillStyle = '#4a3f33'; ctx.fillRect(x0, y0 + 0.6 * k, w, hh - 0.6 * k); ctx.fillStyle = '#a89070'; ctx.fillRect(x0, y0, w, 0.6 * k); ctx.fillRect(x0, y0 + hh * 0.45, w, 0.4 * k); }
+  ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 1; ctx.strokeRect(x0, y0, w, hh);
+  ctx.globalAlpha = 1;
+}
+function drawCrateSide(cam, c, x, y, z, near) {
+  const ctx = sc2, k = cam.k, [a, b] = uRange(cam, corners(x, z, c.w, c.d));
+  const x0 = cam.ox + a * k, w = (b - a) * k, y0 = cam.oy - (y + c.h) * k, hh = c.h * k;
+  ctx.globalAlpha = near ? 0.45 : 1;
+  ctx.fillStyle = c.broken ? '#4c5a63' : c.color; ctx.fillRect(x0, y0, w, hh);
+  if (c.kind === 'glass') { ctx.fillStyle = c.broken ? '#4c5a63' : '#a9d3e6'; ctx.fillRect(x0 + 0.25 * k, y0 + 0.25 * k, w - 0.5 * k, hh - 0.5 * k); }
+  if (c.kind === 'tower') { ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 1; ctx.beginPath(); for (let t = 0; t < c.h; t += 1.5) { ctx.moveTo(x0, y0 + t * k); ctx.lineTo(x0 + w, y0 + (t + 1.5) * k); ctx.moveTo(x0 + w, y0 + t * k); ctx.lineTo(x0, y0 + (t + 1.5) * k); } ctx.stroke(); }
+  ctx.strokeStyle = 'rgba(0,0,0,.4)'; ctx.lineWidth = 1; ctx.strokeRect(x0, y0, w, hh);
+  ctx.globalAlpha = 1;
+}
+const hookScale = () => 0.75 + 0.12 * Math.sqrt(T.structMax / 25);
+function drawHookSide(cam) {
+  const ctx = sc2, k = cam.k, t = tipPos(), h = S.p;
+  const [tx, ty] = cam.P(t.x, t.y, t.z), [hx, hy] = cam.P(h.x, h.y, h.z);
+  // aparejo: varios ramales de cable, bloque con poleas, giratorio y gancho
+  const hb = hookScale(), bw2 = 0.55 * hb * k, bh = 1.0 * hb * k, top0 = hy - bh, falls = T.structMax > 100 ? 4 : 2;
+  ctx.strokeStyle = '#d0d3d8'; ctx.lineWidth = Math.max(1, 0.045 * k);
+  ctx.beginPath(); for (let i = 0; i < falls; i++) { const o = (i - (falls - 1) / 2) * 0.16 * k; ctx.moveTo(tx + o * 0.6, ty); ctx.lineTo(hx + o, top0 + 0.25 * bh); } ctx.stroke();
+  ctx.fillStyle = '#9aa1a9'; ctx.beginPath(); ctx.arc(hx, top0 + 0.3 * bh, bw2 * 0.8, Math.PI, 0); ctx.fill();
+  ctx.fillStyle = '#f2b632'; ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(hx - bw2, top0 + 0.25 * bh, 2 * bw2, 0.75 * bh, [bw2 * 0.5, bw2 * 0.5, 2, 2]); else ctx.rect(hx - bw2, top0 + 0.25 * bh, 2 * bw2, 0.75 * bh);
+  ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.fillStyle = '#1d1d1d'; for (let i = 0; i < 3; i++) ctx.fillRect(hx - bw2 + (i * 0.7 + 0.25) * bw2, top0 + 0.78 * bh, 0.35 * bw2, 0.12 * bh);
+  ctx.fillStyle = '#5d646c'; ctx.beginPath(); ctx.arc(hx, top0 + 0.5 * bh, 0.16 * bw2 + 1, 0, 7); ctx.fill();
+  ctx.fillStyle = '#8a929b'; ctx.fillRect(hx - 0.12 * hb * k, hy, 0.24 * hb * k, 0.14 * hb * k);
+  ctx.strokeStyle = '#9aa1a9'; ctx.lineWidth = Math.max(1.5, 0.11 * hb * k); ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(hx, hy + 0.14 * hb * k); ctx.arc(hx, hy + 0.4 * hb * k, 0.2 * hb * k, -Math.PI / 2, Math.PI * 0.12, true); ctx.stroke(); ctx.lineCap = 'butt';
+  const hookY = hy + 0.6 * hb * k;
+  ctx.strokeStyle = '#4a7bd0'; ctx.lineWidth = Math.max(1, 0.06 * k);
+  if (S.att) {
+    const c = S.att, [a, b] = uRange(cam, corners(h.x, h.z, c.w, c.d)), top = hy + SLING * k;
+    ctx.beginPath(); ctx.moveTo(hx, hookY); ctx.lineTo(cam.ox + (a + (b - a) * 0.15) * k, top); ctx.moveTo(hx, hookY); ctx.lineTo(cam.ox + (b - (b - a) * 0.15) * k, top); ctx.stroke();
+  }
+}
+// ---------- tabla de carga ----------
+const chart = document.getElementById('chart'), cctx = chart.getContext('2d');
+function sizeChart() { chart.width = Math.round(chart.clientWidth * DPR); chart.height = Math.round(170 * DPR); }
+function drawChart() {
+  const w = chart.width, h = chart.height, d = DPR, pl = 40 * d, pr = 8 * d, pt = 8 * d, pb = 22 * d;
+  const md = mode(), alt = T.crawler ? (md === 'crawler' ? 'crawlMove' : 'crawler') : (md === 'out' ? 'tire' : 'out');
+  const RMAX = Math.ceil(T.boom.max / 10) * 10;
+  const pts = m => { const a = []; for (let an = T.boom.angMax; an >= T.boom.angMin - 1e-6; an -= 0.012) a.push([Math.max(0, reach(T, S.Lb, an)), ratedCap(T, m, S.Lb, an, S.slew)]); return a; };
+  const A = pts(md), Bc = pts(alt);
+  const mLoad = (S.att ? S.att.m : 0) + T.hookM;
+  let ymax = Math.max(4, mLoad * 1.4, ...A.map(p => p[1]).filter(v => isFinite(v)));
+  ymax = Math.min(ymax, structCap(T, S.Lb) * 1.05 + 1);
+  const nice = [2, 5, 10, 20, 25, 50, 100]; const stp = nice.find(s => ymax / s <= 5) || 100; ymax = Math.ceil(ymax / stp) * stp;
+  const rx = r => pl + r / RMAX * (w - pl - pr), ty = t => h - pb - Math.min(ymax, t) / ymax * (h - pt - pb);
+  cctx.clearRect(0, 0, w, h);
+  cctx.font = `${10 * d}px "IBM Plex Mono", monospace`; cctx.fillStyle = '#909aa6'; cctx.strokeStyle = '#36414e'; cctx.lineWidth = d;
+  cctx.textBaseline = 'middle'; cctx.textAlign = 'left';
+  for (let t = 0; t <= ymax + 1e-6; t += stp) { cctx.beginPath(); cctx.moveTo(pl, ty(t)); cctx.lineTo(w - pr, ty(t)); cctx.stroke(); cctx.fillText(`${t} t`, 2 * d, ty(t)); }
+  cctx.textBaseline = 'alphabetic';
+  for (let r = 0; r <= RMAX; r += 10) cctx.fillText(`${r}`, rx(r) - 6 * d, h - 6 * d);
+  const line = (P, col, dash) => { cctx.beginPath(); P.forEach(([r, c], i) => i ? cctx.lineTo(rx(r), ty(c)) : cctx.moveTo(rx(r), ty(c))); cctx.strokeStyle = col; cctx.lineWidth = 2 * d; cctx.setLineDash(dash); cctx.stroke(); cctx.setLineDash([]); };
+  line(Bc, '#909aa6', [4 * d, 3 * d]); line(A, '#f2b632', []);
+  const R = radius(), lim = S.rated;
+  cctx.strokeStyle = 'rgba(235,230,218,.45)'; cctx.lineWidth = d; cctx.setLineDash([3 * d, 3 * d]); cctx.beginPath(); cctx.moveTo(rx(R), pt); cctx.lineTo(rx(R), h - pb); cctx.stroke(); cctx.setLineDash([]);
+  cctx.fillStyle = mLoad > lim ? '#e8573f' : mLoad > lim * 0.9 ? '#f0a03a' : '#74c690';
+  cctx.beginPath(); cctx.arc(rx(R), ty(mLoad), 5 * d, 0, 7); cctx.fill();
+  const names = { out: 'Con estabilizadores', tire: 'Sobre neumáticos', move: 'Desplazándose', crawler: 'Orugas, parada', crawlMove: 'Orugas, desplazándose' };
+  $('lg-a').textContent = `${names[md]} · giro ${Math.round(((S.slew * 180 / Math.PI) % 360 + 360) % 360)}°`; $('lg-b').textContent = names[alt];
+}
+
+// ---------- HUD ----------
+const $ = id => document.getElementById(id);
+function setBar(id, v, full, wAt, dAt) { const b = $(id); b.querySelector('i').style.width = `${clamp(v / full * 100, 0, 100)}%`; b.classList.toggle('w', v >= wAt && v < dAt); b.classList.toggle('d', v >= dAt); }
+function hud() {
+  if (!S.running) S.rated = ratedCap(T, mode(), S.Lb, S.ang, S.slew);
+  const h = S.p, R = radius(), m = (S.att ? S.att.m : 0) + T.hookM;
+  const sl = ((S.slew * 180 / Math.PI) % 360 + 360) % 360;
+  $('r-slew').textContent = `${Math.round(sl)}°`;
+  $('r-ang').textContent = `${(S.ang * 180 / Math.PI).toFixed(1)}°`;
+  $('r-len').textContent = `${S.Lb.toFixed(1)} m`;
+  $('chart-len').textContent = `pluma ${S.Lb.toFixed(1)} m`;
+  $('r-rad').textContent = `${R.toFixed(1)} m`;
+  $('r-hook').textContent = `${Math.max(0, h.y).toFixed(1)} m`;
+  $('r-load').textContent = `${m.toFixed(1)} / ${S.rated.toFixed(1)} t`; $('r-load').classList.toggle('warn', m > S.rated);
+  const tp = tipPos(), sw = Math.atan2(Math.hypot(h.x - tp.x, h.z - tp.z), Math.max(0.01, tp.y - h.y)) * 180 / Math.PI;
+  $('r-sway').textContent = `${sw.toFixed(1)}°`; $('r-sway').classList.toggle('warn', sw > 5);
+  $('r-wind').textContent = `${S.wind.toFixed(1)} m/s`; $('r-wind').classList.toggle('warn', S.wind > 7);
+  if (T.jib) $('r-jib').textContent = `${Math.round((S.ang - S.jibRel) * 180 / Math.PI)}° · ${T.jib.len} m`;
+  $('r-spd').textContent = `${Math.abs(S.v * 3.6).toFixed(1)} km/h`;
+  $('clock').textContent = L.time ? `${fmt(Math.max(0, L.time - S.t))} restantes` : fmt(S.t);
+  $('m-lmi').textContent = `${Math.round(S.lmi * 100)} %`; setBar('bar-lmi', S.lmi, 1.25, 0.9, 1);
+  $('m-stab').textContent = `${Math.round(S.stab * 100)} %`; setBar('bar-stab', S.stab, 1, 0.75, 0.85);
+  const lo = $('l-out');
+  if (T.crawler) { lo.textContent = 'Orugas'; lo.className = 'lamp on good'; }
+  else { lo.textContent = 'Estabilizadores'; lo.classList.toggle('on', S.outS > 0); lo.classList.toggle('good', S.outS >= 1); lo.classList.toggle('mid', S.outS > 0 && S.outS < 1); }
+  const lc = $('l-cw'); lc.hidden = !T.ballast;
+  if (T.ballast) { lc.textContent = `Lastre ${Math.round(T.ballast.m * S.cwS)} t`; lc.classList.toggle('on', S.cwS > 0); lc.classList.toggle('good', S.cwS >= 1); lc.classList.toggle('mid', S.cwS > 0 && S.cwS < 1); }
+  const lm = $('l-mnt'), mv = T.tower ? S.er : S.jg; lm.hidden = !(T.tower || T.jibAvail);
+  if (!lm.hidden) { const what = T.tower ? 'Torre' : 'Plumín'; lm.textContent = `${what} ${mv >= 1 ? 'montado' : mv <= 0 ? 'plegado' : Math.round(mv * 100) + ' %'}`; lm.classList.toggle('on', mv > 0); lm.classList.toggle('good', mv >= 1); lm.classList.toggle('mid', mv > 0 && mv < 1); }
+  $('ro-jib').hidden = !(T.jib || T.superlift); if (T.superlift) { $('ro-jib').querySelector('small').textContent = 'Radio superlift'; $('r-jib').textContent = `${T.superlift.r.toFixed(1)} m`; } else $('ro-jib').querySelector('small').textContent = 'Plumín';
+  $('ro-len').querySelector('small').textContent = T.tower ? 'Carro' : 'Long. pluma';
+  const ly = $('l-yg'); ly.hidden = !T.yguy;
+  if (T.yguy) {
+    const ph = S.yg >= 1 ? 'tensado' : S.yg <= 0 ? 'plegado' : S.yg < 0.5 ? `levantando ${Math.round(S.yg * 100)} %` : S.yg < 0.8 ? `abriendo ${Math.round(S.yg * 100)} %` : `tensando ${Math.round(S.yg * 100)} %`;
+    ly.textContent = `Arriostr. Y ${ph}`; ly.classList.toggle('on', S.yg > 0); ly.classList.toggle('good', S.yg >= 1); ly.classList.toggle('mid', S.yg > 0 && S.yg < 1);
+  }
+  $('l-lmi').classList.toggle('on', !!S.flags.lmi || S.lmi >= 1);
+  $('l-atb').classList.toggle('on', !!S.flags.atb);
+  const ll = $('l-line'); ll.classList.toggle('on', lines.length > 0 && S.lineD < 4); ll.classList.toggle('mid', S.lineD >= 2 && S.lineD < 4);
+  $('l-tilt').classList.toggle('on', S.phi > 0.001);
+  $('l-landed').classList.toggle('on', !!(S.att && S.resting)); $('l-landed').classList.toggle('good', !!(S.att && S.resting));
+  const a = S.att;
+  const iz = a && L.zones.some(z => h.x - a.w / 2 >= z.x - z.w / 2 - 0.01 && h.x + a.w / 2 <= z.x + z.w / 2 + 0.01 && h.z - a.d / 2 >= z.z - z.d / 2 - 0.01 && h.z + a.d / 2 <= z.z + z.d / 2 + 0.01);
+  $('l-zone').classList.toggle('on', !!iz); $('l-zone').classList.toggle('good', !!iz);
+}
+
+// ---------- bucle ----------
+let last = performance.now(), acc = 0, frameN = 0;
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now; acc += dt;
+  let n = 0; while (acc >= 1 / 120 && n < 16) { step(1 / 120); acc -= 1 / 120; n++; } if (n >= 16) acc = 0;
+  S.msgT = Math.max(0, S.msgT - dt); S.shake = Math.max(0, S.shake - dt);
+  for (const p of S.parts) { p.x += p.vx * dt; p.z += p.vz * dt; p.y += p.vy * dt; p.vy -= 1.5 * dt; p.life -= dt * 0.9; }
+  S.parts = S.parts.filter(p => p.life > 0);
+  if (S.att && (frameN++ % 6 === 0 || !S.range)) S.range = workRange();
+  if (!S.att) S.range = null;
+  S.model = craneModel();
+  if (glReady()) glBuild(S.model);
+  drawTop(); drawSide(); drawChart(); hud();
+  requestAnimationFrame(frame);
+}
+
+// ---------- entrada ----------
+const keymap = { KeyK: 'sli', KeyL: 'slo', KeyT: 'ju', KeyG: 'jd', ArrowUp: 'fw', ArrowDown: 'bk', ArrowLeft: 'stl', ArrowRight: 'str', KeyA: 'sll', KeyD: 'slr', KeyW: 'lu', KeyS: 'ld', KeyE: 'to', KeyQ: 'ti', KeyR: 'hu', KeyF: 'hd' };
+function cycleView() { const ks = Object.keys(VIEWS); viewMode = ks[(ks.indexOf(viewMode) + 1) % ks.length]; S.sideC = null; $('sidelabel').textContent = VIEWS[viewMode]; }
+addEventListener('keydown', e => {
+  if (e.key === 'Shift') inp.fine = 1;
+  if (!modal.hidden) return;
+  const k = keymap[e.code];
+  if (k) { inp[k] = 1; e.preventDefault(); return; }
+  if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) hookAction(); }
+  if (e.code === 'KeyO' && !e.repeat) toggleOutriggers();
+  if (e.code === 'KeyB' && !e.repeat) toggleBallast();
+  if (e.code === 'KeyY' && !e.repeat) toggleYGuy();
+  if (e.code === 'KeyM' && !e.repeat) toggleMount();
+  if (e.code === 'KeyV' && !e.repeat) cycleView();
+  if (e.code === 'KeyZ' && !e.repeat) $('b-zoom').click();
+});
+addEventListener('keyup', e => { if (e.key === 'Shift') inp.fine = 0; const k = keymap[e.code]; if (k) inp[k] = 0; });
+addEventListener('blur', () => { for (const k in inp) inp[k] = 0; });
+document.querySelectorAll('.pad[data-k]').forEach(b => {
+  const k = b.dataset.k;
+  const on = e => { e.preventDefault(); inp[k] = 1; b.classList.add('held'); try { b.setPointerCapture(e.pointerId); } catch (_) {} };
+  const off = () => { inp[k] = 0; b.classList.remove('held'); };
+  b.addEventListener('pointerdown', on); b.addEventListener('pointerup', off); b.addEventListener('pointercancel', off); b.addEventListener('lostpointercapture', off);
+  b.addEventListener('contextmenu', e => e.preventDefault());
+});
+$('b-hook').addEventListener('click', hookAction);
+$('b-out').addEventListener('click', toggleOutriggers);
+$('b-cw').addEventListener('click', toggleBallast);
+$('b-yg').addEventListener('click', toggleYGuy);
+$('b-mnt').addEventListener('click', toggleMount);
+$('b-fine').addEventListener('click', () => { fineToggle = !fineToggle; $('b-fine').setAttribute('aria-pressed', fineToggle); });
+$('b-view').addEventListener('click', cycleView);
+$('b-zoom').addEventListener('click', () => { zoom = !zoom; $('b-zoom').setAttribute('aria-pressed', zoom); });
+$('b-restart').addEventListener('click', () => showBrief(S.lvl));
+
+addEventListener('resize', resize);
+window.__crane = { structCap, headPos, reach, slewCenter, craneModel, glBuild, get S() { return S; }, get T() { return T; }, padsBlocked, carrierBlocked, pivotPos, get crates() { return crates; }, LEVELS, CRANES, ratedCap, lmiStatic, step, hookAction, toggleOutriggers, toggleBallast, toggleYGuy, toggleMount, loadLevel, tipPos, inp, start: () => { closeCard(); S.running = true; } };
+const hot = window.claude?.hot?.data;
+window.claude?.hot?.snapshot?.(() => ({ lvl: S.lvl }));
+resize();
+showBrief(Math.min(hot?.lvl ?? 0, LEVELS.length - 1));
+requestAnimationFrame(frame);
+})();
+</script>

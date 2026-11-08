@@ -1,0 +1,75 @@
+import type * as THREE from 'three';
+
+// HUD en HTML simple: contador de rendimiento, lecturas de la grúa, mensajes y ayuda de teclas.
+
+export interface Readout {
+  Lb: number;
+  angDeg: number;
+  radius: number;
+  headH: number;
+  cable: number;
+  load: string;
+  fine: boolean;
+}
+
+export class Hud {
+  private perf: HTMLElement;
+  private data: HTMLElement;
+  private msg: HTMLElement;
+  private msgT = 0;
+  // Ventana de medición de 0,5 s
+  private frames = 0;
+  private acc = 0;
+  private worst = 0;
+  private physAcc = 0;
+  private renderAcc = 0;
+
+  constructor(root: HTMLElement) {
+    root.innerHTML = `
+      <div class="panel perf" id="perf">— fps</div>
+      <div class="panel data" id="data"></div>
+      <div class="msg" id="msg"></div>
+      <div class="panel keys">
+        <b>A/D</b> giro · <b>W/S</b> pluma · <b>Q/E</b> telescopio · <b>R/F</b> gancho ·
+        <b>Espacio</b> enganchar/soltar · <b>Shift</b> fino · ratón: cámara
+      </div>`;
+    this.perf = root.querySelector('#perf')!;
+    this.data = root.querySelector('#data')!;
+    this.msg = root.querySelector('#msg')!;
+  }
+
+  say(text: string, seconds = 2.5) {
+    this.msg.textContent = text;
+    this.msg.classList.add('on');
+    this.msgT = seconds;
+  }
+
+  /** dt real del cuadro (s), tiempos de física y render (ms CPU) */
+  frame(dt: number, physMs: number, renderMs: number, info: THREE.WebGLInfo) {
+    this.frames++;
+    this.acc += dt;
+    this.worst = Math.max(this.worst, dt);
+    this.physAcc += physMs;
+    this.renderAcc += renderMs;
+    if (this.msgT > 0 && (this.msgT -= dt) <= 0) this.msg.classList.remove('on');
+    if (this.acc < 0.5) return;
+    const n = this.frames;
+    const fps = n / this.acc;
+    this.perf.innerHTML =
+      `<b class="${fps < 50 ? 'bad' : fps < 58 ? 'warn' : ''}">${fps.toFixed(0)} fps</b>` +
+      ` · ${(1000 * this.acc / n).toFixed(1)} ms (peor ${(1000 * this.worst).toFixed(1)})<br>` +
+      `física ${(this.physAcc / n).toFixed(2)} ms · render CPU ${(this.renderAcc / n).toFixed(2)} ms<br>` +
+      `draw calls ${info.render.calls} · triángulos ${info.render.triangles}`;
+    this.frames = 0; this.acc = 0; this.worst = 0; this.physAcc = 0; this.renderAcc = 0;
+  }
+
+  readout(r: Readout) {
+    const f = (v: number, d = 1) => v.toFixed(d).replace('.', ',');
+    this.data.innerHTML =
+      `<div class="title">AT 60${r.fine ? ' · <span class="warn">fino</span>' : ''}</div>` +
+      `Pluma <b>${f(r.Lb)} m</b> · <b>${f(r.angDeg)}°</b><br>` +
+      `Radio <b>${f(r.radius)} m</b> · punta <b>${f(r.headH)} m</b><br>` +
+      `Cable <b>${f(r.cable)} m</b><br>` +
+      `Gancho: <b>${r.load}</b>`;
+  }
+}
