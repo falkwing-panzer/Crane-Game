@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { CraneState } from '../crane/kinematics';
 import { apply, type Pose } from '../crane/pose';
 import type { SceneCtx } from './scene';
+import type { Eye } from './craneModel';
 
 // Cámaras (tecla V): orbital libre que acompaña a la grúa, seguimiento por detrás y cabina del conductor.
 // También mueve la luz con sombras para que su encuadre (±45 m) siga a la grúa.
@@ -26,7 +27,11 @@ export class CameraRig {
   private look = new THREE.Vector3();
   private sunAt = new THREE.Vector3();
 
-  constructor(private ctx: SceneCtx, private cab: THREE.Object3D[], private eyeLocal: { x: number; y: number; z: number }) {}
+  /**
+   * cab = piezas que se ocultan en la vista de cabina; eye(S) = ojo y mirada en el marco del chasis;
+   * size = escala de las distancias de cámara (1 = AT 60)
+   */
+  constructor(private ctx: SceneCtx, private cab: THREE.Object3D[], private eye: (S: CraneState) => Eye, private size = 1) {}
 
   cycle(S: CraneState, pose: Pose): string {
     this.mode = ORDER[(ORDER.indexOf(this.mode) + 1) % ORDER.length];
@@ -36,13 +41,14 @@ export class CameraRig {
     if (this.mode === 'orbita') {
       // vuelve a una vista libre desde fuera, mirando a la grúa
       const c = this.carrier(pose);
-      controls.target.set(c.x, 5, c.z);
-      camera.position.set(c.x + 22, 16, c.z + 26);
+      const k = this.size;
+      controls.target.set(c.x, 5 * k, c.z);
+      camera.position.set(c.x + 22 * k, 16 * k, c.z + 26 * k);
       controls.update();
     }
     if (this.mode === 'seguir') {
       this.yaw = S.h;
-      this.look.copy(this.carrier(pose)).setY(5);
+      this.look.copy(this.carrier(pose)).setY(5 * this.size);
     }
     return TEXT[this.mode];
   }
@@ -66,14 +72,15 @@ export class CameraRig {
       dy = Math.atan2(Math.sin(dy), Math.cos(dy));
       this.yaw += dy * (1 - Math.exp(-2.5 * dt));
       const k = 1 - Math.exp(-4 * dt);
-      const want = new THREE.Vector3(-26 * Math.cos(this.yaw), 14, 26 * Math.sin(this.yaw)).add(c);
+      const z = this.size;
+      const want = new THREE.Vector3(-26 * z * Math.cos(this.yaw), 14 * z, 26 * z * Math.sin(this.yaw)).add(c);
       camera.position.lerp(want, k);
-      this.look.lerp(new THREE.Vector3(c.x + 3 * Math.cos(this.yaw), 5, c.z - 3 * Math.sin(this.yaw)), k);
+      this.look.lerp(new THREE.Vector3(c.x + 3 * z * Math.cos(this.yaw), 5 * z, c.z - 3 * z * Math.sin(this.yaw)), k);
       camera.lookAt(this.look);
     } else {
-      const e = this.eyeLocal;
+      const e = this.eye(S);
       const eye = apply(pose, e);
-      const at = apply(pose, { x: e.x + 20, y: e.y - 1.2, z: e.z });
+      const at = apply(pose, { x: e.x + 20 * e.fx, y: e.y - 1.2, z: e.z + 20 * e.fz });
       camera.position.set(eye.x, eye.y, eye.z);
       camera.lookAt(at.x, at.y, at.z);
     }

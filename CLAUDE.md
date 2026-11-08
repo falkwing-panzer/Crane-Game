@@ -76,6 +76,9 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - **Fase 3** (conducción AT 60): flechas con el controlador de bicicleta de la referencia, modo `move` (KF 0,45), pick & carry
   al 30 % y bloqueado por LMI, choques del chasis y de las zapatas con obstáculos, ruedas que giran y se orientan, suspensión,
   cámaras (V) y luz de sombras que sigue a la grúa. Pruebas en `drive.test.ts`.
+- **Fase 4** (modelos de ruedas): City 25, AT 60, RT 90, AT 220, AT 300-6, AT 450-8 y AT 500-8 generados desde `cranes.ts`
+  con las fórmulas de `craneModel()` de la referencia; menú "Grúa" en el HUD (`?grua=id`, recarga la página). Pruebas en
+  `models.test.ts` (se construyen y nada se atraviesa en todo el recorrido de la pluma ni al girar).
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -97,7 +100,12 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   `toggleHook()` (condiciones de enganche de la referencia), `resetLoads()` (tecla X; cada `Load` guarda su `home`),
   `addObstacle`, `carrierBlocked(x, z, h)` y `padsBlocked(S)` (consultas `intersectionsWithShape`), `SITE_HALF` = 150 m.
 - `src/render/camera.ts` (`CameraRig`: modos de cámara y luz que sigue a la grúa), `site.ts` (obstáculos de prueba `TEST_OBSTACLES`).
-- `src/render/scene.ts`, `craneModel.ts`, `rigging.ts`: escena, grúa, gancho/cable/cargas.
+- `src/render/models/`: `layout.ts` (todas las cotas del modelo sin three.js: cabina, apoyo de pluma, cola de pluma, ranura de la
+  placa, contrapeso `cwDims`, cabrestante, radio de cola `tailR`, `hookScale`/`hookFalls`, `WHEELED_IDS`), `carrier.ts` (chasis y
+  cabina), `superstructure.ts` (superestructura, tramos, cabeza con poleas), `builder.ts` (`Parts`: caja, cilindro, extrusión de
+  perfil; fusiona por material), `materials.ts` (paleta compartida, materiales por color).
+- `src/render/craneModel.ts` (`CraneModel`: grupos rígidos, llantas y estabilizadores instanciados, `eye(S)`, `lateral()`),
+  `scene.ts`, `rigging.ts` (gancho escalado y 2/4 ramales).
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
   cut…) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
   dibuja cuadros; así se puede probar desde la consola).
@@ -167,6 +175,21 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   referencia, solo para el dibujo y los choques; `CRANES` no cambia y la estabilidad sigue con `tire`/`out` (ojo: las ruedas quedan más afuera que `tire.hw` = 1,25). Cabina del
   conductor a todo el ancho (el largo y la altura siguen la fórmula de la referencia: el techo queda bajo la pluma tumbada)
   y cabina del operador de 2,5 × 0,9 × 1,85 m y llantas de 0,7 m (aproximación visual).
+- **Modelos (fase 4)**: cada grupo rígido (chasis, cabina, superestructura, tramo base, cada tramo interior, cabeza) es
+  **una malla por material** (geometrías fusionadas); llantas (neumático, llanta, buje) y estabilizadores con InstancedMesh.
+  Las cotas viven en `layout.ts` para poder probarlas. La AT 60 conserva chasis ancho y cabina a todo el ancho; las demás
+  usan `half` y la cabina de media anchura de la referencia. La RT 90 no tiene cabina de conductor (referencia): la vista
+  de cabina usa la del operador y gira con la superestructura.
+- **Ajustes a la referencia para que nada se atraviese** (aproximación visual, la estabilidad no cambia): cola del tramo
+  base acortada (√((pivH − corona − 5 cm)² − (alto/2)²), 0,2–1 m) y **ranura en la placa base** bajo el pie; frente del
+  contrapeso recortado si la pluma alta lo tocaría (City 25, AT 60); cabrestante **encima** del contrapeso (la referencia lo
+  metía dentro); cabina del operador a la izquierda por fuera de los soportes del pie (la referencia la ponía a la derecha);
+  equipo de cubierta y apoyo de pluma bajo la pluma tumbada y fuera del radio de cola; sin rotativo en la cabina del
+  conductor; escape del chasis horizontal; poleas de la cabeza ≤ 0,45·alto + 3 cm; bastidor y cofres más estrechos si no
+  caben entre llantas; cajones de estabilizadores recortados para no tocar los guardabarros.
+- **Cilindro de elevación**: posiciones de la referencia (base en `front − 0,9`, al 45 % del tramo base). Con la pluma casi
+  tumbada queda metido bajo la pluma (no hay altura entre placa y pluma con los `pivH` de la referencia). Aceptado.
+- **Gancho**: colisionador de Rapier escalado en ancho/fondo con `hookScale` (0,55·hb × 0,21·hb); el alto sigue fijo (±0,5 m).
 - **Luz con sombras**: se recentra a saltos cada 15 m de recorrido (no cada cuadro) para que las sombras no tiemblen.
 
 ### Plan y riesgos conocidos
@@ -185,14 +208,22 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - Fase 2: 61 draw calls de pie / 68 con estabilizadores fuera / 69 volcada; 4.730 triángulos; física ~0,2 ms y render CPU
   ~1,1 ms por cuadro (panel de la app, oculto durante las pruebas: **fps reales pendientes de medir en la laptop**).
 - Fase 3: 72 draw calls y ~4.700 triángulos en la vista de seguimiento (46 / 3.900 en cabina); física ~0,2 ms, render CPU
-  ~1,1 ms; 60 fps en el panel de la app. **fps reales pendientes de medir en la laptop.**
+  ~1,1 ms; 60 fps en el panel de la app. **En la laptop de Jesús: 60 fps estables** (con el chasis ancho y las
+  cabinas nuevas, ~90 draw calls). (Capturas sueltas con 12–27 fps no reflejan el uso normal.)
+- Fase 4 (AT 500-8, la más pesada): 113–123 draw calls (sombras incluidas) y ~17.200 triángulos; ~1 ms por cuadro de física +
+  render CPU (con `gl.finish`) en el panel de la app; 60 fps con el panel visible. AT 60: ~115 draw calls, ~10.800 triángulos.
+  **fps reales con la AT 500-8 pendientes de medir en la laptop.**
 
 ### Pendientes
+- Lastre (fase 5): el contrapeso se dibuja con `cwS = 0`; al crecer, revisar que el cabrestante (encima) y el radio de cola
+  (`tailR` frente a cabina, apoyo y equipo) sigan libres — las pruebas de `models.test.ts` lo detectarán si se usa `layout`.
+- El encuadre de sombras (±45 m) no cubre plumas de 64–85 m enteras; la cámara se escala con el largo del chasis.
 - Colisión de la carga con la pluma (no existe todavía).
 - Radio de cola: el contrapeso no choca con obstáculos al girar (`boomHit`/contrapeso de la referencia), ni la pluma.
 - Terreno (agua, barro, `offroad`) y límites reales de la obra llegan con los niveles (fase 9); ahora el límite es ±150 m.
 - Conducción de orugas (`spd.turn`, `crawlMove`): fase 6; `stepDrive` no hace nada si la grúa no tiene `wheelbase`.
-- Las alturas del chasis/ruedas son de la AT 60; revisar `CLEARANCE`, el ojo de la cabina y la suspensión con otras grúas.
+- `CLEARANCE` y la suspensión siguen siendo los de la AT 60; el colisionador de la superestructura (`supBox`) no cubre la
+  cabina del operador. Revisar si molesta con otras grúas.
 - La caja despedida 45 m de la fase 1 no se reprodujo con el nuevo ajuste del solver; si vuelve a pasar, anotar cómo.
 - Pruebas en el navegador: no teletransportar la pluma (`S.slew = …` de golpe) con el gancho colgado: el salto da un
   tirón enorme en el cable y vuelca la grúa. Usar las teclas con `__gruas.advance`.

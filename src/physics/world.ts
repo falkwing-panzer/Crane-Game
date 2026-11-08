@@ -1,5 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { SLING, bodyHalf, type CraneSpec } from '../crane/cranes';
+import { hookScale } from '../render/models/layout';
 import { carrierLift, headPos, type CraneState } from '../crane/kinematics';
 import { craneMasses, supportRect, type CraneConfig, type SupportMode } from '../crane/stability';
 import { apply, axisAngle, mul, rotate, type Pose, type V3 } from '../crane/pose';
@@ -90,8 +91,10 @@ export class Physics {
         .setCanSleep(false)
         .setCcdEnabled(true),
     );
+    // ancho y fondo del bloque escalados como el dibujo (hookScale de la referencia); el alto es fijo
+    const hb = hookScale(T);
     this.hookCollider = world.createCollider(
-      RAPIER.ColliderDesc.cuboid(0.28, HOOK_HALF_H, 0.22).setMass(T.hookM).setFriction(0.6),
+      RAPIER.ColliderDesc.cuboid(0.55 * hb, HOOK_HALF_H, 0.21 * hb).setMass(T.hookM).setFriction(0.6),
       this.hookBody,
     );
     this.cableJoint = this.makeCable(this.headBody, { x: 0, y: 0, z: 0 }, S.cable);

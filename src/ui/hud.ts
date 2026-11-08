@@ -41,6 +41,8 @@ export class Hud {
   private card: HTMLElement;
   /** Botón Reiniciar del cartel de vuelco */
   onRestart: () => void = () => {};
+  /** Menú de grúa: se eligió otra */
+  onCrane: (id: string) => void = () => {};
   // Ventana de medición de 0,5 s
   private frames = 0;
   private acc = 0;
@@ -48,9 +50,11 @@ export class Hud {
   private physAcc = 0;
   private renderAcc = 0;
 
-  constructor(root: HTMLElement) {
+  constructor(root: HTMLElement, private title: string, current: string, cranes: { id: string; name: string }[]) {
+    const opts = cranes.map((c) => `<option value="${c.id}"${c.id === current ? ' selected' : ''}>${c.name}</option>`).join('');
     root.innerHTML = `
       <div class="panel perf" id="perf">— fps</div>
+      <label class="panel pick">Grúa <select id="crane">${opts}</select></label>
       <div class="panel data" id="data"></div>
       <div class="msg" id="msg"></div>
       <div class="panel keys">
@@ -64,6 +68,10 @@ export class Hud {
       </div>`;
     this.card = root.querySelector('#card')!;
     root.querySelector('#card-restart')!.addEventListener('click', () => this.onRestart());
+    const sel = root.querySelector('#crane') as HTMLSelectElement;
+    sel.addEventListener('change', () => this.onCrane(sel.value));
+    // las teclas del juego no deben mover el menú: se suelta el foco al elegir o al pulsar una tecla
+    sel.addEventListener('keydown', (e) => { if (e.key !== 'Enter') { e.preventDefault(); sel.blur(); } });
     this.perf = root.querySelector('#perf')!;
     this.data = root.querySelector('#data')!;
     this.msg = root.querySelector('#msg')!;
@@ -113,7 +121,7 @@ export class Hud {
     const f = (v: number, d = 1) => v.toFixed(d).replace('.', ',');
     const lmiCls = r.lmi >= 1 ? 'bad' : r.lmi >= 0.9 ? 'warn' : 'ok';
     this.data.innerHTML =
-      `<div class="title">AT 60${r.fine ? ' · <span class="warn">fino</span>' : ''}</div>` +
+      `<div class="title">${this.title}${r.fine ? ' · <span class="warn">fino</span>' : ''}</div>` +
       `Pluma <b>${f(r.Lb)} m</b> · <b>${f(r.angDeg)}°</b><br>` +
       `Radio <b>${f(r.radius)} m</b> · punta <b>${f(r.headH)} m</b><br>` +
       `Cable <b>${f(r.cable)} m</b><br>` +

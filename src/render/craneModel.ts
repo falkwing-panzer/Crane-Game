@@ -1,44 +1,54 @@
 import * as THREE from 'three';
-import { bodyHalf, type WheeledSpec } from '../crane/cranes';
+import type { WheeledSpec } from '../crane/cranes';
 import { carrierLift, type CraneState } from '../crane/kinematics';
 import { suspensionPose, type Pose } from '../crane/pose';
 import { axleSteer } from '../crane/drive';
+import { Parts } from './models/builder';
+import { palette } from './models/materials';
+import { layout, type Layout } from './models/layout';
+import { buildCarrier } from './models/carrier';
+import { buildBoomBase, buildHead, buildSection, buildSuper, sectionTip, sheaves, TELE_N } from './models/superstructure';
 
-// Modelo simplificado (cajas y cilindros). Las cotas principales vienen de la referencia
-// (chasis, ejes, llantas, centro de giro, pie de pluma, contrapeso, pluma). Cabinas,
-// anchura de llanta, número de tramos y cilindro de elevación son aproximaciones visuales.
+// Grúa de ruedas (fase 4): el modelo sale de cranes.ts con las fórmulas de craneModel() de la referencia
+// (ver models/). Cada grupo rígido (chasis, cabina, superestructura, cada tramo de pluma, cabeza) se fusiona
+// por material; llantas y estabilizadores van con InstancedMesh.
 
 const box = new THREE.BoxGeometry(1, 1, 1);
 const cyl = new THREE.CylinderGeometry(1, 1, 1, 16);
+const tireGeo = new THREE.CylinderGeometry(1, 1, 1, 24);
 // buje hexagonal: así se ve girar la rueda
 const hex = new THREE.CylinderGeometry(1, 1, 1, 6);
 const WHEEL_BASE_Q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
 const _qs = new THREE.Quaternion();
 const _qw = new THREE.Quaternion();
+const _qspin = new THREE.Quaternion();
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
 
-const TELE_N = 3; // tramos telescópicos además del base
-const SECTION_LEN = 10;
-
-const _base = new THREE.Vector3();
-const _top = new THREE.Vector3();
+const _a = new THREE.Vector3();
+const _b = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
-const _q = new THREE.Quaternion();
 const _m4 = new THREE.Matrix4();
 const _p = new THREE.Vector3();
 const _s = new THREE.Vector3();
+const _o = new THREE.Vector3();
 const _q0 = new THREE.Quaternion();
+
+/** Ojo para la vista de cabina, en el marco del chasis: posición y dirección de la mirada. */
+export interface Eye { x: number; y: number; z: number; fx: number; fz: number }
 
 export class CraneModel {
   readonly root = new THREE.Group();
+  readonly L: Layout;
   private sup = new THREE.Group();
   private boom = new THREE.Group();
-  private sections: THREE.Mesh[] = [];
+  private sections: THREE.Group[] = [];
   private head = new THREE.Group();
   private luffBarrel: THREE.Mesh;
   private luffRod: THREE.Mesh;
+  private ropeA: THREE.Mesh;
+  private ropeB: THREE.Mesh;
   // Estabilizadores (4 esquinas): viga, cilindro del gato, vástago y zapata
   private outBeam: THREE.InstancedMesh;
   private outJack: THREE.InstancedMesh;
@@ -47,66 +57,27 @@ export class CraneModel {
   private padMat: THREE.MeshLambertMaterial;
   // Llantas: en un grupo que deshace la suspensión (el chasis se balancea, las ruedas no)
   private wheelGroup = new THREE.Group();
-  private wheels: THREE.InstancedMesh;
+  private tires: THREE.InstancedMesh;
+  private rims: THREE.InstancedMesh;
   private hubs: THREE.InstancedMesh;
-  private wheelW = 0.7;
-  /** Cabina del conductor: se oculta en la vista de cabina */
+  /** Piezas que se ocultan en la vista de cabina (la cabina desde la que se mira) */
   readonly cab: THREE.Object3D[] = [];
-  /** Ojo del conductor en el marco del chasis */
-  readonly eye: { x: number; y: number; z: number };
 
   constructor(private T: WheeledSpec) {
-    const yellow = new THREE.MeshLambertMaterial({ color: T.color });
-    const yellowDark = new THREE.MeshLambertMaterial({ color: new THREE.Color(T.color).multiplyScalar(0.8) });
-    const dark = new THREE.MeshLambertMaterial({ color: '#34393f' });
-    const steel = new THREE.MeshLambertMaterial({ color: '#8b9299' });
-    const tire = new THREE.MeshLambertMaterial({ color: '#1d1f22' });
-    const glass = new THREE.MeshLambertMaterial({ color: '#2b4a63' });
+    const L = (this.L = layout(T));
+    const pal = palette(T);
 
-    const add = (parent: THREE.Object3D, mat: THREE.Material,
-      x0: number, x1: number, y0: number, y1: number, z0: number, z1: number) => {
-      const m = new THREE.Mesh(box, mat);
-      m.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
-      m.scale.set(x1 - x0, y1 - y0, z1 - z0);
-      m.castShadow = m.receiveShadow = true;
-      parent.add(m);
-      return m;
-    };
+    // --- Chasis y cabina del conductor ---
+    const carrier = new Parts(), cabP = new Parts();
+    buildCarrier(T, L, carrier, cabP);
+    carrier.build(this.root, pal);
+    const cabMeshes = cabP.build(this.root, pal);
 
-    // --- Chasis (portador). +x = frente, -z = izquierda ---
-    const [L0, L1] = T.len, hf = bodyHalf(T);
-    // Cabina del conductor a todo el ancho, delante del primer eje (como la referencia: cabX0 = máx(L1 − 2,05, frente de
-    // la rueda delantera), suelo en deckLo − 0,15 y techo bajo la pluma tumbada: pivH − 0,63·boom.w − 0,12).
-    const tireFront = Math.max(...T.axles) + T.wheelR + 0.12;
-    const cabX0 = Math.max(L1 - 2.05, tireFront), cabLow = T.deckLo - 0.15;
-    const cabTop = T.pivH - T.boom.w * 0.63 - 0.12;
-    add(this.root, dark, L0 + 0.3, L1 - 0.3, T.deckLo, T.deckHi - 0.45, -0.6, 0.6); // bastidor
-    add(this.root, yellow, L0, cabX0, T.deckHi - 0.45, T.deckHi, -hf, hf); // plataforma / guardabarros
-    const lamp = new THREE.MeshLambertMaterial({ color: '#f6f1cf', emissive: '#6b6440' });
-    const beacon = new THREE.MeshLambertMaterial({ color: '#f08a1c', emissive: '#7a3c00' });
-    this.cab.push(
-      add(this.root, yellow, cabX0, L1, cabLow, cabTop - 0.08, -hf, hf), // cuerpo
-      add(this.root, yellowDark, cabX0 + 0.05, L1 - 0.15, cabTop - 0.08, cabTop, -hf + 0.05, hf - 0.05), // techo
-      add(this.root, glass, L1 - 0.01, L1 + 0.02, cabTop - 0.85, cabTop - 0.16, -hf + 0.12, hf - 0.12), // parabrisas
-      add(this.root, glass, cabX0 + 0.3, L1 - 0.15, cabTop - 0.8, cabTop - 0.18, -hf - 0.02, hf + 0.02), // ventanas laterales
-      add(this.root, dark, L1 - 0.1, L1 + 0.08, cabLow, cabLow + 0.3, -hf, hf), // parachoques
-      add(this.root, beacon, cabX0 + 0.3, cabX0 + 0.55, cabTop, cabTop + 0.18, -hf + 0.3, -hf + 0.55), // rotativo
-    );
-    for (const sd of [-1, 1]) this.cab.push(add(this.root, lamp, L1, L1 + 0.03, cabLow + 0.4, cabLow + 0.58, sd * (hf - 0.65), sd * (hf - 0.2)));
-    /** Ojo del conductor (vista de cabina), a la izquierda */
-    this.eye = { x: L1 - 0.5, y: cabTop - 0.4, z: -hf + 0.7 };
-    // cajas de estabilizadores en out.xf / out.xr (como la referencia), con franjas de advertencia
-    const stripes = new THREE.MeshLambertMaterial({ map: stripeTexture() });
-    for (const x of [T.out.xf, T.out.xr]) {
-      add(this.root, dark, x - 0.55, x + 0.55, T.deckLo + 0.05, T.deckLo + 1.1, -hf - 0.04, hf + 0.04);
-      add(this.root, stripes, x - 0.5, x + 0.5, T.deckLo + 0.2, T.deckLo + 0.95, -hf - 0.06, hf + 0.06);
-    }
-    // piezas móviles de los estabilizadores (se colocan en update)
-    const chrome = new THREE.MeshLambertMaterial({ color: '#c9ced3' });
+    // estabilizadores (se colocan en update)
     this.padMat = new THREE.MeshLambertMaterial({ color: '#7d858f' });
-    this.outBeam = new THREE.InstancedMesh(box, steel, 4);
-    this.outJack = new THREE.InstancedMesh(cyl, dark, 4);
-    this.outRod = new THREE.InstancedMesh(cyl, chrome, 4);
+    this.outBeam = new THREE.InstancedMesh(box, pal.grey, 4);
+    this.outJack = new THREE.InstancedMesh(cyl, pal.greyDeep, 4);
+    this.outRod = new THREE.InstancedMesh(cyl, pal.chrome, 4);
     this.outPad = new THREE.InstancedMesh(cyl, this.padMat, 4);
     for (const m of [this.outBeam, this.outJack, this.outRod, this.outPad]) {
       m.castShadow = m.receiveShadow = true;
@@ -114,123 +85,131 @@ export class CraneModel {
       this.root.add(m);
     }
 
-    // Llantas con instancing (ejes × 2 lados); se orientan y giran en update()
+    // llantas: neumático, llanta (disco exterior) y buje
     const nW = T.axles.length * 2;
-    this.wheels = new THREE.InstancedMesh(cyl, tire, nW);
-    this.hubs = new THREE.InstancedMesh(hex, steel, nW);
-    this.wheels.castShadow = this.wheels.receiveShadow = true;
-    for (const m of [this.wheels, this.hubs]) { m.frustumCulled = false; this.wheelGroup.add(m); }
+    this.tires = new THREE.InstancedMesh(tireGeo, pal.tire, nW);
+    this.rims = new THREE.InstancedMesh(cyl, pal.rim, nW);
+    this.hubs = new THREE.InstancedMesh(hex, pal.greyDeep, nW);
+    this.tires.castShadow = this.tires.receiveShadow = true;
+    for (const m of [this.tires, this.rims, this.hubs]) { m.frustumCulled = false; this.wheelGroup.add(m); }
     this.root.add(this.wheelGroup);
 
     // --- Superestructura (gira en x = piv) ---
     this.sup.position.set(T.piv, 0, 0);
     this.root.add(this.sup);
-    const yd = T.deckHi;
-    const ring = new THREE.Mesh(cyl, steel);
-    ring.position.set(0, yd + 0.1, 0);
-    ring.scale.set(1.2, 0.2, 1.2);
-    this.sup.add(ring);
-    add(this.sup, yellow, T.foot - 0.9, 1.3, yd + 0.2, yd + 0.85, -1.6, 1.6); // plataforma giratoria
-    // contrapeso: x = xCw y largo cwLen de la referencia; ancho 1,45 y alto 1,7 son los valores por defecto de cwDims()
-    add(this.sup, dark, T.xCw - T.cwLen / 2, T.xCw + T.cwLen / 2, yd + 0.2, yd + 1.9, -0.725, 0.725);
-    // soportes del pie de pluma
-    for (const s of [-1, 1]) add(this.sup, yellowDark, T.foot - 0.6, T.foot + 1.4, yd + 0.85, T.pivH + 0.35, s * 0.55, s * 0.75);
-    const pin = new THREE.Mesh(cyl, steel);
-    pin.position.set(T.foot, T.pivH, 0);
-    pin.rotation.x = Math.PI / 2;
-    pin.scale.set(0.16, 1.6, 0.16);
-    this.sup.add(pin);
-    // cabina del operador, a la izquierda de la pluma (aproximación visual: 2,5 × 0,9 × 1,85 m)
-    const oz0 = -1.7, oz1 = -0.8, oy0 = yd + 0.5, oy1 = yd + 2.35;
-    add(this.sup, yellow, -0.6, 1.9, oy0, oy1, oz0, oz1);
-    add(this.sup, yellowDark, -0.5, 1.75, oy1, oy1 + 0.06, oz0 + 0.04, oz1 - 0.04); // techo
-    add(this.sup, glass, 1.9, 1.93, oy0 + 0.55, oy1 - 0.12, oz0 + 0.08, oz1 - 0.08); // frente
-    add(this.sup, glass, 0.1, 1.75, oy0 + 0.75, oy1 - 0.15, oz0 - 0.02, oz0); // ventana lateral
-    add(this.sup, glass, 0.2, 1.7, oy1 + 0.005, oy1 + 0.07, oz0 + 0.12, oz1 - 0.12); // ventana del techo
+    const supP = new Parts();
+    buildSuper(T, L, supP);
+    const supMeshes = supP.build(this.sup, pal);
+    // en la RT se conduce desde la cabina de la superestructura: es la que se oculta
+    this.cab.push(...(L.noCab ? supMeshes.filter((m) => m.material === pal.cabin || m.material === pal.glass) : cabMeshes));
 
-    // cilindro de elevación (se orienta en cada cuadro)
-    this.luffBarrel = new THREE.Mesh(cyl, dark);
-    this.luffRod = new THREE.Mesh(cyl, steel);
-    this.luffBarrel.castShadow = this.luffRod.castShadow = true;
-    this.sup.add(this.luffBarrel, this.luffRod);
+    // cilindro de elevación y cable de elevación (se orientan en cada cuadro)
+    this.luffBarrel = new THREE.Mesh(cyl, pal.greyDeep);
+    this.luffRod = new THREE.Mesh(cyl, pal.chrome);
+    this.ropeA = new THREE.Mesh(cyl, pal.black);
+    this.ropeB = new THREE.Mesh(cyl, pal.black);
+    for (const m of [this.luffBarrel, this.luffRod, this.ropeA, this.ropeB]) { m.castShadow = true; this.sup.add(m); }
 
-    // --- Pluma telescópica ---
+    // --- Pluma telescópica: tramo base, tramos interiores y cabeza ---
     this.boom.position.set(T.foot, T.pivH, 0);
     this.sup.add(this.boom);
-    for (let s = 0; s <= TELE_N; s++) {
-      const m = new THREE.Mesh(box, s % 2 ? yellowDark : yellow);
-      m.castShadow = m.receiveShadow = true;
-      m.scale.set(1, T.boom.w * 1.2 - 0.12 * s, T.boom.w - 0.1 * s);
-      this.boom.add(m);
-      this.sections.push(m);
+    const base = new Parts();
+    buildBoomBase(T, L, base);
+    base.build(this.boom, pal);
+    for (let k = 1; k <= TELE_N; k++) {
+      const g = new THREE.Group(), p = new Parts();
+      buildSection(T, L, k, p);
+      p.build(g, pal);
+      this.boom.add(g);
+      this.sections.push(g);
     }
-    add(this.head, yellowDark, -0.7, 0.25, -0.4, 0.35, -0.3, 0.3);
-    const sheave = new THREE.Mesh(cyl, steel);
-    sheave.rotation.x = Math.PI / 2;
-    sheave.scale.set(0.38, 0.4, 0.38);
-    this.head.add(sheave);
+    const hp = new Parts();
+    buildHead(T, L, hp);
+    hp.build(this.head, pal);
     this.boom.add(this.head);
+  }
+
+  /** Ojo del conductor (vista de cabina) en el marco del chasis; en la RT, el del operador, que gira. */
+  eye(S: CraneState): Eye {
+    const e = this.L.eye;
+    if (!this.L.noCab) return { ...e, fx: 1, fz: 0 };
+    const c = Math.cos(S.slew), s = Math.sin(S.slew);
+    // rotación de three alrededor de y: x' = x·c + z·s, z' = −x·s + z·c
+    return { x: this.T.piv + e.x * c + e.z * s, y: e.y, z: -e.x * s + e.z * c, fx: c, fz: -s };
   }
 
   /** pose = pose del portador (elevación por estabilizadores, inclinación o cuerpo volcado de Rapier) */
   update(S: CraneState, pose: Pose) {
-    const T = this.T;
+    const T = this.T, L = this.L;
     this.root.position.set(pose.t.x, pose.t.y, pose.t.z);
     this.root.quaternion.set(pose.q.x, pose.q.y, pose.q.z, pose.q.w);
     this.updateOutriggers(S);
     this.updateWheels(S);
     this.sup.rotation.y = S.slew;
     this.boom.rotation.z = S.ang;
-
-    // Tramos: el base fijo; los interiores se reparten la extensión por igual.
-    const e = S.Lb - T.boom.min;
-    for (let s = 0; s <= TELE_N; s++) {
-      let a: number, b: number;
-      if (s === 0) { a = -0.8; b = T.boom.min - 0.25 * TELE_N; }
-      else { b = T.boom.min - 0.25 * (TELE_N - s) + (e * s) / TELE_N; a = b - SECTION_LEN; }
-      const m = this.sections[s];
-      m.position.x = (a + b) / 2;
-      m.scale.x = b - a;
-    }
+    for (let k = 1; k <= TELE_N; k++) this.sections[k - 1].position.x = sectionTip(T, k, S.Lb);
     this.head.position.x = S.Lb;
 
-    // Cilindro de elevación: de la plataforma a 4,2 m del pie de pluma.
-    _base.set(0.9, T.deckHi + 0.6, 0);
-    const c = Math.cos(S.ang), s = Math.sin(S.ang), bx = 4.2, by = -0.55;
-    _top.set(T.foot + bx * c - by * s, T.pivH + bx * s + by * c, 0);
-    _dir.subVectors(_top, _base);
+    const c = Math.cos(S.ang), s = Math.sin(S.ang);
+    const boomPt = (d: number, u: number, v: THREE.Vector3) => v.set(T.foot + d * c - u * s, T.pivH + d * s + u * c, 0);
+
+    // Cilindro de elevación: de la placa base al 45 % del tramo base, bajo la pluma (como la referencia).
+    _a.set(L.luffBase.x, L.luffBase.y, 0);
+    boomPt(T.boom.min * 0.45, -L.hu / 2, _b);
+    this.placeCyl(this.luffBarrel, _a, _b, 0.25 * L.bw, 0, 0.55);
+    this.placeCyl(this.luffRod, _a, _b, 0.13 * L.bw, 0.5, 1);
+
+    // Cable de elevación: tambor → sobre el tramo base → poleas de la cabeza
+    const sv = sheaves(T, L), d = L.drum;
+    _a.set(d.x, d.y + d.r, 0);
+    boomPt(1.0, L.hu / 2 + 0.05, _b);
+    this.placeCyl(this.ropeA, _a, _b, 0.025, 0, 1);
+    boomPt(S.Lb + sv.x, sv.y + sv.r, _o);
+    this.placeCyl(this.ropeB, _b, _o, 0.025, 0, 1);
+    this.root.updateMatrixWorld();
+  }
+
+  /** Eje lateral de la superestructura en el mundo (para repartir los ramales del gancho). */
+  lateral(out: THREE.Vector3) {
+    return out.setFromMatrixColumn(this.sup.matrixWorld, 2).normalize();
+  }
+
+  /** Cilindro de radio r a lo largo de a→b, entre las fracciones t0 y t1 del recorrido. */
+  private placeCyl(m: THREE.Mesh, a: THREE.Vector3, b: THREE.Vector3, r: number, t0: number, t1: number) {
+    _dir.subVectors(b, a);
     const len = _dir.length();
     _dir.normalize();
-    _q.setFromUnitVectors(_up, _dir);
-    const barrelLen = Math.min(3.0, len);
-    this.luffBarrel.quaternion.copy(_q);
-    this.luffBarrel.scale.set(0.2, barrelLen, 0.2);
-    this.luffBarrel.position.copy(_base).addScaledVector(_dir, barrelLen / 2);
-    this.luffRod.quaternion.copy(_q);
-    this.luffRod.scale.set(0.11, len, 0.11);
-    this.luffRod.position.copy(_base).addScaledVector(_dir, len / 2);
+    m.quaternion.setFromUnitVectors(_up, _dir);
+    m.scale.set(r, Math.max(0.01, len * (t1 - t0)), r);
+    m.position.copy(a).addScaledVector(_dir, (len * (t0 + t1)) / 2);
   }
 
   /** Ruedas: dirección por eje (como la referencia), giro según lo recorrido y sin el balanceo del chasis. */
   private updateWheels(S: CraneState) {
-    const T = this.T, w = this.wheelW, wz = bodyHalf(T) - w / 2;
+    const T = this.T, L = this.L, hw = L.tireHalf, wR = T.wheelR;
     const sp = suspensionPose(S); // el grupo aplica la inversa de la suspensión
     _qs.set(sp.q.x, sp.q.y, sp.q.z, sp.q.w).invert();
     this.wheelGroup.quaternion.copy(_qs);
     this.wheelGroup.position.set(-sp.t.x, -sp.t.y, -sp.t.z).applyQuaternion(_qs);
-    const spin = new THREE.Quaternion().setFromAxisAngle(Z_AXIS, -S.spin);
+    _qspin.setFromAxisAngle(Z_AXIS, -S.spin);
     let i = 0;
     for (const ax of T.axles) {
-      _qw.setFromAxisAngle(Y_AXIS, axleSteer(T, ax, S.steer)).multiply(spin).multiply(WHEEL_BASE_Q);
+      _qw.setFromAxisAngle(Y_AXIS, axleSteer(T, ax, S.steer)).multiply(_qspin).multiply(WHEEL_BASE_Q);
       for (const side of [-1, 1]) {
-        _m4.compose(_p.set(ax, T.wheelR, side * wz), _qw, _s.set(T.wheelR, w, T.wheelR));
-        this.wheels.setMatrixAt(i, _m4);
-        _m4.compose(_p.set(ax, T.wheelR, side * (wz + 0.02)), _qw, _s.set(T.wheelR * 0.5, w, T.wheelR * 0.5));
+        _p.set(ax, wR, side * L.tireZ);
+        _m4.compose(_p, _qw, _s.set(wR, 2 * hw, wR));
+        this.tires.setMatrixAt(i, _m4);
+        // el eje local y del cilindro es el eje de la rueda: hacia fuera = side·y
+        _o.set(0, side * (hw - 0.01), 0).applyQuaternion(_qw).add(_p);
+        _m4.compose(_o, _qw, _s.set(wR * 0.64, 0.06, wR * 0.64));
+        this.rims.setMatrixAt(i, _m4);
+        _o.set(0, side * (hw + 0.04), 0).applyQuaternion(_qw).add(_p);
+        _m4.compose(_o, _qw, _s.set(wR * 0.26, 0.1, wR * 0.26));
         this.hubs.setMatrixAt(i, _m4);
         i++;
       }
     }
-    this.wheels.instanceMatrix.needsUpdate = this.hubs.instanceMatrix.needsUpdate = true;
+    for (const m of [this.tires, this.rims, this.hubs]) m.instanceMatrix.needsUpdate = true;
   }
 
   /**
@@ -239,7 +218,7 @@ export class CraneModel {
    * el suelo está en y = −lift.
    */
   private updateOutriggers(S: CraneState) {
-    const T = this.T, o = T.out, hf = bodyHalf(T), dLo = T.deckLo;
+    const T = this.T, o = T.out, hf = this.L.hf, dLo = T.deckLo;
     const e = Math.min(1, S.out * 1.6);
     const ground = -carrierLift(S);
     const padY = S.out >= 0.5 ? ground : dLo * 0.8 * (1 - S.out / 0.5);
@@ -264,15 +243,4 @@ export class CraneModel {
     }
     for (const m of [this.outBeam, this.outJack, this.outRod, this.outPad]) m.instanceMatrix.needsUpdate = true;
   }
-}
-
-function stripeTexture() {
-  const c = document.createElement('canvas');
-  c.width = 96; c.height = 16;
-  const g = c.getContext('2d')!;
-  for (let i = 0; i < 6; i++) { g.fillStyle = i % 2 ? '#1d2125' : '#f2b632'; g.fillRect(i * 16, 0, 16, 16); }
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.magFilter = THREE.NearestFilter;
-  return t;
 }

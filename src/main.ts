@@ -1,6 +1,8 @@
 import RAPIER from '@dimforge/rapier3d-compat';
+import * as THREE from 'three';
 import './style.css';
-import { AT60 } from './crane/cranes';
+import { CRANES, type WheeledSpec } from './crane/cranes';
+import { WHEELED_IDS, type WheeledId } from './render/models/layout';
 import { initialState, stepCrane, stepOutriggers, type CraneState } from './crane/kinematics';
 import { baseConfig, lmiStatic, ratedCap, reach } from './crane/stability';
 import { dynamicStability, stepTilt, supportMode, toggleOutriggers, TILTED_PHI, type Dyn } from './crane/ops';
@@ -17,11 +19,16 @@ import { Hud } from './ui/hud';
 
 const MODE_TEXT = { out: 'estabilizadores', tire: 'neumáticos', move: 'en marcha', crawler: 'orugas', crawlMove: 'orugas en marcha' };
 
+const _lat = new THREE.Vector3();
+
 async function start() {
   await RAPIER.init();
 
   const ctx = createScene(document.getElementById('c') as HTMLCanvasElement);
-  const T = AT60;
+  // Grúa elegida en el menú (?grua=id); por defecto la AT 60
+  const q = new URLSearchParams(location.search).get('grua') as WheeledId | null;
+  const id: WheeledId = q && WHEELED_IDS.includes(q) ? q : 'medium';
+  const T = CRANES[id] as WheeledSpec;
   const S: CraneState = initialState(T);
   const C = baseConfig(T);
 
@@ -31,10 +38,15 @@ async function start() {
   const phys = new Physics(T, S, pose);
   for (const o of TEST_OBSTACLES) phys.addObstacle(o);
   buildSite(ctx.scene, phys.obstacles);
-  const rig = new Rigging(ctx.scene, phys);
-  const cam = new CameraRig(ctx, crane.cab, crane.eye);
+  const rig = new Rigging(ctx.scene, phys, T);
+  const cam = new CameraRig(ctx, crane.cab, (s) => crane.eye(s), Math.max(1, (T.len[1] - T.len[0]) / 12.3));
   const input = new Input();
-  const hud = new Hud(document.getElementById('hud')!);
+  const hud = new Hud(document.getElementById('hud')!, T.name, id, WHEELED_IDS.map((k) => ({ id: k, name: CRANES[k].name })));
+  hud.onCrane = (k) => {
+    const u = new URL(location.href);
+    u.searchParams.set('grua', k);
+    location.href = u.toString();
+  };
 
   let dyn: Dyn = { u: 0, edge: 0, lmi: 0 };
   let cut = false, cutMsg = false;
@@ -66,7 +78,7 @@ async function start() {
     hud.showTipped(null);
     hud.say('Grúa reiniciada', 1.5);
   };
-  hud.say('AT 60 · flechas para conducir · O despliega los estabilizadores · V cambia la cámara', 4);
+  hud.say(`${T.name} · flechas para conducir · O despliega los estabilizadores · V cambia la cámara`, 4);
 
   /** Un paso fijo de la lógica de la grúa y de la física. */
   function tick(dt: number) {
@@ -153,7 +165,7 @@ async function start() {
   function draw(dt: number, physMs: number) {
     const t1 = performance.now();
     crane.update(S, pose);
-    rig.update();
+    rig.update(crane.lateral(_lat));
     cam.update(dt, S, pose);
     ctx.renderer.render(ctx.scene, ctx.camera);
     const t2 = performance.now();
@@ -190,7 +202,7 @@ async function start() {
   if (import.meta.env.DEV) {
     Object.assign(window, {
       __gruas: {
-        S, C, phys, ctx, input, hud, cam,
+        S, C, T, phys, ctx, input, hud, cam, crane,
         get dyn() { return dyn; }, get pose() { return pose; }, get cut() { return cut; },
         advance(s: number) {
           for (let i = 0; i < Math.round(s / FIXED_DT); i++) tick(FIXED_DT);

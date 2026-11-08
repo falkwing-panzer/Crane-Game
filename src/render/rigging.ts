@@ -1,42 +1,75 @@
 import * as THREE from 'three';
+import type { CraneSpec } from '../crane/cranes';
 import { HOOK_HALF_H, type Load, type Physics } from '../physics/world';
+import { hookFalls, hookScale } from './models/layout';
 
 // Gancho, cable, eslingas y cargas: se dibujan a partir de los cuerpos de Rapier.
+// El aparejo se escala con la grúa (hookScale y ramales de la referencia); el alto sigue al cuerpo de Rapier.
 
 const box = new THREE.BoxGeometry(1, 1, 1);
 const cyl = new THREE.CylinderGeometry(1, 1, 1, 8);
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _d = new THREE.Vector3();
+const _lat = new THREE.Vector3();
+const _hx = new THREE.Vector3();
+const _q = new THREE.Quaternion();
+const _m4 = new THREE.Matrix4();
+const _s = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 
 export class Rigging {
   private hook = new THREE.Group();
-  private cable: THREE.Mesh;
+  /** Ramales del cable entre la cabeza y el bloque del gancho */
+  private falls: THREE.InstancedMesh;
+  private nFalls: number;
+  private hb: number;
   private loadMeshes = new Map<Load, THREE.Mesh>();
   private sling: THREE.LineSegments;
   private slingPos: Float32Array;
 
-  constructor(scene: THREE.Scene, private phys: Physics) {
+  constructor(scene: THREE.Scene, private phys: Physics, T: CraneSpec) {
     const steel = new THREE.MeshLambertMaterial({ color: '#7c8389' });
-    const block = new THREE.MeshLambertMaterial({ color: '#e0a21b' });
+    const block = new THREE.MeshLambertMaterial({ color: '#f2b632' });
+    const dark = new THREE.MeshLambertMaterial({ color: '#2a2e33' });
+    const hb = (this.hb = hookScale(T));
+    this.nFalls = hookFalls(T);
 
-    // Gancho: bloque de poleas + gancho. Origen = centro del cuerpo de Rapier.
-    const b = new THREE.Mesh(box, block);
-    b.scale.set(0.56, 0.6, 0.36);
-    b.position.y = 0.18;
+    // Gancho: bloque de poleas (de −0,05 a +0,5, como el cuerpo de Rapier) + vástago + gancho. Origen = centro del cuerpo.
+    const parts: [THREE.Material, THREE.BufferGeometry, number, number, number, number, number, number][] = [
+      [block, box, 0, 0.225, 0, 1.1 * hb, 0.55, 0.42 * hb],
+      [dark, box, 0, 0.36, 0, 1.12 * hb, 0.08, 0.44 * hb],
+      [steel, box, 0, -0.08, 0, 0.26 * hb, 0.07, 0.24 * hb],
+    ];
+    for (const [m, g, x, y, z, sx, sy, sz] of parts) {
+      const mesh = new THREE.Mesh(g, m);
+      mesh.position.set(x, y, z);
+      mesh.scale.set(sx, sy, sz);
+      mesh.castShadow = true;
+      this.hook.add(mesh);
+    }
+    // franjas negras del bloque
+    for (let i = 0; i < 3; i++) {
+      const m = new THREE.Mesh(box, dark);
+      m.scale.set(0.2 * hb, 0.07, 0.43 * hb);
+      m.position.set((i - 1) * 0.36 * hb, 0.06, 0);
+      this.hook.add(m);
+    }
+    const hr = 0.13 * Math.min(hb, 1.15), ht = 0.045 * Math.min(hb, 1.15);
+    const hy = -HOOK_HALF_H + hr + ht, s0 = -0.115, s1 = hy + 0.6 * hr;
     const shank = new THREE.Mesh(cyl, steel);
-    shank.scale.set(0.06, 0.25, 0.06);
-    shank.position.y = -0.22;
-    const hk = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.05, 6, 14, Math.PI * 1.5), steel);
-    hk.position.y = -0.48 + 0.16;
+    shank.scale.set(0.06 * hb, s0 - s1, 0.06 * hb);
+    shank.position.y = (s0 + s1) / 2;
+    const hk = new THREE.Mesh(new THREE.TorusGeometry(hr, ht, 6, 14, Math.PI * 1.5), steel);
+    hk.position.y = hy;
     hk.rotation.z = Math.PI * 0.75;
-    for (const m of [b, shank, hk]) { m.castShadow = true; this.hook.add(m); }
+    for (const m of [shank, hk]) { m.castShadow = true; this.hook.add(m); }
     scene.add(this.hook);
 
-    this.cable = new THREE.Mesh(cyl, new THREE.MeshLambertMaterial({ color: '#2a2c2e' }));
-    this.cable.castShadow = true;
-    scene.add(this.cable);
+    this.falls = new THREE.InstancedMesh(cyl, new THREE.MeshLambertMaterial({ color: '#2a2c2e' }), this.nFalls);
+    this.falls.castShadow = true;
+    this.falls.frustumCulled = false;
+    scene.add(this.falls);
 
     const crateMat = new THREE.MeshLambertMaterial({ map: crateTexture() });
     for (const l of phys.loads) {
@@ -55,21 +88,29 @@ export class Rigging {
     scene.add(this.sling);
   }
 
-  update() {
+  /** lat = eje lateral de la superestructura en el mundo (los ramales salen de las poleas de la cabeza) */
+  update(lat: THREE.Vector3) {
     const p = this.phys;
     const t = p.hookBody.translation(), r = p.hookBody.rotation();
     this.hook.position.set(t.x, t.y, t.z);
     this.hook.quaternion.set(r.x, r.y, r.z, r.w);
 
-    // Cable de la cabeza a la parte superior del gancho
+    // Ramales del cable de la cabeza a la parte superior del gancho
     const h = p.headWorld(), top = p.hookTop();
-    _a.set(h.x, h.y, h.z);
-    _b.set(top.x, top.y, top.z);
-    _d.subVectors(_b, _a);
-    const len = _d.length();
-    this.cable.position.copy(_a).addScaledVector(_d, 0.5);
-    this.cable.quaternion.setFromUnitVectors(_up, _d.normalize());
-    this.cable.scale.set(0.03, len, 0.03);
+    _lat.copy(lat);
+    _hx.set(1, 0, 0).applyQuaternion(this.hook.quaternion);
+    const n = this.nFalls;
+    for (let i = 0; i < n; i++) {
+      const o = (i - (n - 1) / 2);
+      _a.set(h.x, h.y, h.z).addScaledVector(_lat, o * 0.13);
+      _b.set(top.x, top.y, top.z).addScaledVector(_hx, o * 0.3 * this.hb);
+      _d.subVectors(_b, _a);
+      const len = _d.length();
+      _q.setFromUnitVectors(_up, _d.normalize());
+      _m4.compose(_a.addScaledVector(_d, len / 2), _q, _s.set(0.025, len, 0.025));
+      this.falls.setMatrixAt(i, _m4);
+    }
+    this.falls.instanceMatrix.needsUpdate = true;
 
     for (const [l, m] of this.loadMeshes) {
       const lt = l.body.translation(), lr = l.body.rotation();
