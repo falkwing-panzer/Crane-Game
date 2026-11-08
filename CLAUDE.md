@@ -57,3 +57,54 @@ src/
 ## Controles (heredados de la referencia)
 Flechas conducir/dirección · A/D giro · W/S elevar pluma · Q/E telescopar · R/F cable · Espacio gancho ·
 O estabilizadores · B lastre · Y Y-guy · T/G plumín · M montaje · K/L radio superlift · Shift fino · V vista.
+
+## Estado y decisiones
+Se trabaja por fases (ver `FASES.md`), con `/clear` entre fases. **Al cerrar cada fase, actualizar esta sección**
+(estado, decisiones con su porqué, pendientes y medidas de rendimiento) para que la siguiente fase no rehaga ni
+contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el historial de git no va aquí.
+
+### Fases terminadas
+- **Fase 0** (demo AT 60): escena, AT 60 simplificada, cable/gancho/carga con Rapier, HUD con fps, controles.
+
+### Mapa del código
+- `src/crane/cranes.ts`: `CraneSpec` y datos (por ahora solo `AT60`; la fase 1 añade las demás **sin romper** la interfaz).
+- `src/crane/kinematics.ts`: `CraneState`, `stepCrane` (rampas de velocidad, límites, Shift = ×0,3), `headPos`.
+- `src/physics/world.ts`: mundo Rapier; `Physics.step(S)`, `toggleHook()` (condiciones de enganche de la referencia).
+- `src/render/scene.ts`, `craneModel.ts`, `rigging.ts`: escena, grúa, gancho/cable/cargas.
+- `src/ui/input.ts`, `hud.ts`: teclas y HUD. En desarrollo, `window.__gruas = { S, phys, ctx }` para depurar.
+
+### Convenciones
+- Unidades: m, t, rad, s. Masas en Rapier en **toneladas**; gravedad 9,81.
+- Ejes: y arriba; chasis a lo largo de **+x (frente)**; **−z = izquierda**. `slew` positivo = antihorario visto desde arriba
+  (A). Pluma en el plano x-y de la superestructura; `headPos` = fórmula de `reach()` de la referencia.
+- Física con paso fijo de 1/60 s (máximo 4 pasos por cuadro); render a la frecuencia de la pantalla.
+- Cotas no tomadas de la referencia (cabinas, ancho de llanta, nº de tramos, cilindro de elevación) están marcadas
+  en el código como "aproximación visual".
+
+### Decisiones
+- **Grúa no dinámica en Rapier**: chasis = colisionador fijo, superestructura = cinemática, cabeza de pluma = cinemática
+  sin colisionador (ancla del cable). La estabilidad la decide el modelo analítico.
+- **Cable** = `JointData.rope` cabeza→gancho; el largo se cambia con `rawSet.jointSetLimits(LinX)` porque la API JS no
+  expone `setMaxDistance` (verificado: el largo se respeta). Revisar si se actualiza Rapier.
+- **Eslinga** = rope de 0,5 m del fondo del gancho al centro de la cara superior de la carga (un punto en física;
+  4 ramales solo visuales). Soltar exige carga apoyada (contacto + v < 0,3 m/s), como en la referencia.
+- **Pruebas contra la referencia** (desde la fase 1): extraer el `<script>` de `crane-v20.html` y ejecutarlo en Node
+  para comparar resultados con tolerancia 1e-6. Reutilizar ese arnés en fases posteriores.
+
+### Plan y riesgos conocidos
+- **Relación de masas gancho/carga** (0,4 t frente a cargas de cientos de t; gancho de 40 t en la LR 3000): con impulse
+  joints el cable se estira y vibra. Plan: pasar cabeza→gancho→carga a **multibody joints** en la fase 2, antes de las
+  grúas grandes (también resuelve el cambio de largo del cable).
+- **Vuelco** (fase 2): al pasar del modelo analítico a Rapier, iniciar el cuerpo con la inclinación y velocidad del modelo.
+- **Conducción** (fase 3): preferencia por un controlador cinemático propio (bicicleta con dirección en todos los ejes)
+  en vez del vehicle controller de Rapier; confirmar al implementarla.
+- Medir rendimiento **en cada fase** (fps, peor cuadro, draw calls, triángulos del peor caso) y anotarlo aquí.
+  Meta orientativa: menos de unas 150 draw calls.
+
+### Rendimiento medido
+- Fase 0: 57 draw calls, ~3.000 triángulos, física 0,27 ms y render CPU 1,1 ms por cuadro (panel integrado de la app,
+  limitado a 30 fps; **pendiente medir fps reales en la laptop**).
+
+### Pendientes
+- Colisión de la carga con la pluma (no existe todavía).
+- Vite avisa que el bundle pasa de 500 kB por el wasm de Rapier embebido: esperado, no es un error.
