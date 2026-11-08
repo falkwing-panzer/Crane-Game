@@ -232,8 +232,8 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   render CPU (con `gl.finish`) en el panel de la app; 60 fps con el panel visible. AT 60: ~115 draw calls, ~10.800 triángulos.
   **En la laptop de Jesús: 60 fps con la AT 500-8.**
 - Fase 5 (AT 500-8 con lastre y Y-guy montados, pluma de 50 m): 120 draw calls y ~17.600 triángulos (vista de seguimiento,
-  sombras incluidas). Lastre: 1 InstancedMesh; Y-guy: 4 InstancedMesh, recolocados solo cuando cambian. **Fps en la laptop
-  pendientes.**
+  sombras incluidas). Lastre: 1 InstancedMesh; Y-guy: 4 InstancedMesh, recolocados solo cuando cambian. **En la laptop de
+  Jesús: 60 fps.**
 
 ### Pendientes
 - El encuadre de sombras (±45 m) no cubre plumas de 64–85 m enteras; la cámara se escala con el largo del chasis.
