@@ -271,4 +271,7 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - La caja despedida 45 m de la fase 1 no se reprodujo con el nuevo ajuste del solver; si vuelve a pasar, anotar cómo.
 - Pruebas en el navegador: no teletransportar la pluma (`S.slew = …` de golpe) con el gancho colgado: el salto da un
   tirón enorme en el cable y vuelca la grúa. Usar las teclas con `__gruas.advance`.
+- **Referencias visuales** de Jesús en `referencia/imagenes/` (ver `NOTAS.md`). Orden acordado: 6B → 7 (empieza por
+  el contrapeso de dos torres, compartido por todas las grúas con lastre) → 8 → 8B pulido de modelos → niveles.
+  No pulir modelos antes.
 - Vite avisa que el bundle pasa de 500 kB por el wasm de Rapier embebido: esperado, no es un error.

@@ -139,6 +139,10 @@ Antes de programar, dime el plan. Mide fps con la LR 3000 y dímelos.
 ```
 Lee CLAUDE.md. Fase 7: AT 650-8 con plumín abatible.
 
+0. Primero, el sistema de contrapeso nuevo (ver referencia/imagenes/NOTAS.md y contrapeso-torres.png):
+   bastidor central, dos torres de placas con hueco en medio y esquina exterior achaflanada. Solo cambia el
+   dibujo (ballastPlates); masa y cwDims siguen la referencia. Debe servir para AT 300-6, AT 450-8,
+   AT 500-8 y AT 650-8. Revisar tailR y los choques del lastre con la forma nueva.
 1. Modelo de la AT 650-8.
 2. Montaje del plumín (tecla M) por fases: el plumín se ensambla en el suelo, se fija a la cabeza
    de la pluma y se levanta. Usa la lógica de jibDef, jibRel y el montaje "jg" de la referencia.
@@ -160,6 +164,22 @@ Lee CLAUDE.md. Fase 8: SK 60 (grúa móvil que se convierte en torre).
    telescopar, desplegar pluma. Al recoger, al revés.
 3. En modo torre: Q/E mueve el carro, A/D gira, R/F cable. Capacidad según la curva de la torre
    en structCap.
+
+Antes de programar, dime el plan.
+```
+
+---
+
+## Fase 8B — Pulido de modelos (antes de los niveles)
+
+```
+Lee CLAUDE.md. Fase 8B: pulir los modelos de todas las grúas con referencia/imagenes/NOTAS.md.
+
+1. Primero mide fps, draw calls y triángulos del peor caso (LR 3000, AT 650-8) en la laptop para saber
+   cuánto margen hay.
+2. Detalles de forma de las imágenes (barandillas, escalerillas, motón amarrado al parachoques, etc.),
+   sin pasar la meta de rendimiento.
+3. Lo que no esté en la referencia (grúa de 5 ejes, modos de dirección): preguntar antes.
 
 Antes de programar, dime el plan.
 ```
