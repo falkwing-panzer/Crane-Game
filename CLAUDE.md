@@ -212,7 +212,7 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   cabinas nuevas, ~90 draw calls). (Capturas sueltas con 12–27 fps no reflejan el uso normal.)
 - Fase 4 (AT 500-8, la más pesada): 113–123 draw calls (sombras incluidas) y ~17.200 triángulos; ~1 ms por cuadro de física +
   render CPU (con `gl.finish`) en el panel de la app; 60 fps con el panel visible. AT 60: ~115 draw calls, ~10.800 triángulos.
-  **fps reales con la AT 500-8 pendientes de medir en la laptop.**
+  **En la laptop de Jesús: 60 fps con la AT 500-8.**
 
 ### Pendientes
 - Lastre (fase 5): el contrapeso se dibuja con `cwS = 0`; al crecer, revisar que el cabrestante (encima) y el radio de cola
