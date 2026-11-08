@@ -27,6 +27,7 @@ async function start() {
   const input = new Input();
   const hud = new Hud(document.getElementById('hud')!);
   input.onHook = () => hud.say(phys.toggleHook());
+  input.onReset = () => hud.say(phys.resetLoads());
   hud.say('AT 60 sobre neumáticos · LMI activo (solo indica; los bloqueos llegan en la fase 2)', 4);
 
   // Bucle con paso de física fijo (60 Hz) y render a la frecuencia de la pantalla.

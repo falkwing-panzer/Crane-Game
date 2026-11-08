@@ -39,7 +39,7 @@ export class Hud {
       <div class="msg" id="msg"></div>
       <div class="panel keys">
         <b>A/D</b> giro · <b>W/S</b> pluma · <b>Q/E</b> telescopio · <b>R/F</b> gancho ·
-        <b>Espacio</b> enganchar/soltar · <b>Shift</b> fino · ratón: cámara
+        <b>Espacio</b> enganchar/soltar · <b>X</b> reponer carga · <b>Shift</b> fino · ratón: cámara
       </div>`;
     this.perf = root.querySelector('#perf')!;
     this.data = root.querySelector('#data')!;

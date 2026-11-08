@@ -17,6 +17,8 @@ export interface Load {
   half: { x: number; y: number; z: number };
   body: RAPIER.RigidBody;
   collider: RAPIER.Collider;
+  /** Posición inicial, para reponer la carga */
+  home: { x: number; y: number; z: number };
 }
 
 export class Physics {
@@ -90,9 +92,25 @@ export class Physics {
       RAPIER.ColliderDesc.cuboid(half.x, half.y, half.z).setMass(mass).setFriction(0.7),
       body,
     );
-    const load = { label, mass, half, body, collider };
+    const load = { label, mass, half, body, collider, home: { ...pos } };
     this.loads.push(load);
     return load;
+  }
+
+  /** Tecla X: suelta la carga y devuelve todas las cargas a su posición inicial, quietas. */
+  resetLoads(): string {
+    if (this.slingJoint) {
+      this.world.removeImpulseJoint(this.slingJoint, true);
+      this.slingJoint = null;
+    }
+    this.attached = null;
+    for (const l of this.loads) {
+      l.body.setTranslation(l.home, true);
+      l.body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+      l.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      l.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    }
+    return 'Carga repuesta en su posición inicial';
   }
 
   step(S: CraneState) {

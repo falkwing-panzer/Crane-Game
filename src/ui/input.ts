@@ -9,10 +9,13 @@ export class Input {
   private k: Record<string, number> = { sll: 0, slr: 0, lu: 0, ld: 0, to: 0, ti: 0, hu: 0, hd: 0 };
   private fine = false;
   onHook: () => void = () => {};
+  /** X: reponer la carga (ayuda de prueba, no está en la referencia) */
+  onReset: () => void = () => {};
 
   constructor() {
     addEventListener('keydown', (e) => {
       if (e.key === 'Shift') this.fine = true;
+      if (e.code === 'KeyX' && !e.repeat) { this.onReset(); return; }
       if (e.code === 'Space') {
         e.preventDefault();
         if (!e.repeat) this.onHook();
