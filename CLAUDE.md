@@ -57,6 +57,7 @@ src/
 ## Controles (heredados de la referencia)
 Flechas conducir/dirección · A/D giro · W/S elevar pluma · Q/E telescopar · R/F cable · Espacio gancho ·
 O estabilizadores · B lastre · Y Y-guy · T/G plumín · M montaje · K/L radio superlift · Shift fino · V vista.
+Extra (no está en la referencia): **X** reponer la carga en su posición inicial (ayuda de prueba hasta que haya reinicio de nivel).
 
 ## Estado y decisiones
 Se trabaja por fases (ver `FASES.md`), con `/clear` entre fases. **Al cerrar cada fase, actualizar esta sección**
@@ -75,7 +76,8 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   `ratedCap`, `CraneConfig` y `baseConfig(T)`.
 - `src/crane/reference.ts` (solo pruebas): extrae del HTML (import `?raw`) el bloque `const D … ratedCap` y lo ejecuta.
 - `src/crane/kinematics.ts`: `CraneState`, `stepCrane` (rampas de velocidad, límites, Shift = ×0,3), `headPos`.
-- `src/physics/world.ts`: mundo Rapier; `Physics.step(S)`, `toggleHook()` (condiciones de enganche de la referencia).
+- `src/physics/world.ts`: mundo Rapier; `Physics.step(S)`, `toggleHook()` (condiciones de enganche de la referencia),
+  `resetLoads()` (tecla X; cada `Load` guarda su `home`).
 - `src/render/scene.ts`, `craneModel.ts`, `rigging.ts`: escena, grúa, gancho/cable/cargas.
 - `src/ui/input.ts`, `hud.ts`: teclas y HUD. En desarrollo, `window.__gruas = { S, C, phys, ctx }` para depurar.
 
@@ -124,4 +126,6 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 
 ### Pendientes
 - Colisión de la carga con la pluma (no existe todavía).
+- En la prueba de la fase 1 la caja de 2 t salió despedida unos 45 m al balancearla: confirma el riesgo del cable con
+  impulse joints. Tenerlo en cuenta al pasar a multibody en la fase 2.
 - Vite avisa que el bundle pasa de 500 kB por el wasm de Rapier embebido: esperado, no es un error.
