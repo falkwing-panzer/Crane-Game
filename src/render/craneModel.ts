@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { WheeledSpec } from '../crane/cranes';
-import type { CraneState } from '../crane/kinematics';
+import { carrierLift, type CraneState } from '../crane/kinematics';
+import type { Pose } from '../crane/pose';
 
 // Modelo simplificado (cajas y cilindros). Las cotas principales vienen de la referencia
 // (chasis, ejes, llantas, centro de giro, pie de pluma, contrapeso, pluma). Cabinas,
@@ -17,6 +18,10 @@ const _top = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 const _q = new THREE.Quaternion();
+const _m4 = new THREE.Matrix4();
+const _p = new THREE.Vector3();
+const _s = new THREE.Vector3();
+const _q0 = new THREE.Quaternion();
 
 export class CraneModel {
   readonly root = new THREE.Group();
@@ -26,6 +31,12 @@ export class CraneModel {
   private head = new THREE.Group();
   private luffBarrel: THREE.Mesh;
   private luffRod: THREE.Mesh;
+  // Estabilizadores (4 esquinas): viga, cilindro del gato, vástago y zapata
+  private outBeam: THREE.InstancedMesh;
+  private outJack: THREE.InstancedMesh;
+  private outRod: THREE.InstancedMesh;
+  private outPad: THREE.InstancedMesh;
+  private padMat: THREE.MeshLambertMaterial;
 
   constructor(private T: WheeledSpec) {
     const yellow = new THREE.MeshLambertMaterial({ color: T.color });
@@ -54,8 +65,24 @@ export class CraneModel {
     // cabina del conductor: delante a la izquierda, baja para que la pluma descanse encima
     add(this.root, yellow, L1 - 2.05, L1, 1.0, 2.2, -hf, -0.15);
     add(this.root, glass, L1 - 0.02, L1 + 0.01, 1.45, 2.1, -hf + 0.1, -0.25);
-    // cajas de estabilizadores (sin animar en la fase 0)
-    for (const x of [T.axles[1] - 1.4, T.axles[2] - 1.2]) add(this.root, dark, x - 0.3, x + 0.3, T.deckLo, T.deckHi - 0.45, -hf, hf);
+    // cajas de estabilizadores en out.xf / out.xr (como la referencia), con franjas de advertencia
+    const stripes = new THREE.MeshLambertMaterial({ map: stripeTexture() });
+    for (const x of [T.out.xf, T.out.xr]) {
+      add(this.root, dark, x - 0.55, x + 0.55, T.deckLo + 0.05, T.deckLo + 1.1, -hf - 0.04, hf + 0.04);
+      add(this.root, stripes, x - 0.5, x + 0.5, T.deckLo + 0.2, T.deckLo + 0.95, -hf - 0.06, hf + 0.06);
+    }
+    // piezas móviles de los estabilizadores (se colocan en update)
+    const chrome = new THREE.MeshLambertMaterial({ color: '#c9ced3' });
+    this.padMat = new THREE.MeshLambertMaterial({ color: '#7d858f' });
+    this.outBeam = new THREE.InstancedMesh(box, steel, 4);
+    this.outJack = new THREE.InstancedMesh(cyl, dark, 4);
+    this.outRod = new THREE.InstancedMesh(cyl, chrome, 4);
+    this.outPad = new THREE.InstancedMesh(cyl, this.padMat, 4);
+    for (const m of [this.outBeam, this.outJack, this.outRod, this.outPad]) {
+      m.castShadow = m.receiveShadow = true;
+      m.frustumCulled = false;
+      this.root.add(m);
+    }
 
     // Llantas con instancing (3 ejes × 2 lados)
     const nW = T.axles.length * 2;
@@ -119,8 +146,12 @@ export class CraneModel {
     this.boom.add(this.head);
   }
 
-  update(S: CraneState) {
+  /** pose = pose del portador (elevación por estabilizadores, inclinación o cuerpo volcado de Rapier) */
+  update(S: CraneState, pose: Pose) {
     const T = this.T;
+    this.root.position.set(pose.t.x, pose.t.y, pose.t.z);
+    this.root.quaternion.set(pose.q.x, pose.q.y, pose.q.z, pose.q.w);
+    this.updateOutriggers(S);
     this.sup.rotation.y = S.slew;
     this.boom.rotation.z = S.ang;
 
@@ -152,4 +183,47 @@ export class CraneModel {
     this.luffRod.scale.set(0.11, len, 0.11);
     this.luffRod.position.copy(_base).addScaledVector(_dir, len / 2);
   }
+
+  /**
+   * Como el dibujo de la referencia: en la primera parte (outS·1,6) salen las vigas, luego bajan los gatos;
+   * con outS > 0,5 las zapatas están en el suelo y el chasis sube (carrierLift). Coordenadas del chasis:
+   * el suelo está en y = −lift.
+   */
+  private updateOutriggers(S: CraneState) {
+    const T = this.T, o = T.out, hf = T.half, dLo = T.deckLo;
+    const e = Math.min(1, S.out * 1.6);
+    const ground = -carrierLift(S);
+    const padY = S.out >= 0.5 ? ground : dLo * 0.8 * (1 - S.out / 0.5);
+    this.padMat.color.set(S.out >= 1 ? '#f2b632' : '#7d858f');
+    _q0.identity();
+    let i = 0;
+    for (const x of [o.xf, o.xr]) for (const s of [-1, 1]) {
+      const z = s * (hf + 0.3 + (o.hw - hf - 0.3) * e); // eje del gato
+      // viga: del cajón al gato
+      const z0 = s * (hf - 0.2);
+      _m4.compose(_p.set(x, dLo + 0.6, (z0 + z) / 2), _q0, _s.set(0.56, 0.5, Math.abs(z - z0)));
+      this.outBeam.setMatrixAt(i, _m4);
+      _m4.compose(_p.set(x, dLo + 0.75, z), _q0, _s.set(0.3, 1.0, 0.3));
+      this.outJack.setMatrixAt(i, _m4);
+      const r0 = padY + 0.2, r1 = dLo + 0.3;
+      _m4.compose(_p.set(x, (r0 + r1) / 2, z), _q0, _s.set(0.16, Math.max(0.01, r1 - r0), 0.16));
+      this.outRod.setMatrixAt(i, _m4);
+      const pr = 0.46 + 0.26 * e;
+      _m4.compose(_p.set(x, padY + 0.1, z), _q0, _s.set(pr, 0.2, pr));
+      this.outPad.setMatrixAt(i, _m4);
+      i++;
+    }
+    for (const m of [this.outBeam, this.outJack, this.outRod, this.outPad]) m.instanceMatrix.needsUpdate = true;
+  }
+}
+
+function stripeTexture() {
+  const c = document.createElement('canvas');
+  c.width = 96; c.height = 16;
+  const g = c.getContext('2d')!;
+  for (let i = 0; i < 6; i++) { g.fillStyle = i % 2 ? '#1d2125' : '#f2b632'; g.fillRect(i * 16, 0, 16, 16); }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.magFilter = THREE.NearestFilter;
+  return t;
 }

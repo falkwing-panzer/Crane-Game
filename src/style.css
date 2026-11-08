@@ -22,3 +22,11 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #cfdde9; }
   background: rgba(22, 26, 31, 0.8); font-size: 15px; opacity: 0; transition: opacity 0.25s; }
 .msg.on { opacity: 1; }
 @media (max-width: 700px) { .keys { white-space: normal; width: calc(100% - 40px); } }
+.cut { background: #ff6b5a; color: #1b1d20; font-weight: 700; border-radius: 4px; padding: 1px 6px; margin: 2px 0; }
+.card { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(420px, calc(100% - 32px));
+  box-sizing: border-box; background: rgba(22, 26, 31, 0.92); border-radius: 8px; padding: 18px 22px; pointer-events: auto; text-align: center; }
+.card[hidden] { display: none; }
+.card h2 { margin: 0 0 8px; color: #ff6b5a; font-size: 22px; }
+.card p { margin: 0 0 14px; color: #d5dbe1; }
+.card button { font: inherit; font-weight: 700; padding: 8px 22px; border: 0; border-radius: 5px; background: #f0bb27; color: #1b1d20; cursor: pointer; }
+.card button:hover { background: #ffd04a; }

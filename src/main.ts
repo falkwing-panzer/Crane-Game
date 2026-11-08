@@ -1,8 +1,10 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import './style.css';
 import { AT60 } from './crane/cranes';
-import { initialState, stepCrane, headPos } from './crane/kinematics';
-import { baseConfig, lmiStatic, ratedCap, reach, type SupportMode } from './crane/stability';
+import { initialState, stepCrane, stepOutriggers, type CraneState } from './crane/kinematics';
+import { baseConfig, lmiStatic, ratedCap, reach } from './crane/stability';
+import { dynamicStability, stepTilt, supportMode, toggleOutriggers, TILTED_PHI, type Dyn } from './crane/ops';
+import { carrierPose, edgeAxis, type Pose } from './crane/pose';
 import { createScene } from './render/scene';
 import { CraneModel } from './render/craneModel';
 import { Rigging } from './render/rigging';
@@ -10,25 +12,98 @@ import { Physics, FIXED_DT } from './physics/world';
 import { Input } from './ui/input';
 import { Hud } from './ui/hud';
 
+const MODE_TEXT = { out: 'estabilizadores', tire: 'neumáticos', move: 'en marcha', crawler: 'orugas', crawlMove: 'orugas en marcha' };
+
 async function start() {
   await RAPIER.init();
 
   const ctx = createScene(document.getElementById('c') as HTMLCanvasElement);
   const T = AT60;
-  const S = initialState(T);
+  const S: CraneState = initialState(T);
   const C = baseConfig(T);
-  // Fase 1: la AT 60 aún no tiene estabilizadores ni conducción → apoyo sobre neumáticos, parada (KF 0,66).
-  const md: SupportMode = 'tire';
 
   const crane = new CraneModel(T);
   ctx.scene.add(crane.root);
-  const phys = new Physics(T, S);
-  const rig = new Rigging(ctx.scene, phys, T);
+  let pose: Pose = carrierPose(T, S, supportMode(S));
+  const phys = new Physics(T, S, pose);
+  const rig = new Rigging(ctx.scene, phys);
   const input = new Input();
   const hud = new Hud(document.getElementById('hud')!);
-  input.onHook = () => hud.say(phys.toggleHook());
-  input.onReset = () => hud.say(phys.resetLoads());
-  hud.say('AT 60 sobre neumáticos · LMI activo (solo indica; los bloqueos llegan en la fase 2)', 4);
+
+  let dyn: Dyn = { u: 0, edge: 0, lmi: 0 };
+  let cut = false, cutMsg = false;
+  /** Puenteo del LMI (tecla P): sin cortes, para poder probar el vuelco */
+  let bypass = false;
+  /** Tiempo desde el vuelco: el cartel sale después, para ver caer la grúa */
+  let tipClock = -1, tipText = '';
+  const CARD_DELAY = 2.5;
+  const tipped = () => phys.tipped !== null;
+  const hanging = () => !!phys.attached && !phys.isResting(phys.attached);
+
+  input.onHook = () => { if (!tipped()) hud.say(phys.toggleHook()); };
+  input.onReset = () => { if (!tipped()) hud.say(phys.resetLoads()); };
+  input.onOutriggers = () => { if (!tipped()) hud.say(toggleOutriggers(T, C, S, { loadHanging: hanging() }), 1.8); };
+  input.onBypass = () => {
+    bypass = !bypass;
+    hud.say(bypass ? 'LMI PUENTEADO: sin cortes, la grúa puede volcar' : 'LMI activo de nuevo', 2.5);
+  };
+  hud.onRestart = () => {
+    Object.assign(S, initialState(T));
+    pose = carrierPose(T, S, supportMode(S));
+    phys.reset(S, pose);
+    dyn = { u: 0, edge: 0, lmi: 0 };
+    tipClock = -1;
+    bypass = false;
+    hud.showTipped(null);
+    hud.say('Grúa reiniciada', 1.5);
+  };
+  hud.say('AT 60 · O despliega los estabilizadores · el LMI corta los movimientos que pasan del 100 %', 4);
+
+  /** Un paso fijo de la lógica de la grúa y de la física. */
+  function tick(dt: number) {
+    const inp = input.state();
+    if (!tipped()) {
+      const md = supportMode(S);
+      const att = phys.attached;
+      const mLoad = T.hookM + (att ? att.mass : 0);
+      // Como la referencia: los cortes usan el LMI estático; la carga cuenta solo si cuelga.
+      const mEval = hanging() ? mLoad : T.hookM;
+      const noHoistUp = !!att && lmiStatic(T, C, md, S.Lb, S.ang, S.slew, mLoad) >= 1;
+      cut = stepCrane(T, S, inp, dt, {
+        lmi: bypass ? () => 0 : (s) => lmiStatic(T, C, md, s.Lb, s.ang, s.slew, mEval),
+        L0: lmiStatic(T, C, md, S.Lb, S.ang, S.slew, mEval),
+        noHoistUp: noHoistUp && !bypass,
+        tilted: S.phi > TILTED_PHI, // la inclinación limita los movimientos aunque el LMI esté puenteado
+      });
+      if (cut && !cutMsg) {
+        hud.say(noHoistUp && inp.hoist < 0 ? 'LMI: la carga supera la capacidad en esta posición'
+          : 'LMI: movimiento cortado · solo se permiten los que reducen el momento');
+      }
+      cutMsg = cut;
+      stepOutriggers(T, S, dt);
+      pose = carrierPose(T, S, supportMode(S));
+    }
+    phys.step(S, pose);
+    if (tipped()) {
+      pose = phys.tippedPose()!;
+      if (tipClock >= 0 && (tipClock += dt) >= CARD_DELAY) { hud.showTipped(tipText); tipClock = -1; }
+      return;
+    }
+
+    // Estabilidad con la tensión real del cable: un balanceo o un tirón también cuentan.
+    const md = supportMode(S);
+    dyn = dynamicStability(T, C, S, md, phys.tension, phys.gp);
+    if (stepTilt(S, dyn, dt)) {
+      const { p, axis } = edgeAxis(T, md, S.edge);
+      phys.tipOver(C, S, md, pose, p, axis);
+      cut = false;
+      tipClock = 0;
+      tipText = `El momento de vuelco superó la estabilidad (${Math.round(dyn.u * 100)} %). ` +
+        (md === 'tire' ? 'Sobre neumáticos la capacidad es mucho menor: despliega los estabilizadores (O). ' : '') +
+        'Reduce el radio y evita que la carga se balancee hacia fuera.';
+      hud.say('¡La grúa vuelca!', CARD_DELAY);
+    }
+  }
 
   // Bucle con paso de física fijo (60 Hz) y render a la frecuencia de la pantalla.
   let last = performance.now();
@@ -42,47 +117,64 @@ async function start() {
     acc += dt;
 
     const t0 = performance.now();
-    const inp = input.state();
     let n = 0;
     while (acc >= FIXED_DT && n < MAX_STEPS) {
-      stepCrane(T, S, inp, FIXED_DT);
-      phys.step(S);
+      tick(FIXED_DT);
       acc -= FIXED_DT;
       n++;
     }
     if (n === MAX_STEPS) acc = 0; // si la máquina no da abasto, se ralentiza en vez de acumular
-    const t1 = performance.now();
+    draw(dt, performance.now() - t0);
+  }
 
-    crane.update(S);
-    rig.update(S);
+  /** Dibuja el cuadro y actualiza el HUD (physMs = tiempo de física de este cuadro). */
+  function draw(dt: number, physMs: number) {
+    const t1 = performance.now();
+    crane.update(S, pose);
+    rig.update();
     ctx.controls.update();
     ctx.renderer.render(ctx.scene, ctx.camera);
     const t2 = performance.now();
 
-    const hp = headPos(T, S);
-    // LMI estático como en la referencia: la carga cuenta solo si cuelga (no si está apoyada).
+    const md = supportMode(S);
     const att = phys.attached;
-    const mHook = T.hookM + (att ? att.mass : 0);
-    const mEval = att && !phys.isResting(att) ? mHook : T.hookM;
-    const lmi = lmiStatic(T, C, md, S.Lb, S.ang, S.slew, mEval);
-    const rated = ratedCap(T, C, md, S.Lb, S.ang, S.slew);
-    hud.frame(dt, t1 - t0, t2 - t1, ctx.renderer.info);
+    const hp = phys.headWorld();
+    hud.frame(dt, physMs, t2 - t1, ctx.renderer.info);
     hud.readout({
       Lb: S.Lb,
       angDeg: (S.ang * 180) / Math.PI,
       radius: Math.max(0, reach(T, C, S.Lb, S.ang)),
       headH: hp.y,
       cable: S.cable,
-      load: phys.attached ? `${phys.attached.label} ${phys.attached.mass.toFixed(1).replace('.', ',')} t` : 'libre',
-      fine: inp.fine,
-      lmi, rated, mHook,
-      mode: 'neumáticos',
+      load: att ? `${att.label} ${att.mass.toFixed(1).replace('.', ',')} t` : 'libre',
+      fine: input.state().fine,
+      lmi: dyn.lmi,
+      rated: ratedCap(T, C, md, S.Lb, S.ang, S.slew),
+      mHook: T.hookM + (att ? att.mass : 0),
+      mode: S.out > 0 && S.out < 1 ? (S.outT ? 'desplegando estabilizadores…' : 'recogiendo estabilizadores…') : MODE_TEXT[md],
+      tension: phys.tension,
+      cut,
+      tiltDeg: (S.phi * 180) / Math.PI,
+      tipped: tipped(),
+      bypass,
     });
   }
   requestAnimationFrame(frame);
 
   // Acceso para depurar desde la consola del navegador
-  if (import.meta.env.DEV) Object.assign(window, { __gruas: { S, C, phys, ctx } });
+  // advance(s): avanza la simulación s segundos sin depender de requestAnimationFrame (pruebas con la pestaña oculta)
+  if (import.meta.env.DEV) {
+    Object.assign(window, {
+      __gruas: {
+        S, C, phys, ctx, input, hud,
+        get dyn() { return dyn; }, get pose() { return pose; }, get cut() { return cut; },
+        advance(s: number) {
+          for (let i = 0; i < Math.round(s / FIXED_DT); i++) tick(FIXED_DT);
+          draw(FIXED_DT, 0);
+        },
+      },
+    });
+  }
 }
 
 start().catch((err) => {

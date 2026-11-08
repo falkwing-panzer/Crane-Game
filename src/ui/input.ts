@@ -11,11 +11,17 @@ export class Input {
   onHook: () => void = () => {};
   /** X: reponer la carga (ayuda de prueba, no está en la referencia) */
   onReset: () => void = () => {};
+  /** O: estabilizadores */
+  onOutriggers: () => void = () => {};
+  /** P: puenteo del LMI (ayuda de prueba, no está en la referencia) */
+  onBypass: () => void = () => {};
 
   constructor() {
     addEventListener('keydown', (e) => {
       if (e.key === 'Shift') this.fine = true;
       if (e.code === 'KeyX' && !e.repeat) { this.onReset(); return; }
+      if (e.code === 'KeyO' && !e.repeat) { this.onOutriggers(); return; }
+      if (e.code === 'KeyP' && !e.repeat) { this.onBypass(); return; }
       if (e.code === 'Space') {
         e.preventDefault();
         if (!e.repeat) this.onHook();

@@ -184,7 +184,7 @@ export const CRANES: Record<CraneId, CraneSpec> = {
 };
 
 /** Grúa de ruedas usada por el modelo 3D de la fase 0. */
-export type WheeledSpec = CraneSpec & { axles: number[]; wheelR: number; tire: SupportRect };
+export type WheeledSpec = CraneSpec & { axles: number[]; wheelR: number; tire: SupportRect; out: SupportRect };
 export const AT60 = CRANES.medium as WheeledSpec;
 
 /** Distancia del centro del gancho a la parte superior de la carga cuando está enganchada (SLING en la referencia). */

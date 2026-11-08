@@ -1,7 +1,5 @@
 import * as THREE from 'three';
 import { HOOK_HALF_H, type Load, type Physics } from '../physics/world';
-import { headPos, type CraneState } from '../crane/kinematics';
-import type { CraneSpec } from '../crane/cranes';
 
 // Gancho, cable, eslingas y cargas: se dibujan a partir de los cuerpos de Rapier.
 
@@ -19,7 +17,7 @@ export class Rigging {
   private sling: THREE.LineSegments;
   private slingPos: Float32Array;
 
-  constructor(scene: THREE.Scene, private phys: Physics, private T: CraneSpec) {
+  constructor(scene: THREE.Scene, private phys: Physics) {
     const steel = new THREE.MeshLambertMaterial({ color: '#7c8389' });
     const block = new THREE.MeshLambertMaterial({ color: '#e0a21b' });
 
@@ -57,14 +55,14 @@ export class Rigging {
     scene.add(this.sling);
   }
 
-  update(S: CraneState) {
+  update() {
     const p = this.phys;
     const t = p.hookBody.translation(), r = p.hookBody.rotation();
     this.hook.position.set(t.x, t.y, t.z);
     this.hook.quaternion.set(r.x, r.y, r.z, r.w);
 
     // Cable de la cabeza a la parte superior del gancho
-    const h = headPos(this.T, S), top = p.hookTop();
+    const h = p.headWorld(), top = p.hookTop();
     _a.set(h.x, h.y, h.z);
     _b.set(top.x, top.y, top.z);
     _d.subVectors(_b, _a);

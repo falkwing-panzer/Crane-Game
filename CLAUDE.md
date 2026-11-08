@@ -57,7 +57,8 @@ src/
 ## Controles (heredados de la referencia)
 Flechas conducir/dirección · A/D giro · W/S elevar pluma · Q/E telescopar · R/F cable · Espacio gancho ·
 O estabilizadores · B lastre · Y Y-guy · T/G plumín · M montaje · K/L radio superlift · Shift fino · V vista.
-Extra (no está en la referencia): **X** reponer la carga en su posición inicial (ayuda de prueba hasta que haya reinicio de nivel).
+Extra (no está en la referencia): **X** reponer la carga en su posición inicial (ayuda de prueba hasta que haya reinicio de nivel) ·
+**P** puentear el LMI (sin cortes, para poder probar el vuelco; se apaga al reiniciar).
 
 ## Estado y decisiones
 Se trabaja por fases (ver `FASES.md`), con `/clear` entre fases. **Al cerrar cada fase, actualizar esta sección**
@@ -68,18 +69,29 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - **Fase 0** (demo AT 60): escena, AT 60 simplificada, cable/gancho/carga con Rapier, HUD con fps, controles.
 - **Fase 1** (estabilidad y LMI): las 11 grúas en `cranes.ts`, port de la estabilidad en `stability.ts`, pruebas contra
   la referencia, LMI / capacidad / radio en el HUD (solo indica; sin bloqueos todavía).
+- **Fase 2** (AT 60): estabilizadores (O) animados con elevación del chasis, cortes del LMI (`guard`), tensión del cable
+  medida en Rapier para el LMI dinámico, inclinación incipiente (`phi`) y vuelco con cuerpo dinámico de Rapier, cartel y
+  Reiniciar. Pruebas en `ops.test.ts` (incluye física: tensión y caída).
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
   `CraneSpec`, `AT60` (= `CRANES.medium`, tipada `WheeledSpec` para el modelo 3D de la fase 0).
 - `src/crane/stability.ts`: `KF`, `yNoGuy`, `reach`, `structCap`, `supportRect`, `craneMasses`, `tipUtil`, `lmiStatic`,
-  `ratedCap`, `CraneConfig` y `baseConfig(T)`.
+  `ratedCap`, `CraneConfig` y `baseConfig(T)`. `tipEdge` (no está en la referencia) = `tipUtil` + qué arista manda
+  (0 delante, 1 detrás, 2 izquierda −z, 3 derecha +z).
 - `src/crane/reference.ts` (solo pruebas): extrae del HTML (import `?raw`) el bloque `const D … ratedCap` y lo ejecuta.
-- `src/crane/kinematics.ts`: `CraneState`, `stepCrane` (rampas de velocidad, límites, Shift = ×0,3), `headPos`.
-- `src/physics/world.ts`: mundo Rapier; `Physics.step(S)`, `toggleHook()` (condiciones de enganche de la referencia),
-  `resetLoads()` (tecla X; cada `Load` guarda su `home`).
+- `src/crane/kinematics.ts`: `CraneState` (incluye `out`/`outT`, `phi`/`phiV`/`edge`), `stepCrane(…, lim)` con el `guard`
+  de la referencia (`StepLimits`: corte por LMI, sin izar si la carga supera la capacidad, inclinada solo recuperar),
+  `stepOutriggers`, `carrierLift`, `headPos` (en el marco del chasis apoyado; luego se aplica la pose).
+- `src/crane/ops.ts`: `supportMode` (`out` solo con `out = 1`), `toggleOutriggers` (condiciones de la referencia),
+  `dynamicStability` (tensión en `gp`), `stepTilt` (phi de la referencia), `TIP_PHI` = 0,06.
+- `src/crane/pose.ts`: `carrierPose` (elevación + giro de `phi` sobre la arista), `edgeAxis`, cuaterniones sin three.js.
+- `src/physics/world.ts`: mundo Rapier; `Physics.step(S, pose)`, `tension`/`gp`, `tipOver()`, `reset()`, `headWorld()`,
+  `toggleHook()` (condiciones de enganche de la referencia), `resetLoads()` (tecla X; cada `Load` guarda su `home`).
 - `src/render/scene.ts`, `craneModel.ts`, `rigging.ts`: escena, grúa, gancho/cable/cargas.
-- `src/ui/input.ts`, `hud.ts`: teclas y HUD. En desarrollo, `window.__gruas = { S, C, phys, ctx }` para depurar.
+- `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
+  cut…) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
+  dibuja cuadros; así se puede probar desde la consola).
 
 ### Convenciones
 - Unidades: m, t, rad, s. Masas en Rapier en **toneladas**; gravedad 9,81.
@@ -90,10 +102,30 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   en el código como "aproximación visual".
 
 ### Decisiones
-- **Grúa no dinámica en Rapier**: chasis = colisionador fijo, superestructura = cinemática, cabeza de pluma = cinemática
-  sin colisionador (ancla del cable). La estabilidad la decide el modelo analítico.
+- **Grúa no dinámica en Rapier mientras está de pie**: chasis, superestructura y cabeza (sin colisionador, ancla del cable)
+  son cinemáticos y siguen `carrierPose` (elevación por estabilizadores e inclinación `phi`). La estabilidad la decide
+  el modelo analítico. Al pasar `phi` de 0,06 rad, `tipOver()` los cambia por **un** cuerpo dinámico (masa y CDG de
+  `craneMasses`, alturas aproximadas; inercia diagonal) con la pose y la velocidad de giro del modelo. Su base es el
+  rectángulo de apoyo (zapatas o base de neumáticos) para que pivote en la misma arista que el modelo.
+- **Vuelco como la referencia**: `phi` crece con u > 1 y **se recupera** si baja (un tirón corto no vuelca); con
+  `phi > 0,002` solo se permite subir pluma y recoger. Damping de `phiV` ajustado a 60 Hz (la referencia va a 120 Hz).
+  El cartel sale 2,5 s después para ver la caída. Con los cortes del LMI volcar es difícil (como en la referencia):
+  hace falta un balanceo o tirón fuerte, o puentear el LMI (P).
+- **Cortes del LMI** con el LMI **estático** (`mEval`, carga solo si cuelga) como la referencia; el LMI **dinámico**
+  (tensión real) se muestra y mueve `phi`. Con la carga apoyada solo cuenta el gancho, así que se puede bajar la pluma
+  y arrastrar la carga (igual que la referencia).
+- **Tensión del cable**: la API JS de Rapier no da fuerzas de juntas. Se mide F = Σ m·(a − g) de gancho + carga colgada,
+  con la aceleración sacada de las **posiciones** (Rapier corrige el límite del rope moviendo el cuerpo sin cambiar su
+  velocidad: con `linvel()` un izado no se notaba). Filtro de 0,1 s. En reposo da exactamente gancho + carga.
+- **Amortiguador gancho–carga** (`dampSling`): impulsos iguales y opuestos según la velocidad relativa horizontal. Apaga el
+  modo rápido del doble péndulo (gancho liviano oscilando ~0,6 s contra la carga, ±27 % de tensión) sin frenar el
+  balanceo grande, porque conserva el momento.
 - **Cable** = `JointData.rope` cabeza→gancho; el largo se cambia con `rawSet.jointSetLimits(LinX)` porque la API JS no
   expone `setMaxDistance` (verificado: el largo se respeta). Revisar si se actualiza Rapier.
+- **Multibody descartado** (fase 2): la API JS no deja cambiar límites ni motores de un multibody joint, y el cable cambia
+  de largo cada cuadro. En su lugar `numSolverIterations = 8` y **`numInternalPgsIterations = 16`**: medido, el cable se
+  estiraba metros al izar (1,7 m con 2 t, 7 m con 60 t) y con 16 queda ≤ 6 cm incluso con 200 t bajo un gancho de 0,4 t;
+  < 0,02 ms por paso. Al levantar la caja del suelo, con 1 iteración el cable se estiraba 0,8 m y con 16, 0.
 - **Eslinga** = rope de 0,5 m del fondo del gancho al centro de la cara superior de la carga (un punto en física;
   4 ramales solo visuales). Soltar exige carga apoyada (contacto + v < 0,3 m/s), como en la referencia.
 - **Pruebas contra la referencia**: `loadReference()` en `reference.ts` ejecuta el código original; `stability.test.ts`
@@ -104,15 +136,19 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   Aquí va en `CraneConfig` (parámetro `C`), así `CRANES` no se modifica nunca. Lastre montado: `C.mCw = cwBase + ballast.m·avance`.
 - **Signo lateral**: la referencia usa y = +sin(slew) en el marco del chasis y nosotros −z = izquierda; el apoyo es
   simétrico, así que no cambia resultados. Si algún día hay apoyos asimétricos, revisarlo.
-- **LMI en la demo**: modo `tire` (la AT 60 aún no tiene estabilizadores); masa evaluada = gancho + carga solo si
-  cuelga (`mEval` de la referencia). La capacidad mostrada incluye el gancho, como en la referencia. Con poca carga y
-  pluma empinada el LMI puede bajar al bajar la pluma: es el vuelco hacia atrás (contrapeso), también en la referencia.
+- **LMI**: masa evaluada = gancho + carga solo si cuelga (`mEval` de la referencia). La capacidad mostrada incluye el
+  gancho, como en la referencia. Con poca carga y pluma empinada el LMI puede bajar al bajar la pluma: es el vuelco
+  hacia atrás (contrapeso), también en la referencia.
+- **AT 60 por delante**: en los datos de la referencia la viga delantera (`out.xf = 1,6`) está detrás del eje delantero
+  (`tire.xf = 3,4`), así que con la pluma hacia delante la capacidad con estabilizadores es **menor** que sobre neumáticos.
+  No se cambió (dato de la referencia); preguntado a Jesús al cerrar la fase 2.
+- **Tecla O bloqueada con `phi > 0`** (no está en la referencia): cambiar el apoyo a mitad del vuelco cambiaría la arista.
 
 ### Plan y riesgos conocidos
-- **Relación de masas gancho/carga** (0,4 t frente a cargas de cientos de t; gancho de 40 t en la LR 3000): con impulse
-  joints el cable se estira y vibra. Plan: pasar cabeza→gancho→carga a **multibody joints** en la fase 2, antes de las
-  grúas grandes (también resuelve el cambio de largo del cable).
-- **Vuelco** (fase 2): al pasar del modelo analítico a Rapier, iniciar el cuerpo con la inclinación y velocidad del modelo.
+- **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
+  grúas grandes (fases 4–6): cabeza cinemática, izado a velocidad plena, estiramiento máximo del cable.
+- **Vuelco con otras grúas**: las alturas de las masas en `tipOver` son de la AT 60 (portador, superestructura, contrapeso,
+  pluma); las masas extra (plumín, derrick) usan `pivH`. Revisar en las fases 6–7.
 - **Conducción** (fase 3): preferencia por un controlador cinemático propio (bicicleta con dirección en todos los ejes)
   en vez del vehicle controller de Rapier; confirmar al implementarla.
 - Medir rendimiento **en cada fase** (fps, peor cuadro, draw calls, triángulos del peor caso) y anotarlo aquí.
@@ -123,9 +159,12 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   limitado a 30 fps; **pendiente medir fps reales en la laptop**).
 - Fase 1: 60 fps, 56 draw calls, ~3.050 triángulos, física 0,16 ms, render CPU 0,6 ms (panel de la app). El LMI y
   `ratedCap` (26 iteraciones) se calculan cada cuadro sin costo apreciable.
+- Fase 2: 61 draw calls de pie / 68 con estabilizadores fuera / 69 volcada; 4.730 triángulos; física ~0,2 ms y render CPU
+  ~1,1 ms por cuadro (panel de la app, oculto durante las pruebas: **fps reales pendientes de medir en la laptop**).
 
 ### Pendientes
 - Colisión de la carga con la pluma (no existe todavía).
-- En la prueba de la fase 1 la caja de 2 t salió despedida unos 45 m al balancearla: confirma el riesgo del cable con
-  impulse joints. Tenerlo en cuenta al pasar a multibody en la fase 2.
+- La caja despedida 45 m de la fase 1 no se reprodujo con el nuevo ajuste del solver; si vuelve a pasar, anotar cómo.
+- Pruebas en el navegador: no teletransportar la pluma (`S.slew = …` de golpe) con el gancho colgado: el salto da un
+  tirón enorme en el cable y vuelca la grúa. Usar las teclas con `__gruas.advance`.
 - Vite avisa que el bundle pasa de 500 kB por el wasm de Rapier embebido: esperado, no es un error.

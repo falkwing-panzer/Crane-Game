@@ -18,6 +18,16 @@ export interface Readout {
   mHook: number;
   /** Texto del modo de apoyo */
   mode: string;
+  /** Tensión del cable medida en Rapier (t) */
+  tension: number;
+  /** El LMI cortó algún movimiento en este cuadro */
+  cut: boolean;
+  /** Inclinación incipiente (°) */
+  tiltDeg: number;
+  /** La grúa ya volcó */
+  tipped: boolean;
+  /** LMI puenteado (tecla P) */
+  bypass: boolean;
 }
 
 export class Hud {
@@ -25,6 +35,9 @@ export class Hud {
   private data: HTMLElement;
   private msg: HTMLElement;
   private msgT = 0;
+  private card: HTMLElement;
+  /** Botón Reiniciar del cartel de vuelco */
+  onRestart: () => void = () => {};
   // Ventana de medición de 0,5 s
   private frames = 0;
   private acc = 0;
@@ -39,11 +52,27 @@ export class Hud {
       <div class="msg" id="msg"></div>
       <div class="panel keys">
         <b>A/D</b> giro · <b>W/S</b> pluma · <b>Q/E</b> telescopio · <b>R/F</b> gancho ·
-        <b>Espacio</b> enganchar/soltar · <b>X</b> reponer carga · <b>Shift</b> fino · ratón: cámara
+        <b>O</b> estabilizadores · <b>Espacio</b> enganchar/soltar · <b>X</b> reponer carga · <b>P</b> puentear LMI · <b>Shift</b> fino · ratón: cámara
+      </div>
+      <div class="card" id="card" hidden>
+        <h2>Grúa volcada</h2>
+        <p id="card-text"></p>
+        <button id="card-restart">Reiniciar</button>
       </div>`;
+    this.card = root.querySelector('#card')!;
+    root.querySelector('#card-restart')!.addEventListener('click', () => this.onRestart());
     this.perf = root.querySelector('#perf')!;
     this.data = root.querySelector('#data')!;
     this.msg = root.querySelector('#msg')!;
+  }
+
+  /** Cartel de vuelco (null = ocultar) */
+  showTipped(text: string | null) {
+    this.card.hidden = text === null;
+    if (text !== null) {
+      this.card.querySelector('#card-text')!.textContent = text;
+      (this.card.querySelector('#card-restart') as HTMLButtonElement).focus();
+    }
   }
 
   say(text: string, seconds = 2.5) {
@@ -82,7 +111,14 @@ export class Hud {
       `Gancho: <b>${r.load}</b>` +
       `<div class="lmi ${lmiCls}"><span>LMI</span><b>${Math.round(r.lmi * 100)} %</b>` +
       `<i><u style="width:${Math.min(100, (r.lmi / 1.25) * 100).toFixed(1)}%"></u><s></s></i></div>` +
+      (r.bypass && !r.tipped ? `<div class="cut">LMI PUENTEADO (P)</div>` : '') +
+      (r.tipped ? `<div class="cut">GRÚA VOLCADA</div>`
+        : r.cut ? `<div class="cut">CORTE LMI · solo movimientos que lo reducen</div>`
+        : r.lmi >= 1 ? `<div class="bad">LMI por encima del 100 %</div>`
+        : r.lmi >= 0.9 ? `<div class="warn">Aviso LMI: cerca del límite</div>` : '') +
+      (!r.tipped && r.tiltDeg > 0.05 ? `<div class="bad">¡La grúa se levanta! ${f(r.tiltDeg)}°</div>` : '') +
       `Capacidad <b class="${r.mHook > r.rated ? 'bad' : ''}">${f(r.mHook)} / ${f(r.rated)} t</b><br>` +
+      `Tensión cable <b>${f(r.tension, 2)} t</b><br>` +
       `<small>Apoyo: ${r.mode} · masa y capacidad con gancho</small>`;
   }
 }

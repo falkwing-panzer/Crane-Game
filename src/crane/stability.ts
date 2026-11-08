@@ -104,6 +104,27 @@ export function tipUtil(T: CraneSpec, md: SupportMode, ms: PointMass[]) {
   return u;
 }
 
+/**
+ * Como tipUtil, pero dice también por qué arista vuelca (no está en la referencia).
+ * Aristas: 0 delantera (x = xf), 1 trasera (x = xr), 2 lado y+ de la referencia (= izquierda, −z en el mundo),
+ * 3 lado y− (= derecha, +z).
+ */
+export function tipEdge(T: CraneSpec, md: SupportMode, ms: PointMass[]) {
+  const r = supportRect(T, md);
+  const E: [number, number, number][] = [[1, 0, r.xf], [-1, 0, -r.xr], [0, 1, r.hw], [0, -1, r.hw]];
+  let u = 0, edge = 0;
+  E.forEach(([nx, ny, e], k) => {
+    let o = 0, i = 0;
+    for (const [m, x, y, onlyRestore] of ms) {
+      const d = nx * x + ny * y - e;
+      if (d > 0) { if (!onlyRestore) o += m * d; } else i -= m * d;
+    }
+    const uk = o / Math.max(i, 1e-6);
+    if (uk > u) { u = uk; edge = k; }
+  });
+  return { u, edge };
+}
+
 /** LMI (1 = 100 %) con una masa m colgada de la punta, en reposo. */
 export function lmiStatic(T: CraneSpec, C: CraneConfig, md: SupportMode, Lb: number, ang: number, slew: number, m: number) {
   const ms = craneMasses(T, C, Lb, ang, slew), R = reach(T, C, Lb, ang);
