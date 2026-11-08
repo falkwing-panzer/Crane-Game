@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { CraneSpec } from '../crane/cranes';
+import type { WheeledSpec } from '../crane/cranes';
 import type { CraneState } from '../crane/kinematics';
 
 // Modelo simplificado (cajas y cilindros). Las cotas principales vienen de la referencia
@@ -27,7 +27,7 @@ export class CraneModel {
   private luffBarrel: THREE.Mesh;
   private luffRod: THREE.Mesh;
 
-  constructor(private T: CraneSpec) {
+  constructor(private T: WheeledSpec) {
     const yellow = new THREE.MeshLambertMaterial({ color: T.color });
     const yellowDark = new THREE.MeshLambertMaterial({ color: new THREE.Color(T.color).multiplyScalar(0.8) });
     const dark = new THREE.MeshLambertMaterial({ color: '#34393f' });

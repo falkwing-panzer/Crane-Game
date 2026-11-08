@@ -65,13 +65,19 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 
 ### Fases terminadas
 - **Fase 0** (demo AT 60): escena, AT 60 simplificada, cable/gancho/carga con Rapier, HUD con fps, controles.
+- **Fase 1** (estabilidad y LMI): las 11 grúas en `cranes.ts`, port de la estabilidad en `stability.ts`, pruebas contra
+  la referencia, LMI / capacidad / radio en el HUD (solo indica; sin bloqueos todavía).
 
 ### Mapa del código
-- `src/crane/cranes.ts`: `CraneSpec` y datos (por ahora solo `AT60`; la fase 1 añade las demás **sin romper** la interfaz).
+- `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
+  `CraneSpec`, `AT60` (= `CRANES.medium`, tipada `WheeledSpec` para el modelo 3D de la fase 0).
+- `src/crane/stability.ts`: `KF`, `yNoGuy`, `reach`, `structCap`, `supportRect`, `craneMasses`, `tipUtil`, `lmiStatic`,
+  `ratedCap`, `CraneConfig` y `baseConfig(T)`.
+- `src/crane/reference.ts` (solo pruebas): extrae del HTML (import `?raw`) el bloque `const D … ratedCap` y lo ejecuta.
 - `src/crane/kinematics.ts`: `CraneState`, `stepCrane` (rampas de velocidad, límites, Shift = ×0,3), `headPos`.
 - `src/physics/world.ts`: mundo Rapier; `Physics.step(S)`, `toggleHook()` (condiciones de enganche de la referencia).
 - `src/render/scene.ts`, `craneModel.ts`, `rigging.ts`: escena, grúa, gancho/cable/cargas.
-- `src/ui/input.ts`, `hud.ts`: teclas y HUD. En desarrollo, `window.__gruas = { S, phys, ctx }` para depurar.
+- `src/ui/input.ts`, `hud.ts`: teclas y HUD. En desarrollo, `window.__gruas = { S, C, phys, ctx }` para depurar.
 
 ### Convenciones
 - Unidades: m, t, rad, s. Masas en Rapier en **toneladas**; gravedad 9,81.
@@ -88,8 +94,17 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   expone `setMaxDistance` (verificado: el largo se respeta). Revisar si se actualiza Rapier.
 - **Eslinga** = rope de 0,5 m del fondo del gancho al centro de la cara superior de la carga (un punto en física;
   4 ramales solo visuales). Soltar exige carga apoyada (contacto + v < 0,3 m/s), como en la referencia.
-- **Pruebas contra la referencia** (desde la fase 1): extraer el `<script>` de `crane-v20.html` y ejecutarlo en Node
-  para comparar resultados con tolerancia 1e-6. Reutilizar ese arnés en fases posteriores.
+- **Pruebas contra la referencia**: `loadReference()` en `reference.ts` ejecuta el código original; `stability.test.ts`
+  compara en una malla de largo/ángulo/giro/masa con tolerancia 1e-6 (AT 60 out/tire/move, AT 500-8 con/sin Y-guy y
+  lastre, LR 3000 con varios radios de superlift, SK 60 torre, AT 650-8 con plumín, resto). Ampliar el `return` del
+  arnés si una fase necesita más funciones de la referencia (por ejemplo `guard`, niveles).
+- **Estado de montaje fuera de los datos**: la referencia mutaba `T.mCw`, `T.yOn`, `T.jib`, `T.jibRel`, `T.superlift.r`.
+  Aquí va en `CraneConfig` (parámetro `C`), así `CRANES` no se modifica nunca. Lastre montado: `C.mCw = cwBase + ballast.m·avance`.
+- **Signo lateral**: la referencia usa y = +sin(slew) en el marco del chasis y nosotros −z = izquierda; el apoyo es
+  simétrico, así que no cambia resultados. Si algún día hay apoyos asimétricos, revisarlo.
+- **LMI en la demo**: modo `tire` (la AT 60 aún no tiene estabilizadores); masa evaluada = gancho + carga solo si
+  cuelga (`mEval` de la referencia). La capacidad mostrada incluye el gancho, como en la referencia. Con poca carga y
+  pluma empinada el LMI puede bajar al bajar la pluma: es el vuelco hacia atrás (contrapeso), también en la referencia.
 
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga** (0,4 t frente a cargas de cientos de t; gancho de 40 t en la LR 3000): con impulse
@@ -104,6 +119,8 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 ### Rendimiento medido
 - Fase 0: 57 draw calls, ~3.000 triángulos, física 0,27 ms y render CPU 1,1 ms por cuadro (panel integrado de la app,
   limitado a 30 fps; **pendiente medir fps reales en la laptop**).
+- Fase 1: 60 fps, 56 draw calls, ~3.050 triángulos, física 0,16 ms, render CPU 0,6 ms (panel de la app). El LMI y
+  `ratedCap` (26 iteraciones) se calculan cada cuadro sin costo apreciable.
 
 ### Pendientes
 - Colisión de la carga con la pluma (no existe todavía).

@@ -10,6 +10,14 @@ export interface Readout {
   cable: number;
   load: string;
   fine: boolean;
+  /** LMI (1 = 100 %) */
+  lmi: number;
+  /** Capacidad nominal en esta posición (t, gancho incluido) */
+  rated: number;
+  /** Masa en el gancho: gancho + carga enganchada (t) */
+  mHook: number;
+  /** Texto del modo de apoyo */
+  mode: string;
 }
 
 export class Hud {
@@ -65,11 +73,16 @@ export class Hud {
 
   readout(r: Readout) {
     const f = (v: number, d = 1) => v.toFixed(d).replace('.', ',');
+    const lmiCls = r.lmi >= 1 ? 'bad' : r.lmi >= 0.9 ? 'warn' : 'ok';
     this.data.innerHTML =
       `<div class="title">AT 60${r.fine ? ' · <span class="warn">fino</span>' : ''}</div>` +
       `Pluma <b>${f(r.Lb)} m</b> · <b>${f(r.angDeg)}°</b><br>` +
       `Radio <b>${f(r.radius)} m</b> · punta <b>${f(r.headH)} m</b><br>` +
       `Cable <b>${f(r.cable)} m</b><br>` +
-      `Gancho: <b>${r.load}</b>`;
+      `Gancho: <b>${r.load}</b>` +
+      `<div class="lmi ${lmiCls}"><span>LMI</span><b>${Math.round(r.lmi * 100)} %</b>` +
+      `<i><u style="width:${Math.min(100, (r.lmi / 1.25) * 100).toFixed(1)}%"></u><s></s></i></div>` +
+      `Capacidad <b class="${r.mHook > r.rated ? 'bad' : ''}">${f(r.mHook)} / ${f(r.rated)} t</b><br>` +
+      `<small>Apoyo: ${r.mode} · masa y capacidad con gancho</small>`;
   }
 }
