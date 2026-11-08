@@ -4,7 +4,10 @@ import { AT60 } from './crane/cranes';
 import { initialState, stepCrane, stepOutriggers, type CraneState } from './crane/kinematics';
 import { baseConfig, lmiStatic, ratedCap, reach } from './crane/stability';
 import { dynamicStability, stepTilt, supportMode, toggleOutriggers, TILTED_PHI, type Dyn } from './crane/ops';
-import { carrierPose, edgeAxis, type Pose } from './crane/pose';
+import { apply, carrierFrame, carrierPose, edgeAxis, rotate, worldToCarrier, type Pose } from './crane/pose';
+import { stepDrive, stepSuspension } from './crane/drive';
+import { CameraRig } from './render/camera';
+import { buildSite, TEST_OBSTACLES } from './render/site';
 import { createScene } from './render/scene';
 import { CraneModel } from './render/craneModel';
 import { Rigging } from './render/rigging';
@@ -26,7 +29,10 @@ async function start() {
   ctx.scene.add(crane.root);
   let pose: Pose = carrierPose(T, S, supportMode(S));
   const phys = new Physics(T, S, pose);
+  for (const o of TEST_OBSTACLES) phys.addObstacle(o);
+  buildSite(ctx.scene, phys.obstacles);
   const rig = new Rigging(ctx.scene, phys);
+  const cam = new CameraRig(ctx, T, crane.cab);
   const input = new Input();
   const hud = new Hud(document.getElementById('hud')!);
 
@@ -42,7 +48,10 @@ async function start() {
 
   input.onHook = () => { if (!tipped()) hud.say(phys.toggleHook()); };
   input.onReset = () => { if (!tipped()) hud.say(phys.resetLoads()); };
-  input.onOutriggers = () => { if (!tipped()) hud.say(toggleOutriggers(T, C, S, { loadHanging: hanging() }), 1.8); };
+  input.onOutriggers = () => {
+    if (!tipped()) hud.say(toggleOutriggers(T, C, S, { loadHanging: hanging(), padsBlocked: phys.padsBlocked(S) }), 1.8);
+  };
+  input.onView = () => hud.say(cam.cycle(S, pose), 1.5);
   input.onBypass = () => {
     bypass = !bypass;
     hud.say(bypass ? 'LMI PUENTEADO: sin cortes, la grúa puede volcar' : 'LMI activo de nuevo', 2.5);
@@ -57,15 +66,26 @@ async function start() {
     hud.showTipped(null);
     hud.say('Grúa reiniciada', 1.5);
   };
-  hud.say('AT 60 · O despliega los estabilizadores · el LMI corta los movimientos que pasan del 100 %', 4);
+  hud.say('AT 60 · flechas para conducir · O despliega los estabilizadores · V cambia la cámara', 4);
 
   /** Un paso fijo de la lógica de la grúa y de la física. */
   function tick(dt: number) {
     const inp = input.state();
     if (!tipped()) {
-      const md = supportMode(S);
       const att = phys.attached;
       const mLoad = T.hookM + (att ? att.mass : 0);
+      // Conducción (antes de las funciones de la grúa, como step() en la referencia)
+      const v0 = S.vd;
+      const dr = stepDrive(T, S, input.drive(), dt, {
+        loadHanging: hanging(),
+        lmiMove: lmiStatic(T, C, 'move', S.Lb, S.ang, S.slew, mLoad),
+        tilted: S.phi > TILTED_PHI,
+        bypass,
+        blocked: (x, z, h) => phys.carrierBlocked(x, z, h),
+      });
+      if (dr.msg) hud.sayOnce(dr.msg);
+      stepSuspension(T, S, (S.vd - v0) / dt, dt);
+      const md = supportMode(S);
       // Como la referencia: los cortes usan el LMI estático; la carga cuenta solo si cuelga.
       const mEval = hanging() ? mLoad : T.hookM;
       const noHoistUp = !!att && lmiStatic(T, C, md, S.Lb, S.ang, S.slew, mLoad) >= 1;
@@ -92,14 +112,16 @@ async function start() {
 
     // Estabilidad con la tensión real del cable: un balanceo o un tirón también cuentan.
     const md = supportMode(S);
-    dyn = dynamicStability(T, C, S, md, phys.tension, phys.gp);
+    dyn = dynamicStability(T, C, S, md, phys.tension, worldToCarrier(S, phys.gp));
     if (stepTilt(S, dyn, dt)) {
       const { p, axis } = edgeAxis(T, md, S.edge);
-      phys.tipOver(C, S, md, pose, p, axis);
+      const f = carrierFrame(S); // la arista viene en el marco del chasis
+      phys.tipOver(C, S, md, pose, apply(f, p), rotate(f.q, axis));
+      S.vd = 0;
       cut = false;
       tipClock = 0;
       tipText = `El momento de vuelco superó la estabilidad (${Math.round(dyn.u * 100)} %). ` +
-        (md === 'tire' ? 'Sobre neumáticos la capacidad es mucho menor: despliega los estabilizadores (O). ' : '') +
+        (md !== 'out' ? 'Sobre neumáticos la capacidad es mucho menor: despliega los estabilizadores (O). ' : '') +
         'Reduce el radio y evita que la carga se balancee hacia fuera.';
       hud.say('¡La grúa vuelca!', CARD_DELAY);
     }
@@ -132,7 +154,7 @@ async function start() {
     const t1 = performance.now();
     crane.update(S, pose);
     rig.update();
-    ctx.controls.update();
+    cam.update(dt, S, pose);
     ctx.renderer.render(ctx.scene, ctx.camera);
     const t2 = performance.now();
 
@@ -157,6 +179,8 @@ async function start() {
       tiltDeg: (S.phi * 180) / Math.PI,
       tipped: tipped(),
       bypass,
+      speed: S.vd,
+      steerDeg: (S.steer * 180) / Math.PI,
     });
   }
   requestAnimationFrame(frame);
@@ -166,7 +190,7 @@ async function start() {
   if (import.meta.env.DEV) {
     Object.assign(window, {
       __gruas: {
-        S, C, phys, ctx, input, hud,
+        S, C, phys, ctx, input, hud, cam,
         get dyn() { return dyn; }, get pose() { return pose; }, get cut() { return cut; },
         advance(s: number) {
           for (let i = 0; i < Math.round(s / FIXED_DT); i++) tick(FIXED_DT);

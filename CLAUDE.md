@@ -56,7 +56,8 @@ src/
 
 ## Controles (heredados de la referencia)
 Flechas conducir/dirección · A/D giro · W/S elevar pluma · Q/E telescopar · R/F cable · Espacio gancho ·
-O estabilizadores · B lastre · Y Y-guy · T/G plumín · M montaje · K/L radio superlift · Shift fino · V vista.
+O estabilizadores · B lastre · Y Y-guy · T/G plumín · M montaje · K/L radio superlift · Shift fino ·
+V cámara (en la referencia cambiaba la vista lateral; aquí: orbital libre → seguimiento → cabina del conductor).
 Extra (no está en la referencia): **X** reponer la carga en su posición inicial (ayuda de prueba hasta que haya reinicio de nivel) ·
 **P** puentear el LMI (sin cortes, para poder probar el vuelco; se apaga al reiniciar).
 
@@ -72,6 +73,9 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - **Fase 2** (AT 60): estabilizadores (O) animados con elevación del chasis, cortes del LMI (`guard`), tensión del cable
   medida en Rapier para el LMI dinámico, inclinación incipiente (`phi`) y vuelco con cuerpo dinámico de Rapier, cartel y
   Reiniciar. Pruebas en `ops.test.ts` (incluye física: tensión y caída).
+- **Fase 3** (conducción AT 60): flechas con el controlador de bicicleta de la referencia, modo `move` (KF 0,45), pick & carry
+  al 30 % y bloqueado por LMI, choques del chasis y de las zapatas con obstáculos, ruedas que giran y se orientan, suspensión,
+  cámaras (V) y luz de sombras que sigue a la grúa. Pruebas en `drive.test.ts`.
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -83,11 +87,16 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - `src/crane/kinematics.ts`: `CraneState` (incluye `out`/`outT`, `phi`/`phiV`/`edge`), `stepCrane(…, lim)` con el `guard`
   de la referencia (`StepLimits`: corte por LMI, sin izar si la carga supera la capacidad, inclinada solo recuperar),
   `stepOutriggers`, `carrierLift`, `headPos` (en el marco del chasis apoyado; luego se aplica la pose).
-- `src/crane/ops.ts`: `supportMode` (`out` solo con `out = 1`), `toggleOutriggers` (condiciones de la referencia),
+- `src/crane/drive.ts`: `stepDrive` (conducción de `step()` de la referencia), `yawRate`, `minTurnRadius`, `stepSuspension`,
+  `axleSteer` (ángulo de cada eje como el dibujo de la referencia). `MOVING` = 0,05 m/s, `CARRY_SPEED` = 0,3.
+- `src/crane/ops.ts`: `supportMode` (`out` solo con `out = 1`; `move` con |vd| > 0,05), `toggleOutriggers` (condiciones de la referencia),
   `dynamicStability` (tensión en `gp`), `stepTilt` (phi de la referencia), `TIP_PHI` = 0,06.
-- `src/crane/pose.ts`: `carrierPose` (elevación + giro de `phi` sobre la arista), `edgeAxis`, cuaterniones sin three.js.
+- `src/crane/pose.ts`: `carrierPose` = `carrierFrame` (x, z, rumbo h) ∘ elevación y `phi` ∘ `suspensionPose`; `edgeAxis`
+  (marco del chasis), `worldToCarrier`, `compose`, cuaterniones sin three.js.
 - `src/physics/world.ts`: mundo Rapier; `Physics.step(S, pose)`, `tension`/`gp`, `tipOver()`, `reset()`, `headWorld()`,
-  `toggleHook()` (condiciones de enganche de la referencia), `resetLoads()` (tecla X; cada `Load` guarda su `home`).
+  `toggleHook()` (condiciones de enganche de la referencia), `resetLoads()` (tecla X; cada `Load` guarda su `home`),
+  `addObstacle`, `carrierBlocked(x, z, h)` y `padsBlocked(S)` (consultas `intersectionsWithShape`), `SITE_HALF` = 150 m.
+- `src/render/camera.ts` (`CameraRig`: modos de cámara y luz que sigue a la grúa), `site.ts` (obstáculos de prueba `TEST_OBSTACLES`).
 - `src/render/scene.ts`, `craneModel.ts`, `rigging.ts`: escena, grúa, gancho/cable/cargas.
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
   cut…) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
@@ -95,7 +104,8 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 
 ### Convenciones
 - Unidades: m, t, rad, s. Masas en Rapier en **toneladas**; gravedad 9,81.
-- Ejes: y arriba; chasis a lo largo de **+x (frente)**; **−z = izquierda**. `slew` positivo = antihorario visto desde arriba
+- Ejes: y arriba; chasis a lo largo de **+x (frente)**; **−z = izquierda**. Rumbo `h` y dirección `steer` positivos =
+  izquierda (antihorario visto desde arriba), avance = (cos h, 0, −sin h); la referencia usa el signo contrario en planta. `slew` positivo = antihorario visto desde arriba
   (A). Pluma en el plano x-y de la superestructura; `headPos` = fórmula de `reach()` de la referencia.
 - Física con paso fijo de 1/60 s (máximo 4 pasos por cuadro); render a la frecuencia de la pantalla.
 - Cotas no tomadas de la referencia (cabinas, ancho de llanta, nº de tramos, cilindro de elevación) están marcadas
@@ -143,14 +153,23 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   (`tire.xf = 3,4`), así que con la pluma hacia delante la capacidad con estabilizadores es **menor** que sobre neumáticos.
   No se cambió (dato de la referencia); preguntado a Jesús al cerrar la fase 2.
 - **Tecla O bloqueada con `phi > 0`** (no está en la referencia): cambiar el apoyo a mitad del vuelco cambiaría la arista.
+- **Conducción cinemática, no el vehicle controller de Rapier** (fase 3): reproduce la referencia (y se prueba contra sus
+  fórmulas), y la grúa de pie ya es cinemática con la estabilidad analítica; un chasis dinámico de decenas de toneladas sobre
+  raycasts temblaría y volcaría por su cuenta. Los choques se comprueban **antes** de mover (caja del chasis desde 0,35 m de
+  altura libre contra obstáculos y cargas sueltas, sin gancho ni carga enganchada): el chasis cinemático empujaría todo.
+  La posición avanza en el origen del marco del chasis, como la referencia. El volante vuelve solo al centro (referencia).
+- **Marcos tras la conducción**: `gp` (mundo) se pasa al marco del chasis con `worldToCarrier` antes de `dynamicStability`;
+  la arista de `edgeAxis` se pasa al mundo con `carrierFrame` antes de `tipOver`.
+- **Suspensión** (aproximación visual, no está en la referencia): cabeceo 0,006 rad por m/s² y balanceo 0,009 rad por m/s²
+  lateral, resorte ω = 5, ζ = 0,6, tope 1°. Va **en la pose** (también en física) para que el cable salga de la cabeza; las
+  ruedas van en un grupo que deshace la suspensión.
+- **Luz con sombras**: se recentra a saltos cada 15 m de recorrido (no cada cuadro) para que las sombras no tiemblen.
 
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
   grúas grandes (fases 4–6): cabeza cinemática, izado a velocidad plena, estiramiento máximo del cable.
 - **Vuelco con otras grúas**: las alturas de las masas en `tipOver` son de la AT 60 (portador, superestructura, contrapeso,
   pluma); las masas extra (plumín, derrick) usan `pivH`. Revisar en las fases 6–7.
-- **Conducción** (fase 3): preferencia por un controlador cinemático propio (bicicleta con dirección en todos los ejes)
-  en vez del vehicle controller de Rapier; confirmar al implementarla.
 - Medir rendimiento **en cada fase** (fps, peor cuadro, draw calls, triángulos del peor caso) y anotarlo aquí.
   Meta orientativa: menos de unas 150 draw calls.
 
@@ -161,9 +180,15 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   `ratedCap` (26 iteraciones) se calculan cada cuadro sin costo apreciable.
 - Fase 2: 61 draw calls de pie / 68 con estabilizadores fuera / 69 volcada; 4.730 triángulos; física ~0,2 ms y render CPU
   ~1,1 ms por cuadro (panel de la app, oculto durante las pruebas: **fps reales pendientes de medir en la laptop**).
+- Fase 3: 72 draw calls y ~4.700 triángulos en la vista de seguimiento (46 / 3.900 en cabina); física ~0,2 ms, render CPU
+  ~1,1 ms; 60 fps en el panel de la app. **fps reales pendientes de medir en la laptop.**
 
 ### Pendientes
 - Colisión de la carga con la pluma (no existe todavía).
+- Radio de cola: el contrapeso no choca con obstáculos al girar (`boomHit`/contrapeso de la referencia), ni la pluma.
+- Terreno (agua, barro, `offroad`) y límites reales de la obra llegan con los niveles (fase 9); ahora el límite es ±150 m.
+- Conducción de orugas (`spd.turn`, `crawlMove`): fase 6; `stepDrive` no hace nada si la grúa no tiene `wheelbase`.
+- Las alturas del chasis/ruedas son de la AT 60; revisar `CLEARANCE`, el ojo de la cabina y la suspensión con otras grúas.
 - La caja despedida 45 m de la fase 1 no se reprodujo con el nuevo ajuste del solver; si vuelve a pasar, anotar cómo.
 - Pruebas en el navegador: no teletransportar la pluma (`S.slew = …` de golpe) con el gancho colgado: el salto da un
   tirón enorme en el cable y vuelca la grúa. Usar las teclas con `__gruas.advance`.

@@ -1,0 +1,41 @@
+import * as THREE from 'three';
+import type { Obstacle } from '../physics/world';
+
+// Obstáculos de la obra (cajas fijas). Los bloques de hormigón van en un InstancedMesh.
+
+const box = new THREE.BoxGeometry(1, 1, 1);
+
+/** Obstáculos de prueba para la conducción (fase 3; los niveles llegan en la fase 9). */
+export const TEST_OBSTACLES: Obstacle[] = [
+  // fila de bloques de hormigón delante de la grúa
+  ...[-6, -3, 0, 3, 6].map((z): Obstacle => ({ label: 'Bloque', kind: 'block', half: { x: 0.6, y: 0.6, z: 1.2 }, pos: { x: 30, y: 0.6, z }, rotY: 0 })),
+  // dos bloques sueltos a la derecha
+  { label: 'Bloque', kind: 'block', half: { x: 0.6, y: 0.6, z: 1.2 }, pos: { x: 16, y: 0.6, z: 18 }, rotY: 0.5 },
+  { label: 'Bloque', kind: 'block', half: { x: 0.6, y: 0.6, z: 1.2 }, pos: { x: 19, y: 0.6, z: 20 }, rotY: 0.3 },
+  // contenedor de 20 pies a la izquierda
+  { label: 'Contenedor', kind: 'container', half: { x: 3.03, y: 1.3, z: 1.22 }, pos: { x: 4, y: 1.3, z: -18 }, rotY: 0.25, color: '#7a3b33' },
+];
+
+export function buildSite(scene: THREE.Scene, obstacles: Obstacle[]) {
+  const concrete = new THREE.MeshLambertMaterial({ color: '#a7a39a' });
+  const blocks = obstacles.filter((o) => o.kind === 'block');
+  const inst = new THREE.InstancedMesh(box, concrete, Math.max(1, blocks.length));
+  inst.count = blocks.length;
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
+  blocks.forEach((o, i) => {
+    q.setFromAxisAngle(up, o.rotY);
+    m4.compose(new THREE.Vector3(o.pos.x, o.pos.y, o.pos.z), q, new THREE.Vector3(2 * o.half.x, 2 * o.half.y, 2 * o.half.z));
+    inst.setMatrixAt(i, m4);
+  });
+  inst.castShadow = inst.receiveShadow = true;
+  scene.add(inst);
+  for (const o of obstacles) {
+    if (o.kind !== 'container') continue;
+    const m = new THREE.Mesh(box, new THREE.MeshLambertMaterial({ color: o.color ?? '#3d6f8f' }));
+    m.position.set(o.pos.x, o.pos.y, o.pos.z);
+    m.rotation.y = o.rotY;
+    m.scale.set(2 * o.half.x, 2 * o.half.y, 2 * o.half.z);
+    m.castShadow = m.receiveShadow = true;
+    scene.add(m);
+  }
+}

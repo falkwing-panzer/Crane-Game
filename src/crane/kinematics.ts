@@ -19,6 +19,17 @@ export interface CraneState {
   phiV: number;
   /** Arista de vuelco mientras phi > 0 (índice de tipEdge), −1 si no hay */
   edge: number;
+  /** Portador en el mundo: origen del chasis (x, z) y rumbo h (rad, antihorario visto desde arriba; 0 = +x) */
+  x: number;
+  z: number;
+  h: number;
+  /** Velocidad de marcha (m/s, + adelante) y dirección (rad, + izquierda), como S.v y S.steer de la referencia */
+  vd: number;
+  steer: number;
+  /** Giro acumulado de las ruedas (rad), solo para el dibujo */
+  spin: number;
+  /** Suspensión (visual y en la pose): cabeceo y balanceo (rad) con sus velocidades */
+  sus: { pitch: number; bank: number; vp: number; vb: number };
 }
 
 export interface CraneInput {
@@ -52,6 +63,7 @@ export function initialState(T: CraneSpec): CraneState {
   return {
     slew: 0, ang: 40 * Math.PI / 180, Lb: T.boom.min, cable: 4, v: { slew: 0, ang: 0, Lb: 0, cable: 0 },
     out: 0, outT: 0, phi: 0, phiV: 0, edge: -1,
+    x: 0, z: 0, h: 0, vd: 0, steer: 0, spin: 0, sus: { pitch: 0, bank: 0, vp: 0, vb: 0 },
   };
 }
 

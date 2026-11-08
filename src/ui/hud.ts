@@ -28,6 +28,9 @@ export interface Readout {
   tipped: boolean;
   /** LMI puenteado (tecla P) */
   bypass: boolean;
+  /** Velocidad de marcha (m/s) y dirección (°, + izquierda) */
+  speed: number;
+  steerDeg: number;
 }
 
 export class Hud {
@@ -51,8 +54,8 @@ export class Hud {
       <div class="panel data" id="data"></div>
       <div class="msg" id="msg"></div>
       <div class="panel keys">
-        <b>A/D</b> giro · <b>W/S</b> pluma · <b>Q/E</b> telescopio · <b>R/F</b> gancho ·
-        <b>O</b> estabilizadores · <b>Espacio</b> enganchar/soltar · <b>X</b> reponer carga · <b>P</b> puentear LMI · <b>Shift</b> fino · ratón: cámara
+        <b>Flechas</b> conducir · <b>A/D</b> giro · <b>W/S</b> pluma · <b>Q/E</b> telescopio · <b>R/F</b> gancho ·
+        <b>O</b> estabilizadores · <b>Espacio</b> enganchar/soltar · <b>X</b> reponer carga · <b>P</b> puentear LMI · <b>Shift</b> fino · <b>V</b> cámara
       </div>
       <div class="card" id="card" hidden>
         <h2>Grúa volcada</h2>
@@ -79,6 +82,12 @@ export class Hud {
     this.msg.textContent = text;
     this.msg.classList.add('on');
     this.msgT = seconds;
+  }
+
+  /** Como say(), pero no reinicia el mensaje si ya se está mostrando (para avisos que se repiten cada paso). */
+  sayOnce(text: string, seconds = 1.9) {
+    if (this.msg.textContent === text && this.msgT > 0.5) return;
+    this.say(text, seconds);
   }
 
   /** dt real del cuadro (s), tiempos de física y render (ms CPU) */
@@ -108,7 +117,8 @@ export class Hud {
       `Pluma <b>${f(r.Lb)} m</b> · <b>${f(r.angDeg)}°</b><br>` +
       `Radio <b>${f(r.radius)} m</b> · punta <b>${f(r.headH)} m</b><br>` +
       `Cable <b>${f(r.cable)} m</b><br>` +
-      `Gancho: <b>${r.load}</b>` +
+      `Gancho: <b>${r.load}</b><br>` +
+      `Marcha <b>${f(Math.abs(r.speed) * 3.6)} km/h</b>${r.speed < -0.05 ? ' atrás' : ''} · dirección <b>${f(r.steerDeg, 0)}°</b>` +
       `<div class="lmi ${lmiCls}"><span>LMI</span><b>${Math.round(r.lmi * 100)} %</b>` +
       `<i><u style="width:${Math.min(100, (r.lmi / 1.25) * 100).toFixed(1)}%"></u><s></s></i></div>` +
       (r.bypass && !r.tipped ? `<div class="cut">LMI PUENTEADO (P)</div>` : '') +

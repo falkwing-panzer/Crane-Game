@@ -1,6 +1,6 @@
-// Pose del portador en el mundo: elevación por estabilizadores y giro alrededor de la arista de vuelco.
-// El marco del chasis coincide con el mundo cuando la grúa está sobre el suelo y sin inclinar
-// (la grúa está en el origen mirando a +x). Sin dependencias de three.js para usarla en física y pruebas.
+// Pose del portador en el mundo: posición y rumbo de la conducción, elevación por estabilizadores,
+// giro alrededor de la arista de vuelco y suspensión. Marco del chasis: x hacia delante, y arriba,
+// −z a la izquierda, origen sobre el suelo. Sin dependencias de three.js para usarla en física y pruebas.
 
 import type { CraneSpec } from './cranes';
 import { supportRect, type SupportMode } from './stability';
@@ -59,8 +59,27 @@ export function edgeAxis(T: CraneSpec, md: SupportMode, edge: number): { p: V3; 
   }
 }
 
-/** Pose del portador según el estado analítico (elevación y phi). */
-export function carrierPose(T: CraneSpec, S: CraneState, md: SupportMode): Pose {
+/** A∘B: primero B, luego A. */
+export function compose(A: Pose, B: Pose): Pose {
+  return { t: apply(A, B.t), q: mul(A.q, B.q) };
+}
+
+/** Marco del portador en el suelo: solo posición y rumbo de la conducción. */
+export function carrierFrame(S: Pick<CraneState, 'x' | 'z' | 'h'>): Pose {
+  return { t: { x: S.x, y: 0, z: S.z }, q: axisAngle(0, 1, 0, S.h) };
+}
+
+/** Punto del mundo → marco del portador en el suelo (inverso de carrierFrame; y no cambia). */
+export function worldToCarrier(S: Pick<CraneState, 'x' | 'z' | 'h'>, p: { x: number; z: number }) {
+  const dx = p.x - S.x, dz = p.z - S.z, c = Math.cos(S.h), s = Math.sin(S.h);
+  return { x: c * dx - s * dz, z: s * dx + c * dz };
+}
+
+/** Altura del centro de giro de la suspensión (aproximación: altura de los ejes). */
+const SUS_Y = 0.75;
+
+/** Pose del portador en el marco del chasis: elevación y phi (modelo analítico). */
+function standPose(T: CraneSpec, S: CraneState, md: SupportMode): Pose {
   const lift = carrierLift(S);
   if (S.phi <= 0 || S.edge < 0) return { t: { x: 0, y: lift, z: 0 }, q: IDENTITY };
   const { p, axis } = edgeAxis(T, md, S.edge);
@@ -69,4 +88,21 @@ export function carrierPose(T: CraneSpec, S: CraneState, md: SupportMode): Pose 
   // mundo = e + R·(p_chasis + lift − e)
   const r = rotate(q, { x: -p.x, y: lift - p.y, z: -p.z });
   return { t: { x: p.x + r.x, y: p.y + r.y, z: p.z + r.z }, q };
+}
+
+/** Suspensión: cabeceo (eje z) y balanceo (eje x) alrededor de un punto a la altura de los ejes. */
+export function suspensionPose(S: Pick<CraneState, 'sus'>): Pose {
+  const { pitch, bank } = S.sus;
+  if (!pitch && !bank) return { t: { x: 0, y: 0, z: 0 }, q: IDENTITY };
+  const q = mul(axisAngle(0, 0, 1, pitch), axisAngle(1, 0, 0, bank));
+  const c = rotate(q, { x: 0, y: SUS_Y, z: 0 });
+  return { t: { x: -c.x, y: SUS_Y - c.y, z: -c.z }, q };
+}
+
+/**
+ * Pose del portador en el mundo = conducción ∘ (elevación y phi) ∘ suspensión.
+ * La suspensión va también en la física para que el cable siga saliendo de la cabeza de la pluma.
+ */
+export function carrierPose(T: CraneSpec, S: CraneState, md: SupportMode): Pose {
+  return compose(carrierFrame(S), compose(standPose(T, S, md), suspensionPose(S)));
 }

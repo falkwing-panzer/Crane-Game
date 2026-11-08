@@ -25,11 +25,27 @@ export interface Load {
   home: { x: number; y: number; z: number };
 }
 
+/** Obstáculo fijo de la obra (caja), girado `rotY` alrededor del eje vertical. */
+export interface Obstacle {
+  label: string;
+  kind: 'block' | 'container';
+  half: { x: number; y: number; z: number };
+  pos: { x: number; y: number; z: number };
+  rotY: number;
+  color?: string;
+}
+
+/** Medio lado de la obra: más allá no se puede conducir (Límite de la obra de la referencia). */
+export const SITE_HALF = 150;
+/** Altura libre bajo el chasis: lo más bajo no lo bloquea (la referencia ignora cajas de menos de 0,35 m). */
+const CLEARANCE = 0.35;
+
 export class Physics {
   readonly world: RAPIER.World;
   readonly hookBody: RAPIER.RigidBody;
   readonly hookCollider: RAPIER.Collider;
   readonly loads: Load[] = [];
+  readonly obstacles: Obstacle[] = [];
   /** Carga enganchada, si la hay */
   attached: Load | null = null;
   /** Tensión del cable (t), filtrada; incluye el gancho */
@@ -84,6 +100,60 @@ export class Physics {
     this.addLoad('Caja', 2.0, { x: 1.0, y: 0.5, z: 0.7 }, { x: 9, y: 0.5, z: 6 });
   }
 
+  addObstacle(o: Obstacle) {
+    const q = axisAngle(0, 1, 0, o.rotY);
+    this.world.createCollider(
+      RAPIER.ColliderDesc.cuboid(o.half.x, o.half.y, o.half.z).setTranslation(o.pos.x, o.pos.y, o.pos.z).setRotation(q).setFriction(0.8),
+    );
+    this.obstacles.push(o);
+  }
+
+  /**
+   * ¿El chasis en la pose (x, z, h) toca algo? (carrierBlocked de la referencia). Caja del chasis desde la
+   * altura libre hasta la plataforma; cuentan los obstáculos y las cargas sueltas, no el gancho ni la carga
+   * enganchada. Se prueba antes de mover: el chasis cinemático empujaría cualquier cosa sin frenarse.
+   */
+  carrierBlocked(x: number, z: number, h: number): string | null {
+    const T = this.T, [L0, L1] = T.len;
+    const c = Math.cos(h), s = Math.sin(h);
+    // esquinas en el mundo para el límite de la obra
+    for (const lx of [L0, L1]) for (const lz of [-T.half, T.half]) {
+      const wx = x + c * lx + s * lz, wz = z - s * lx + c * lz;
+      if (Math.abs(wx) > SITE_HALF || Math.abs(wz) > SITE_HALF) return 'Límite de la obra';
+    }
+    const cx = (L0 + L1) / 2, hy = (T.deckHi - CLEARANCE) / 2;
+    const shape = new RAPIER.Cuboid((L1 - L0) / 2, hy, T.half);
+    const pos = { x: x + c * cx, y: CLEARANCE + hy, z: z - s * cx };
+    return this.hitsSomething(pos, axisAngle(0, 1, 0, h), shape) ? 'El chasis toca un obstáculo' : null;
+  }
+
+  /** ¿Hay sitio para las zapatas? (padsBlocked de la referencia, con un margen de 0,6 m alrededor). */
+  padsBlocked(S: CraneState): string | null {
+    const o = this.T.out;
+    if (!o) return null;
+    const c = Math.cos(S.h), s = Math.sin(S.h), q = axisAngle(0, 1, 0, S.h);
+    const shape = new RAPIER.Cuboid(0.6, 0.5, 0.6);
+    for (const lx of [o.xf, o.xr]) for (const lz of [-o.hw, o.hw]) {
+      const wx = S.x + c * lx + s * lz, wz = S.z - s * lx + c * lz;
+      if (Math.abs(wx) > SITE_HALF || Math.abs(wz) > SITE_HALF) return 'No hay espacio para los estabilizadores';
+      if (this.hitsSomething({ x: wx, y: 0.55, z: wz }, q, shape)) return 'Un obstáculo impide abrir los estabilizadores';
+    }
+    return null;
+  }
+
+  private hitsSomething(pos: V3, rot: { x: number; y: number; z: number; w: number }, shape: RAPIER.Shape) {
+    let hit = false;
+    const own = new Set([this.chassisBody?.handle, this.supBody?.handle, this.headBody?.handle]);
+    this.world.intersectionsWithShape(pos, rot, shape, () => { hit = true; return false; }, undefined, undefined, undefined, undefined,
+      (col) => {
+        if (col.handle === this.hookCollider.handle) return false;
+        if (this.attached && col.handle === this.attached.collider.handle) return false;
+        const b = col.parent();
+        return !(b && own.has(b.handle));
+      });
+    return hit;
+  }
+
   /** Grúa de pie: chasis y superestructura cinemáticos; cabeza cinemática sin colisionador (ancla del cable). */
   private buildStanding(pose: Pose) {
     const T = this.T, world = this.world;
@@ -93,7 +163,9 @@ export class Physics {
       RAPIER.ColliderDesc.cuboid((L1 - L0) / 2, T.deckHi / 2, T.half).setTranslation((L0 + L1) / 2, T.deckHi / 2, 0),
       this.chassisBody,
     );
-    this.supBody = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(T.piv, pose.t.y, 0));
+    this.chassisBody.setRotation(pose.q, false);
+    this.supBody = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased()
+      .setTranslation(...xyz(apply(pose, { x: T.piv, y: 0, z: 0 }))).setRotation(pose.q));
     const [hx, cx, cy] = this.supBox();
     world.createCollider(RAPIER.ColliderDesc.cuboid(hx, 0.85, 1.15).setTranslation(cx, cy, 0), this.supBody);
     this.headBody = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased());
@@ -374,6 +446,8 @@ export class Physics {
     return `Enganchada ${load.label} · ${load.mass.toFixed(1).replace('.', ',')} t`;
   }
 }
+
+const xyz = (p: V3): [number, number, number] => [p.x, p.y, p.z];
 
 /** Seguimiento de posición para derivar velocidad y aceleración */
 interface Track { p: V3; v: V3; n: number }

@@ -3,6 +3,7 @@
 
 import type { CraneSpec } from './cranes';
 import type { CraneState } from './kinematics';
+import { MOVING } from './drive';
 import { KF, craneMasses, lmiStatic, structCap, tipEdge, type CraneConfig, type SupportMode } from './stability';
 
 /** Inclinación (rad) a partir de la cual la grúa vuelca sin remedio (fail de la referencia, ≈ 3,4°). */
@@ -10,14 +11,16 @@ export const TIP_PHI = 0.06;
 /** Por encima de esto la grúa se considera inclinada y solo se permiten movimientos que la recuperan. */
 export const TILTED_PHI = 0.002;
 
-/** mode() de la referencia (todavía sin conducción): estabilizadores solo si están apoyados del todo. */
+/** mode() de la referencia (grúas de ruedas): estabilizadores solo si están apoyados del todo; en marcha "move". */
 export function supportMode(S: CraneState): SupportMode {
-  return S.out >= 1 ? 'out' : 'tire';
+  return S.out >= 1 ? 'out' : Math.abs(S.vd) > MOVING ? 'move' : 'tire';
 }
 
 export interface OutriggerCtx {
   /** Hay carga enganchada que no está apoyada */
   loadHanging: boolean;
+  /** Motivo por el que no se pueden abrir los estabilizadores (padsBlocked de la referencia), o null */
+  padsBlocked?: string | null;
 }
 
 /** Tecla O. Devuelve el mensaje para el operador. */
@@ -26,6 +29,8 @@ export function toggleOutriggers(T: CraneSpec, C: CraneConfig, S: CraneState, ct
   // (no está en la referencia) con la grúa levantándose no se cambia el apoyo: cambiaría la arista de vuelco
   if (S.phi > 0) return 'La grúa se está levantando: recupérala antes de mover los estabilizadores';
   if (S.outT === 0) {
+    if (Math.abs(S.vd) > MOVING) return 'Detén la grúa antes de estabilizar';
+    if (ctx.padsBlocked) return ctx.padsBlocked;
     S.outT = 1;
     return 'Desplegando estabilizadores';
   }

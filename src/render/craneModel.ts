@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import type { WheeledSpec } from '../crane/cranes';
 import { carrierLift, type CraneState } from '../crane/kinematics';
-import type { Pose } from '../crane/pose';
+import { suspensionPose, type Pose } from '../crane/pose';
+import { axleSteer } from '../crane/drive';
 
 // Modelo simplificado (cajas y cilindros). Las cotas principales vienen de la referencia
 // (chasis, ejes, llantas, centro de giro, pie de pluma, contrapeso, pluma). Cabinas,
@@ -9,6 +10,13 @@ import type { Pose } from '../crane/pose';
 
 const box = new THREE.BoxGeometry(1, 1, 1);
 const cyl = new THREE.CylinderGeometry(1, 1, 1, 16);
+// buje hexagonal: así se ve girar la rueda
+const hex = new THREE.CylinderGeometry(1, 1, 1, 6);
+const WHEEL_BASE_Q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
+const _qs = new THREE.Quaternion();
+const _qw = new THREE.Quaternion();
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
+const Z_AXIS = new THREE.Vector3(0, 0, 1);
 
 const TELE_N = 3; // tramos telescópicos además del base
 const SECTION_LEN = 10;
@@ -37,6 +45,13 @@ export class CraneModel {
   private outRod: THREE.InstancedMesh;
   private outPad: THREE.InstancedMesh;
   private padMat: THREE.MeshLambertMaterial;
+  // Llantas: en un grupo que deshace la suspensión (el chasis se balancea, las ruedas no)
+  private wheelGroup = new THREE.Group();
+  private wheels: THREE.InstancedMesh;
+  private hubs: THREE.InstancedMesh;
+  private wheelW = 0.6;
+  /** Cabina del conductor: se oculta en la vista de cabina */
+  readonly cab: THREE.Object3D[] = [];
 
   constructor(private T: WheeledSpec) {
     const yellow = new THREE.MeshLambertMaterial({ color: T.color });
@@ -58,13 +73,13 @@ export class CraneModel {
 
     // --- Chasis (portador). +x = frente, -z = izquierda ---
     const [L0, L1] = T.len, hf = T.half;
-    const wheelW = 0.6;
-    const wz = hf - wheelW / 2;
     add(this.root, dark, L0 + 0.3, L1 - 0.3, T.deckLo, T.deckHi - 0.45, -0.6, 0.6); // bastidor
     add(this.root, yellow, L0, L1, T.deckHi - 0.45, T.deckHi, -hf, hf); // plataforma / guardabarros
     // cabina del conductor: delante a la izquierda, baja para que la pluma descanse encima
-    add(this.root, yellow, L1 - 2.05, L1, 1.0, 2.2, -hf, -0.15);
-    add(this.root, glass, L1 - 0.02, L1 + 0.01, 1.45, 2.1, -hf + 0.1, -0.25);
+    this.cab.push(
+      add(this.root, yellow, L1 - 2.05, L1, 1.0, 2.2, -hf, -0.15),
+      add(this.root, glass, L1 - 0.02, L1 + 0.01, 1.45, 2.1, -hf + 0.1, -0.25),
+    );
     // cajas de estabilizadores en out.xf / out.xr (como la referencia), con franjas de advertencia
     const stripes = new THREE.MeshLambertMaterial({ map: stripeTexture() });
     for (const x of [T.out.xf, T.out.xr]) {
@@ -84,21 +99,13 @@ export class CraneModel {
       this.root.add(m);
     }
 
-    // Llantas con instancing (3 ejes × 2 lados)
+    // Llantas con instancing (ejes × 2 lados); se orientan y giran en update()
     const nW = T.axles.length * 2;
-    const wheels = new THREE.InstancedMesh(cyl, tire, nW);
-    const hubs = new THREE.InstancedMesh(cyl, steel, nW);
-    wheels.castShadow = wheels.receiveShadow = true;
-    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
-    let i = 0;
-    for (const ax of T.axles) for (const side of [-1, 1]) {
-      m4.compose(new THREE.Vector3(ax, T.wheelR, side * wz), q, new THREE.Vector3(T.wheelR, wheelW, T.wheelR));
-      wheels.setMatrixAt(i, m4);
-      m4.compose(new THREE.Vector3(ax, T.wheelR, side * (wz + 0.02)), q, new THREE.Vector3(T.wheelR * 0.5, wheelW, T.wheelR * 0.5));
-      hubs.setMatrixAt(i, m4);
-      i++;
-    }
-    this.root.add(wheels, hubs);
+    this.wheels = new THREE.InstancedMesh(cyl, tire, nW);
+    this.hubs = new THREE.InstancedMesh(hex, steel, nW);
+    this.wheels.castShadow = this.wheels.receiveShadow = true;
+    for (const m of [this.wheels, this.hubs]) { m.frustumCulled = false; this.wheelGroup.add(m); }
+    this.root.add(this.wheelGroup);
 
     // --- Superestructura (gira en x = piv) ---
     this.sup.position.set(T.piv, 0, 0);
@@ -152,6 +159,7 @@ export class CraneModel {
     this.root.position.set(pose.t.x, pose.t.y, pose.t.z);
     this.root.quaternion.set(pose.q.x, pose.q.y, pose.q.z, pose.q.w);
     this.updateOutriggers(S);
+    this.updateWheels(S);
     this.sup.rotation.y = S.slew;
     this.boom.rotation.z = S.ang;
 
@@ -182,6 +190,28 @@ export class CraneModel {
     this.luffRod.quaternion.copy(_q);
     this.luffRod.scale.set(0.11, len, 0.11);
     this.luffRod.position.copy(_base).addScaledVector(_dir, len / 2);
+  }
+
+  /** Ruedas: dirección por eje (como la referencia), giro según lo recorrido y sin el balanceo del chasis. */
+  private updateWheels(S: CraneState) {
+    const T = this.T, w = this.wheelW, wz = T.half - w / 2;
+    const sp = suspensionPose(S); // el grupo aplica la inversa de la suspensión
+    _qs.set(sp.q.x, sp.q.y, sp.q.z, sp.q.w).invert();
+    this.wheelGroup.quaternion.copy(_qs);
+    this.wheelGroup.position.set(-sp.t.x, -sp.t.y, -sp.t.z).applyQuaternion(_qs);
+    const spin = new THREE.Quaternion().setFromAxisAngle(Z_AXIS, -S.spin);
+    let i = 0;
+    for (const ax of T.axles) {
+      _qw.setFromAxisAngle(Y_AXIS, axleSteer(T, ax, S.steer)).multiply(spin).multiply(WHEEL_BASE_Q);
+      for (const side of [-1, 1]) {
+        _m4.compose(_p.set(ax, T.wheelR, side * wz), _qw, _s.set(T.wheelR, w, T.wheelR));
+        this.wheels.setMatrixAt(i, _m4);
+        _m4.compose(_p.set(ax, T.wheelR, side * (wz + 0.02)), _qw, _s.set(T.wheelR * 0.5, w, T.wheelR * 0.5));
+        this.hubs.setMatrixAt(i, _m4);
+        i++;
+      }
+    }
+    this.wheels.instanceMatrix.needsUpdate = this.hubs.instanceMatrix.needsUpdate = true;
   }
 
   /**
