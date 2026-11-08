@@ -79,6 +79,9 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - **Fase 4** (modelos de ruedas): City 25, AT 60, RT 90, AT 220, AT 300-6, AT 450-8 y AT 500-8 generados desde `cranes.ts`
   con las fórmulas de `craneModel()` de la referencia; menú "Grúa" en el HUD (`?grua=id`, recarga la página). Pruebas en
   `models.test.ts` (se construyen y nada se atraviesa en todo el recorrido de la pluma ni al girar).
+- **Fase 5** (montajes): lastre (B) en AT 300-6, AT 450-8 y AT 500-8; Y-guy (Y) en la AT 500-8 (la AT 650-8 lo tendrá al
+  hacer su modelo en la fase 7: la lógica ya es general). Bloqueo de mandos mientras se monta, indicadores en el HUD.
+  Pruebas en `assembly.test.ts` y `models.test.ts`.
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -94,6 +97,8 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   `axleSteer` (ángulo de cada eje como el dibujo de la referencia). `MOVING` = 0,05 m/s, `CARRY_SPEED` = 0,3.
 - `src/crane/ops.ts`: `supportMode` (`out` solo con `out = 1`; `move` con |vd| > 0,05), `toggleOutriggers` (condiciones de la referencia),
   `dynamicStability` (tensión en `gp`), `stepTilt` (phi de la referencia), `TIP_PHI` = 0,06.
+- `src/crane/assembly.ts`: `toggleBallast`/`toggleYGuy` (condiciones de la referencia), `stepAssembly` (avance de `S.cw`/`S.yg`
+  y `syncConfig` → `C.mCw`, `C.yOn`), `blockWhileAssembling`, `teleLimit` (35 m sin Y-guy), `outriggersLocked`, `yGuyPhase`.
 - `src/crane/pose.ts`: `carrierPose` = `carrierFrame` (x, z, rumbo h) ∘ elevación y `phi` ∘ `suspensionPose`; `edgeAxis`
   (marco del chasis), `worldToCarrier`, `compose`, cuaterniones sin three.js.
 - `src/physics/world.ts`: mundo Rapier; `Physics.step(S, pose)`, `tension`/`gp`, `tipOver()`, `reset()`, `headWorld()`,
@@ -103,7 +108,8 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - `src/render/models/`: `layout.ts` (todas las cotas del modelo sin three.js: cabina, apoyo de pluma, cola de pluma, ranura de la
   placa, contrapeso `cwDims`, cabrestante, radio de cola `tailR`, `hookScale`/`hookFalls`, `WHEELED_IDS`), `carrier.ts` (chasis y
   cabina), `superstructure.ts` (superestructura, tramos, cabeza con poleas), `builder.ts` (`Parts`: caja, cilindro, extrusión de
-  perfil; fusiona por material), `materials.ts` (paleta compartida, materiales por color).
+  perfil; fusiona por material), `materials.ts` (paleta compartida, materiales por color), `ballastPlates(T, L, cw)` en
+  `layout.ts` (placas de lastre) y `yguy.ts` (`yGuyGeom` sin three.js, `YGuyView` instanciado en el grupo de la pluma).
 - `src/render/craneModel.ts` (`CraneModel`: grupos rígidos, llantas y estabilizadores instanciados, `eye(S)`, `lateral()`),
   `scene.ts`, `rigging.ts` (gancho escalado y 2/4 ramales).
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
@@ -191,6 +197,18 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   tumbada queda metido bajo la pluma (no hay altura entre placa y pluma con los `pivH` de la referencia). Aceptado.
 - **Gancho**: colisionador de Rapier escalado en ancho/fondo con `hookScale` (0,55·hb × 0,21·hb); el alto sigue fijo (±0,5 m).
 - **Luz con sombras**: se recentra a saltos cada 15 m de recorrido (no cada cuadro) para que las sombras no tiemblen.
+- **Montajes (fase 5)**: como la referencia, la masa del lastre crece de forma continua (`mCw = cwBase + m·cw`) y el Y-guy solo
+  cuenta tensado al 100 %. **Bloqueo** (pedido en FASES, no está en la referencia para lastre/Y-guy): mientras `cw ≠ cwT` o
+  `yg ≠ ygT` se anulan giro, pluma, telescopio y cable. Conducir ya está bloqueado (estabilizadores fuera, y O no los recoge
+  con lastre o Y-guy). Medido: el lastre completo no provoca vuelco hacia atrás (LMI ≤ 42 % sin carga en todo el recorrido).
+- **Lastre en el dibujo** (aproximación visual): `cwDims(cw)` de la referencia, pero las placas van **detrás** del contrapeso
+  base y del cabrestante (las de la referencia, de todo el largo, lo atravesarían); 1 placa nueva cada 25 %. AT 450-8 (y
+  AT 650-8, `cwStyle: 'stack'`): torre que crece 4,4 m en placas de 0,42 m. La referencia las dibuja **redondas**; aquí son
+  **rectangulares** (pedido de Jesús), con la misma planta (`cwLen` × `cwLen`). El cabrestante va **delante** de la torre. `tailR` se
+  calcula con el lastre completo. La AT 500-8 llega a 8,24 m de ancho de lastre (`cwWide` = 4,12 es media anchura en la
+  referencia); se dejó así.
+- **Y-guy** (`yGuyModel` de la referencia, marco de la pluma): el cable delantero se ata en lo alto de la cabeza (`Lb + 0,1`), no
+  1,1 m detrás como la referencia (con la pluma recogida quedaba dentro del tramo base). Sin masa en la estabilidad (referencia).
 
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
@@ -213,13 +231,15 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - Fase 4 (AT 500-8, la más pesada): 113–123 draw calls (sombras incluidas) y ~17.200 triángulos; ~1 ms por cuadro de física +
   render CPU (con `gl.finish`) en el panel de la app; 60 fps con el panel visible. AT 60: ~115 draw calls, ~10.800 triángulos.
   **En la laptop de Jesús: 60 fps con la AT 500-8.**
+- Fase 5 (AT 500-8 con lastre y Y-guy montados, pluma de 50 m): 120 draw calls y ~17.600 triángulos (vista de seguimiento,
+  sombras incluidas). Lastre: 1 InstancedMesh; Y-guy: 4 InstancedMesh, recolocados solo cuando cambian. **Fps en la laptop
+  pendientes.**
 
 ### Pendientes
-- Lastre (fase 5): el contrapeso se dibuja con `cwS = 0`; al crecer, revisar que el cabrestante (encima) y el radio de cola
-  (`tailR` frente a cabina, apoyo y equipo) sigan libres — las pruebas de `models.test.ts` lo detectarán si se usa `layout`.
 - El encuadre de sombras (±45 m) no cubre plumas de 64–85 m enteras; la cámara se escala con el largo del chasis.
 - Colisión de la carga con la pluma (no existe todavía).
 - Radio de cola: el contrapeso no choca con obstáculos al girar (`boomHit`/contrapeso de la referencia), ni la pluma.
+  Con lastre la cola llega a ~7,8 m en la AT 500-8; el colisionador de la superestructura no incluye el lastre.
 - Terreno (agua, barro, `offroad`) y límites reales de la obra llegan con los niveles (fase 9); ahora el límite es ±150 m.
 - Conducción de orugas (`spd.turn`, `crawlMove`): fase 6; `stepDrive` no hace nada si la grúa no tiene `wheelbase`.
 - `CLEARANCE` y la suspensión siguen siendo los de la AT 60; el colisionador de la superestructura (`supBox`) no cubre la

@@ -5,7 +5,8 @@ import { suspensionPose, type Pose } from '../crane/pose';
 import { axleSteer } from '../crane/drive';
 import { Parts } from './models/builder';
 import { palette } from './models/materials';
-import { layout, type Layout } from './models/layout';
+import { ballastPlates, layout, type Layout } from './models/layout';
+import { buildYGuyBase, YGuyView } from './models/yguy';
 import { buildCarrier } from './models/carrier';
 import { buildBoomBase, buildHead, buildSection, buildSuper, sectionTip, sheaves, TELE_N } from './models/superstructure';
 
@@ -34,6 +35,7 @@ const _p = new THREE.Vector3();
 const _s = new THREE.Vector3();
 const _o = new THREE.Vector3();
 const _q0 = new THREE.Quaternion();
+const _col = new THREE.Color();
 
 /** Ojo para la vista de cabina, en el marco del chasis: posición y dirección de la mirada. */
 export interface Eye { x: number; y: number; z: number; fx: number; fz: number }
@@ -60,6 +62,10 @@ export class CraneModel {
   private tires: THREE.InstancedMesh;
   private rims: THREE.InstancedMesh;
   private hubs: THREE.InstancedMesh;
+  // Lastre (tecla B): placas que aparecen con el montaje (detrás del contrapeso o en torre, según la grúa)
+  private ballastMesh: THREE.InstancedMesh | null = null;
+  private ballastKey = -1;
+  private yguy: YGuyView | null = null;
   /** Piezas que se ocultan en la vista de cabina (la cabina desde la que se mira) */
   readonly cab: THREE.Object3D[] = [];
 
@@ -103,6 +109,15 @@ export class CraneModel {
     // en la RT se conduce desde la cabina de la superestructura: es la que se oculta
     this.cab.push(...(L.noCab ? supMeshes.filter((m) => m.material === pal.cabin || m.material === pal.glass) : cabMeshes));
 
+    // placas de lastre: como mucho 4 placas detrás del contrapeso o 13 en torre (5,3 m en placas de 0,42 m)
+    if (L.ballast) {
+      const n = Math.max(4, ballastPlates(T, L, 1).boxes.length);
+      this.ballastMesh = new THREE.InstancedMesh(box, new THREE.MeshLambertMaterial({ color: '#ffffff' }), n);
+      this.ballastMesh.castShadow = this.ballastMesh.receiveShadow = true;
+      this.ballastMesh.frustumCulled = false;
+      this.sup.add(this.ballastMesh);
+    }
+
     // cilindro de elevación y cable de elevación (se orientan en cada cuadro)
     this.luffBarrel = new THREE.Mesh(cyl, pal.greyDeep);
     this.luffRod = new THREE.Mesh(cyl, pal.chrome);
@@ -115,7 +130,9 @@ export class CraneModel {
     this.sup.add(this.boom);
     const base = new Parts();
     buildBoomBase(T, L, base);
+    if (T.yguy) buildYGuyBase(L, base);
     base.build(this.boom, pal);
+    if (T.yguy) this.yguy = new YGuyView(this.boom, L, pal);
     for (let k = 1; k <= TELE_N; k++) {
       const g = new THREE.Group(), p = new Parts();
       buildSection(T, L, k, p);
@@ -149,6 +166,8 @@ export class CraneModel {
     this.boom.rotation.z = S.ang;
     for (let k = 1; k <= TELE_N; k++) this.sections[k - 1].position.x = sectionTip(T, k, S.Lb);
     this.head.position.x = S.Lb;
+    this.updateBallast(S.cw);
+    this.yguy?.update(S.yg, S.Lb, S.ang);
 
     const c = Math.cos(S.ang), s = Math.sin(S.ang);
     const boomPt = (d: number, u: number, v: THREE.Vector3) => v.set(T.foot + d * c - u * s, T.pivH + d * s + u * c, 0);
@@ -167,6 +186,24 @@ export class CraneModel {
     boomPt(S.Lb + sv.x, sv.y + sv.r, _o);
     this.placeCyl(this.ropeB, _b, _o, 0.025, 0, 1);
     this.root.updateMatrixWorld();
+  }
+
+  /** Placas de lastre al avance cw (solo se recolocan cuando cambia el avance). */
+  private updateBallast(cw: number) {
+    const m = this.ballastMesh;
+    if (!m || cw === this.ballastKey) return;
+    this.ballastKey = cw;
+    const { boxes, stack } = ballastPlates(this.T, this.L, cw);
+    const colors = stack ? ['#5d646b', '#7c838a'] : ['#5d646b', '#3a3f45'];
+    _q0.identity();
+    boxes.forEach((b, i) => {
+      _m4.compose(_p.set((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, (b.z0 + b.z1) / 2), _q0, _s.set(b.x1 - b.x0, b.y1 - b.y0, b.z1 - b.z0));
+      m.setMatrixAt(i, _m4);
+      m.setColorAt(i, _col.set(colors[i % 2]));
+    });
+    m.count = boxes.length;
+    m.instanceMatrix.needsUpdate = true;
+    if (m.instanceColor) m.instanceColor.needsUpdate = true;
   }
 
   /** Eje lateral de la superestructura en el mundo (para repartir los ramales del gancho). */

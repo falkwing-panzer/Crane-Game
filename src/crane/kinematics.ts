@@ -30,6 +30,12 @@ export interface CraneState {
   spin: number;
   /** Suspensión (visual y en la pose): cabeceo y balanceo (rad) con sus velocidades */
   sus: { pitch: number; bank: number; vp: number; vb: number };
+  /** Lastre: avance del montaje 0…1 y objetivo (cwS / cwT de la referencia) */
+  cw: number;
+  cwT: 0 | 1;
+  /** Arriostramiento en Y: avance 0…1 y objetivo (yg / ygT de la referencia) */
+  yg: number;
+  ygT: 0 | 1;
 }
 
 export interface CraneInput {
@@ -50,6 +56,8 @@ export interface StepLimits {
   noHoistUp: boolean;
   /** Grúa inclinada (phi > 0): solo se permiten movimientos que la recuperan */
   tilted: boolean;
+  /** Largo máximo de pluma permitido ahora (sin Y-guy tensado: yguy.teleMax) */
+  teleMax?: number;
 }
 
 export const CABLE_MIN = 1.2;
@@ -64,6 +72,7 @@ export function initialState(T: CraneSpec): CraneState {
     slew: 0, ang: 40 * Math.PI / 180, Lb: T.boom.min, cable: 4, v: { slew: 0, ang: 0, Lb: 0, cable: 0 },
     out: 0, outT: 0, phi: 0, phiV: 0, edge: -1,
     x: 0, z: 0, h: 0, vd: 0, steer: 0, spin: 0, sus: { pitch: 0, bank: 0, vp: 0, vb: 0 },
+    cw: 0, cwT: 0, yg: 0, ygT: 0,
   };
 }
 
@@ -109,8 +118,10 @@ export function stepCrane(T: CraneSpec, S: CraneState, inp: CraneInput, dt: numb
   if (lim?.tilted) S.v.Lb = Math.min(0, S.v.Lb);
   if (S.v.Lb) {
     const o = S.Lb;
-    if (!guard(() => { S.Lb = clamp(S.Lb + S.v.Lb * dt, T.boom.min, T.boom.max); }, () => { S.Lb = o; })) S.v.Lb = 0;
-    if (S.Lb === T.boom.min || S.Lb === T.boom.max) S.v.Lb = 0;
+    // tope de largo (Y-guy): si ya está más afuera, solo se puede recoger
+    const max = Math.max(o, Math.min(T.boom.max, lim?.teleMax ?? Infinity));
+    if (!guard(() => { S.Lb = clamp(S.Lb + S.v.Lb * dt, T.boom.min, max); }, () => { S.Lb = o; })) S.v.Lb = 0;
+    if (S.Lb === T.boom.min || S.Lb === max) S.v.Lb = 0;
   }
   // cable: subir la carga (hoist < 0) se corta si la carga supera la capacidad
   let hoist = inp.hoist;

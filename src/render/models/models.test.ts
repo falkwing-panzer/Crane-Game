@@ -4,7 +4,8 @@ import { CRANES, type WheeledSpec } from '../../crane/cranes';
 import { initialState } from '../../crane/kinematics';
 import { carrierPose } from '../../crane/pose';
 import { CraneModel } from '../craneModel';
-import { boomCorners, layout, WHEELED_IDS, type Box3 } from './layout';
+import { ballastPlates, boomCorners, cwDims, layout, WHEELED_IDS, type Box3 } from './layout';
+import { yGuyGeom } from './yguy';
 import { sheaves } from './superstructure';
 
 // Modelos 3D de las grúas de ruedas (fase 4): se construyen sin errores y las piezas no se atraviesan
@@ -57,10 +58,46 @@ for (const id of WHEELED_IDS) {
         rectXY({ x0: d.x - d.r, x1: d.x + d.r, y0: d.y - d.r, y1: d.y + d.r }),
       ];
       if (L.rearBlock) obstacles.push(rectXY(L.rearBlock));
+      // lastre montado del todo
+      const full = ballastPlates(T, L, 1);
+      for (const b of full.boxes) obstacles.push(rectXY(b));
       for (const a of angs) {
         const boom = boomCorners(T, L, a);
         obstacles.forEach((o) => expect(overlap(boom, o), `ángulo ${(a * 180 / Math.PI).toFixed(0)}°`).toBe(false));
       }
+    });
+
+    it('el lastre crece por fases y no toca el cabrestante', () => {
+      if (!L.ballast) { expect(ballastPlates(T, L, 1).boxes.length).toBe(0); return; }
+      const d = L.drum, counts: number[] = [];
+      for (let i = 0; i <= 20; i++) {
+        const { boxes } = ballastPlates(T, L, i / 20);
+        counts.push(boxes.length);
+        for (const b of boxes) expect(b.x1).toBeLessThanOrEqual(d.x - 0.55 + 1e-9);
+      }
+      expect(new Set(counts).size).toBeGreaterThan(3); // aparecen placas a medida que se monta
+      for (let i = 1; i < counts.length; i++) expect(counts[i]).toBeGreaterThanOrEqual(counts[i - 1]);
+      // el radio de cola cubre el lastre completo
+      const c1 = cwDims(T, 1);
+      for (const b of ballastPlates(T, L, 1).boxes) expect(L.tailR).toBeGreaterThanOrEqual(Math.hypot(b.x0, b.z1) - 1e-9);
+      if (L.ballast.kind === 'slab') expect(L.tailR).toBeGreaterThanOrEqual(Math.hypot(c1.x - c1.len / 2, c1.w));
+    });
+
+    if (T.yguy) it('el arriostramiento en Y queda por encima de la pluma y sus cables llegan a la cabeza', () => {
+      for (const yg of [0, 0.25, 0.5, 0.65, 0.8, 0.9, 1]) for (const Lb of [T.boom.min, T.boom.max]) {
+        const g = yGuyGeom(L, yg, Lb, 0);
+        expect(g.arms.length).toBe(2);
+        for (const s of [...g.arms, ...g.ropes, ...g.braces]) for (const p of [s.a, s.b]) {
+          for (const v of p) expect(Number.isFinite(v)).toBe(true);
+          // nada se mete dentro de la pluma (tramo base hasta boom.min; más allá, el tramo interior más fino)
+          expect(p[1]).toBeGreaterThanOrEqual((p[0] <= T.boom.min ? L.hu / 2 : 0.61 * L.hu / 2) - 1e-9);
+          expect(p[0]).toBeLessThanOrEqual(Lb + 0.1 + 1e-9);
+        }
+        if (yg >= 1) expect(g.ropes.every((r) => !r.slack)).toBe(true);
+      }
+      // tensado: el cable de la cabeza es recto y llega cerca de la punta
+      const g = yGuyGeom(L, 1, T.boom.max, 0);
+      expect(Math.max(...g.ropes.map((r) => r.b[0]))).toBeCloseTo(T.boom.max + 0.1, 6);
     });
 
     it('lo que gira queda a los lados de la pluma', () => {

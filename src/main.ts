@@ -8,6 +8,7 @@ import { baseConfig, lmiStatic, ratedCap, reach } from './crane/stability';
 import { dynamicStability, stepTilt, supportMode, toggleOutriggers, TILTED_PHI, type Dyn } from './crane/ops';
 import { apply, carrierFrame, carrierPose, edgeAxis, rotate, worldToCarrier, type Pose } from './crane/pose';
 import { stepDrive, stepSuspension } from './crane/drive';
+import { blockWhileAssembling, outriggersLocked, stepAssembly, teleLimit, toggleBallast, toggleYGuy, yGuyPhase } from './crane/assembly';
 import { CameraRig } from './render/camera';
 import { buildSite, TEST_OBSTACLES } from './render/site';
 import { createScene } from './render/scene';
@@ -41,7 +42,8 @@ async function start() {
   const rig = new Rigging(ctx.scene, phys, T);
   const cam = new CameraRig(ctx, crane.cab, (s) => crane.eye(s), Math.max(1, (T.len[1] - T.len[0]) / 12.3));
   const input = new Input();
-  const hud = new Hud(document.getElementById('hud')!, T.name, id, WHEELED_IDS.map((k) => ({ id: k, name: CRANES[k].name })));
+  const hud = new Hud(document.getElementById('hud')!, T.name, id, WHEELED_IDS.map((k) => ({ id: k, name: CRANES[k].name })),
+    { ballast: !!T.ballast, yguy: !!T.yguy });
   hud.onCrane = (k) => {
     const u = new URL(location.href);
     u.searchParams.set('grua', k);
@@ -61,8 +63,10 @@ async function start() {
   input.onHook = () => { if (!tipped()) hud.say(phys.toggleHook()); };
   input.onReset = () => { if (!tipped()) hud.say(phys.resetLoads()); };
   input.onOutriggers = () => {
-    if (!tipped()) hud.say(toggleOutriggers(T, C, S, { loadHanging: hanging(), padsBlocked: phys.padsBlocked(S) }), 1.8);
+    if (!tipped()) hud.say(toggleOutriggers(T, C, S, { loadHanging: hanging(), padsBlocked: phys.padsBlocked(S), locked: outriggersLocked(S) }), 1.8);
   };
+  input.onBallast = () => { if (!tipped()) hud.say(toggleBallast(T, S, { loadHanging: hanging() }), 1.8); };
+  input.onYGuy = () => { if (!tipped()) hud.say(toggleYGuy(T, S, { loadHanging: hanging() }), 2.2); };
   input.onView = () => hud.say(cam.cycle(S, pose), 1.5);
   input.onBypass = () => {
     bypass = !bypass;
@@ -70,6 +74,7 @@ async function start() {
   };
   hud.onRestart = () => {
     Object.assign(S, initialState(T));
+    Object.assign(C, baseConfig(T)); // sin lastre ni Y-guy
     pose = carrierPose(T, S, supportMode(S));
     phys.reset(S, pose);
     dyn = { u: 0, edge: 0, lmi: 0 };
@@ -97,6 +102,15 @@ async function start() {
       });
       if (dr.msg) hud.sayOnce(dr.msg);
       stepSuspension(T, S, (S.vd - v0) / dt, dt);
+      // Montajes (lastre, Y-guy): avanzan y, mientras tanto, la grúa no se mueve
+      const am = stepAssembly(T, S, C, dt);
+      if (am) hud.say(am, 2);
+      const bm = blockWhileAssembling(S, inp);
+      if (bm) hud.sayOnce(bm);
+      const teleMax = teleLimit(T, S);
+      if (inp.tele > 0 && S.Lb >= teleMax - 1e-6 && teleMax < T.boom.max) {
+        hud.sayOnce(`Sin arriostramiento tensado la pluma solo llega a ${teleMax} m (Y)`);
+      }
       const md = supportMode(S);
       // Como la referencia: los cortes usan el LMI estático; la carga cuenta solo si cuelga.
       const mEval = hanging() ? mLoad : T.hookM;
@@ -106,6 +120,7 @@ async function start() {
         L0: lmiStatic(T, C, md, S.Lb, S.ang, S.slew, mEval),
         noHoistUp: noHoistUp && !bypass,
         tilted: S.phi > TILTED_PHI, // la inclinación limita los movimientos aunque el LMI esté puenteado
+        teleMax,
       });
       if (cut && !cutMsg) {
         hud.say(noHoistUp && inp.hoist < 0 ? 'LMI: la carga supera la capacidad en esta posición'
@@ -193,6 +208,8 @@ async function start() {
       bypass,
       speed: S.vd,
       steerDeg: (S.steer * 180) / Math.PI,
+      ballast: T.ballast ? { t: T.ballast.m * S.cw, of: T.ballast.m, p: S.cw, target: S.cwT } : null,
+      yguy: T.yguy ? { text: yGuyPhase(S.yg), p: S.yg } : null,
     });
   }
   requestAnimationFrame(frame);

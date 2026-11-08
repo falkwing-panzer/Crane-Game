@@ -31,6 +31,22 @@ export interface Readout {
   /** Velocidad de marcha (m/s) y dirección (°, + izquierda) */
   speed: number;
   steerDeg: number;
+  /** Lastre: t montadas, total, avance 0…1 y objetivo (null si la grúa no monta lastre) */
+  ballast: { t: number; of: number; p: number; target: number } | null;
+  /** Y-guy: texto de la fase y avance 0…1 (null si no tiene) */
+  yguy: { text: string; p: number } | null;
+}
+
+/** Indicadores de montaje: verde montado, amarillo montando, gris desmontado. */
+function assemblyLine(r: Readout) {
+  const cls = (p: number) => (p >= 1 ? 'ok' : p > 0 ? 'warn' : 'off');
+  const out: string[] = [];
+  if (r.ballast) {
+    const b = r.ballast, moving = b.p !== b.target;
+    out.push(`<span class="lamp ${cls(b.p)}">Lastre ${Math.round(b.t)} / ${b.of} t${moving ? (b.target ? ' · montando' : ' · desmontando') : ''}</span>`);
+  }
+  if (r.yguy) out.push(`<span class="lamp ${cls(r.yguy.p)}">Arriostr. Y ${r.yguy.text}</span>`);
+  return out.length ? `<div class="lamps">${out.join('')}</div>` : '';
 }
 
 export class Hud {
@@ -50,7 +66,8 @@ export class Hud {
   private physAcc = 0;
   private renderAcc = 0;
 
-  constructor(root: HTMLElement, private title: string, current: string, cranes: { id: string; name: string }[]) {
+  constructor(root: HTMLElement, private title: string, current: string, cranes: { id: string; name: string }[],
+    has = { ballast: false, yguy: false }) {
     const opts = cranes.map((c) => `<option value="${c.id}"${c.id === current ? ' selected' : ''}>${c.name}</option>`).join('');
     root.innerHTML = `
       <div class="panel perf" id="perf">— fps</div>
@@ -59,7 +76,7 @@ export class Hud {
       <div class="msg" id="msg"></div>
       <div class="panel keys">
         <b>Flechas</b> conducir · <b>A/D</b> giro · <b>W/S</b> pluma · <b>Q/E</b> telescopio · <b>R/F</b> gancho ·
-        <b>O</b> estabilizadores · <b>Espacio</b> enganchar/soltar · <b>X</b> reponer carga · <b>P</b> puentear LMI · <b>Shift</b> fino · <b>V</b> cámara
+        <b>O</b> estabilizadores · ${has.ballast ? '<b>B</b> lastre · ' : ''}${has.yguy ? '<b>Y</b> arriostramiento · ' : ''}<b>Espacio</b> enganchar/soltar · <b>X</b> reponer carga · <b>P</b> puentear LMI · <b>Shift</b> fino · <b>V</b> cámara
       </div>
       <div class="card" id="card" hidden>
         <h2>Grúa volcada</h2>
@@ -137,6 +154,7 @@ export class Hud {
       (!r.tipped && r.tiltDeg > 0.05 ? `<div class="bad">¡La grúa se levanta! ${f(r.tiltDeg)}°</div>` : '') +
       `Capacidad <b class="${r.mHook > r.rated ? 'bad' : ''}">${f(r.mHook)} / ${f(r.rated)} t</b><br>` +
       `Tensión cable <b>${f(r.tension, 2)} t</b><br>` +
+      assemblyLine(r) +
       `<small>Apoyo: ${r.mode} · masa y capacidad con gancho</small>`;
   }
 }

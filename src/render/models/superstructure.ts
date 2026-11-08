@@ -1,6 +1,6 @@
 import type { WheeledSpec } from '../../crane/cranes';
 import type { Parts } from './builder';
-import type { Layout } from './layout';
+import { stackPlates, type Layout } from './layout';
 
 // Superestructura y pluma telescópica (port de craneModel() de la referencia).
 // Superestructura: marco con origen en el centro de giro; las alturas son las del chasis (y absoluta).
@@ -49,10 +49,12 @@ export function buildSuper(T: WheeledSpec, L: Layout, P: Parts) {
   // contrapeso: placas apiladas o torre de placas redondas
   if (T.cwStyle === 'stack') {
     P.box('dark', cw.x - cw.len / 2 - 0.2, cw.x + cw.len / 2 + 0.2, cw.y0, cw.y0 + 0.4, -cw.w - 0.2, cw.w + 0.2);
-    const np = Math.max(1, Math.round(cw.hgt / 0.42));
+    // torre de placas rectangulares (la referencia las dibuja redondas). Con lastre crecen con el montaje: van
+    // aparte (CraneModel, ballastPlates)
+    const np = L.ballast ? 0 : stackPlates(cw.hgt);
     for (let i = 0; i < np; i++) {
       const y = cw.y0 + 0.4 + i * 0.42;
-      P.cyl(i % 2 ? 'greyDark' : 'greyDeep', [cw.x, y, 0], [cw.x, y + 0.37, 0], cw.len / 2, 22);
+      P.box(i % 2 ? 'greyDark' : 'greyDeep', cw.x - cw.len / 2, cw.x + cw.len / 2, y, y + 0.37, -cw.w, cw.w);
     }
   } else {
     const n = T.ballast ? 1 : 3, sh = cw.hgt / n;
@@ -60,11 +62,11 @@ export function buildSuper(T: WheeledSpec, L: Layout, P: Parts) {
       P.box(i % 2 ? 'greyDeep' : 'dark', cw.x - cw.len / 2, cw.x + cw.len / 2, cw.y0 + i * sh, cw.y0 + (i + 1) * sh - (i < n - 1 ? 0.07 : 0), -cw.w, cw.w);
     }
   }
-  // cabrestante principal sobre el frente del contrapeso
+  // cabrestante principal sobre el frente del contrapeso (delante de la torre de lastre)
   const d = L.drum;
   for (const s of [-1, 1]) {
     const a = s * (d.hl + 0.05), b = s * (d.hl + 0.15);
-    P.box('black', d.x - 0.55, d.x + 0.55, cw.top, d.y + 0.3, Math.min(a, b), Math.max(a, b));
+    P.box('black', d.x - 0.55, d.x + 0.55, d.y0, d.y + 0.3, Math.min(a, b), Math.max(a, b));
   }
   P.cyl('drum', [d.x, d.y, -d.hl], [d.x, d.y, d.hl], d.r, 14);
   // cabina del operador (izquierda), con ménsula, cristales, techo y rotativo

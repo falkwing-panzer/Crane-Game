@@ -17,6 +17,10 @@ export class Input {
   onOutriggers: () => void = () => {};
   /** P: puenteo del LMI (ayuda de prueba, no está en la referencia) */
   onBypass: () => void = () => {};
+  /** B: lastre */
+  onBallast: () => void = () => {};
+  /** Y: arriostramiento en Y */
+  onYGuy: () => void = () => {};
   /** V: cambiar de cámara */
   onView: () => void = () => {};
 
@@ -27,6 +31,8 @@ export class Input {
       if (e.code === 'KeyO' && !e.repeat) { this.onOutriggers(); return; }
       if (e.code === 'KeyP' && !e.repeat) { this.onBypass(); return; }
       if (e.code === 'KeyV' && !e.repeat) { this.onView(); return; }
+      if (e.code === 'KeyB' && !e.repeat) { this.onBallast(); return; }
+      if (e.code === 'KeyY' && !e.repeat) { this.onYGuy(); return; }
       if (e.code === 'Space') {
         e.preventDefault();
         if (!e.repeat) this.onHook();

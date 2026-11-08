@@ -21,6 +21,8 @@ export interface OutriggerCtx {
   loadHanging: boolean;
   /** Motivo por el que no se pueden abrir los estabilizadores (padsBlocked de la referencia), o null */
   padsBlocked?: string | null;
+  /** Montajes que impiden recogerlos (lastre, Y-guy: outriggersLocked), o null */
+  locked?: string | null;
 }
 
 /** Tecla O. Devuelve el mensaje para el operador. */
@@ -35,6 +37,7 @@ export function toggleOutriggers(T: CraneSpec, C: CraneConfig, S: CraneState, ct
     return 'Desplegando estabilizadores';
   }
   if (ctx.loadHanging) return 'Apoya la carga antes de recoger los estabilizadores';
+  if (ctx.locked) return ctx.locked;
   if (lmiStatic(T, C, 'tire', S.Lb, S.ang, S.slew, T.hookM) >= 1) return 'LMI: sobre neumáticos la grúa no es estable así. Gira o retrae la pluma.';
   S.outT = 0;
   return 'Recogiendo estabilizadores';

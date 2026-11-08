@@ -12,7 +12,7 @@ export type WheeledId = (typeof WHEELED_IDS)[number];
 
 export interface CwDims { x: number; len: number; w: number; hgt: number }
 
-/** cwDims() de la referencia; cwS = avance del montaje del lastre (fase 5; ahora 0). */
+/** cwDims() de la referencia; cwS = avance del montaje del lastre (0 sin lastre, 1 montado). */
 export function cwDims(T: CraneSpec, cwS = 0): CwDims {
   if (T.cwStyle === 'stack') return { len: T.cwLen, w: T.cwLen / 2, hgt: 0.9 + 4.4 * cwS, x: T.xCw };
   if (T.ballast) return { len: T.cwLen * (0.35 + 0.65 * cwS), w: 1.45 + ((T.cwWide || 2.05) - 1.45) * cwS, hgt: 1.0 + 1.6 * cwS, x: T.xCw + T.cwLen * 0.65 * (1 - cwS) / 2 };
@@ -72,11 +72,18 @@ export interface Layout {
   /** Placa base: de yd + 0,12 a plateTop, con una ranura bajo el pie de pluma (rango x) de |z| < ancho/2 + 0,08 */
   plateTop: number;
   slot: [number, number];
+  /** Contrapeso base (sin lastre) */
   cw: CwDims & { y0: number; top: number; front: number };
+  /**
+   * Lastre (tecla B). 'slab': placas detrás del contrapeso base, hasta x1 (dejan libre el cabrestante);
+   * 'stack': torre de placas (rectangulares) con el cabrestante delante. null si la grúa no monta lastre.
+   */
+  ballast: { kind: 'slab' | 'stack'; x1: number } | null;
   opCab: Box3;
   housing: Box3 | null;
   rearBlock: Box3 | null;
-  drum: { x: number; y: number; r: number; hl: number };
+  /** Cabrestante: centro, radio, media longitud y base de sus soportes */
+  drum: { x: number; y: number; r: number; hl: number; y0: number };
   luffBase: { x: number; y: number };
   /** Radio de cola: lo más lejano de la superestructura al centro de giro (en planta) */
   tailR: number;
@@ -158,9 +165,19 @@ export function layout(T: WheeledSpec): Layout {
   const cwRear = cd.x - cd.len / 2;
   const cw = { ...cd, len: cwFront - cwRear, x: (cwFront + cwRear) / 2, y0: plateTop, front: cwFront,
     top: stack ? plateTop + 0.4 + Math.max(1, Math.round(cd.hgt / 0.42)) * 0.42 : plateTop + cd.hgt };
-  // Cabrestante sobre el frente del contrapeso (la referencia lo pone dentro del contrapeso)
+  // Cabrestante sobre el frente del contrapeso (la referencia lo pone dentro del contrapeso). Con torre de lastre
+  // (que crece 4,4 m) va delante de la torre, sobre el bloque trasero (aproximación visual).
   const dr = 0.42, hl = bw / 2 + 0.3;
-  const drum = { x: cwFront - dr - 0.1, y: cw.top + dr + 0.08, r: dr, hl };
+  const rbx1 = Math.min(T.foot - 0.75, boomBack - 0.12);
+  const rbTop = yd + 0.55;
+  const drumFront = !!T.ballast && stack;
+  const drum = drumFront
+    ? { x: cwFront + 0.6, y: rbTop + dr + 0.3, r: dr, hl, y0: rbTop }
+    : { x: cwFront - dr - 0.1, y: cw.top + dr + 0.08, r: dr, hl, y0: cw.top };
+  // Lastre en placas: detrás del contrapeso base y del cabrestante (aproximación visual: la referencia apila
+  // placas de todo el largo, que atravesarían el cabrestante)
+  const ballast: Layout['ballast'] = !T.ballast ? null : stack ? { kind: 'stack', x1: cwFront }
+    : { kind: 'slab', x1: Math.min(cwFront - T.cwLen * 0.35, drum.x - 0.6) };
   // Cabina del operador a la izquierda, por fuera de los soportes del pie de pluma (2,05 × 0,95 × 1,85 m de la
   // referencia; la AT 60 conserva la de 2,5 m de largo de la fase 3)
   const oz1 = -(bw / 2 + 0.42), oz0 = oz1 - 0.95;
@@ -169,13 +186,17 @@ export function layout(T: WheeledSpec): Layout {
     : { x0: 0.2, x1: 2.25, y0: yd + 0.4, y1: yd + 2.25, z0: oz0, z1: oz1 };
   const hz0 = bw / 2 + 0.42;
   const housing: Box3 | null = wide - hz0 > 0.25 ? { x0: cwFront, x1: front - 0.2, y0: plateTop, y1: yd + 1.45, z0: hz0, z1: wide } : null;
-  const rbx1 = Math.min(T.foot - 0.75, boomBack - 0.12);
-  const rearBlock: Box3 | null = rbx1 - cwFront > 0.15 ? { x0: cwFront, x1: rbx1, y0: plateTop, y1: yd + 0.55, z0: -wide, z1: wide } : null;
+  const rearBlock: Box3 | null = rbx1 - cwFront > 0.15 ? { x0: cwFront, x1: rbx1, y0: plateTop, y1: rbTop, z0: -wide, z1: wide } : null;
   const luffBase = { x: front - 0.9, y: plateTop + 0.05 };
   const corners: [number, number][] = [
     [cwRear - (stack ? 0.2 : 0), cw.w + (stack ? 0.2 : 0)], [cwRear + 0.2, wide], [front, wide],
     [opCab.x0, -opCab.z0], [opCab.x1, -opCab.z0], [drum.x - dr, hl + 0.15],
   ];
+  // radio de cola con el lastre completo
+  if (T.ballast) {
+    const c1 = cwDims(T, 1);
+    if (!stack) corners.push([c1.x - c1.len / 2, c1.w]); // la torre tiene la planta de la placa base (ya incluida)
+  }
   const tailR = Math.max(...corners.map(([x, z]) => Math.hypot(x, z)));
 
   // equipo de la cubierta: entre el radio de cola y el apoyo de pluma, por debajo de la pluma tumbada
@@ -187,7 +208,38 @@ export function layout(T: WheeledSpec): Layout {
 
   return {
     hf, fullCab, noCab, tireHalf: tw2, tireZ: hf - 0.07 - tw2, frameHalf: Math.min(0.8, hf - 0.07 - 2 * tw2 - 0.08), cab, restX, restH, freeGaps, engGap, outBox, deck, eye,
-    yd, wide, front, ringR, plateTop, slot, cw, opCab, housing, rearBlock, drum, luffBase, tailR,
+    yd, wide, front, ringR, plateTop, slot, cw, ballast, opCab, housing, rearBlock, drum, luffBase, tailR,
     bw, hu, tail, boomBottom0: T.pivH - hu / 2,
   };
 }
+
+/** Placas de lastre con el montaje al avance cwS (cwDims de la referencia; marco de la superestructura). */
+export function ballastPlates(T: CraneSpec, L: Layout, cwS: number): { boxes: Box3[]; stack: boolean } {
+  const boxes: Box3[] = [];
+  const b = L.ballast;
+  if (!b) return { boxes, stack: false };
+  const cd = cwDims(T, cwS);
+  if (b.kind === 'stack') {
+    // torre de placas sobre la placa base. La referencia las dibuja redondas; aquí son rectangulares (pedido de
+    // Jesús), con la planta del contrapeso de la referencia: largo cwLen (recortado) × ancho 2·w = cwLen.
+    const np = stackPlates(cd.hgt), c = L.cw;
+    for (let i = 0; i < np; i++) {
+      const y = c.y0 + 0.4 + i * 0.42;
+      boxes.push({ x0: c.x - c.len / 2, x1: c.x + c.len / 2, y0: y, y1: y + 0.37, z0: -c.w, z1: c.w });
+    }
+    return { boxes, stack: true };
+  } else {
+    // la referencia dibuja 1 + round(4·cwS) placas; la primera es el contrapeso base
+    const n = Math.round(4 * cwS), x0 = cd.x - cd.len / 2;
+    if (n > 0 && b.x1 - x0 > 0.05) {
+      const sh = cd.hgt / n;
+      for (let i = 0; i < n; i++) {
+        boxes.push({ x0, x1: b.x1, y0: L.cw.y0 + i * sh, y1: L.cw.y0 + (i + 1) * sh - (i < n - 1 ? 0.07 : 0), z0: -cd.w, z1: cd.w });
+      }
+    }
+  }
+  return { boxes, stack: false };
+}
+
+/** Placas de 0,42 m de la torre de lastre para una altura (como la referencia). */
+export const stackPlates = (hgt: number) => Math.max(1, Math.round(hgt / 0.42));
