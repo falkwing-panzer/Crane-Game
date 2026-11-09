@@ -334,6 +334,6 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - Pruebas en el navegador: no teletransportar la pluma (`S.slew = …` de golpe) con el gancho colgado: el salto da un
   tirón enorme en el cable y vuelca la grúa. Usar las teclas con `__gruas.advance`.
 - **Referencias visuales** de Jesús en `referencia/imagenes/` (ver `NOTAS.md`). Orden acordado: 6B → 7 → 8 → 8B
-  pulido de modelos → niveles.
+  remodelado y pulido de los vehículos, con el contrapeso de cada grúa → niveles.
   No pulir modelos antes.
 - Vite avisa que el bundle pasa de 500 kB por el wasm de Rapier embebido: esperado, no es un error.
