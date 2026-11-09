@@ -319,7 +319,7 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 
 - Fase 7 (AT 650-8 con lastre, Y-guy y plumín montados, pluma de 24 m a 46°): **146 draw calls** y ~30.600 triángulos
   (sombras incluidas), al límite de la meta de 150; render CPU ~3,4 ms con `gl.finish` en el panel de la app; física
-  0,18 ms por paso. AT 450-8 con lastre: 118. **Pendiente medir en la laptop.**
+  0,18 ms por paso. AT 450-8 con lastre: 118. **En la laptop de Jesús: 60 fps.**
 
 ### Pendientes
 - Al volcar la LR 3000, la bandeja del superlift se dibuja girando con la grúa (en física desaparece); debería quedarse en el suelo.
