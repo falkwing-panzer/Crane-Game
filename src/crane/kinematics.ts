@@ -10,7 +10,7 @@ export interface CraneState {
   /** Largo de cable de la cabeza al gancho (m) */
   cable: number;
   /** Velocidades actuales (con rampa) */
-  v: { slew: number; ang: number; Lb: number; cable: number };
+  v: { slew: number; ang: number; Lb: number; cable: number; jib: number };
   /** Estabilizadores: avance 0 (recogidos) … 1 (apoyados) y objetivo (outS / outT de la referencia) */
   out: number;
   outT: 0 | 1;
@@ -41,6 +41,11 @@ export interface CraneState {
   /** Arriostramiento en Y: avance 0…1 y objetivo (yg / ygT de la referencia) */
   yg: number;
   ygT: 0 | 1;
+  /** Plumín abatible (AT 650-8): avance del montaje 0…1 y objetivo (jg / jgT de la referencia) */
+  jg: number;
+  jgT: 0 | 1;
+  /** Ángulo del plumín respecto de la pluma (rad, + hacia abajo): ángulo absoluto = ang − jibRel (referencia) */
+  jibRel: number;
 }
 
 export interface CraneInput {
@@ -51,6 +56,8 @@ export interface CraneInput {
   fine: boolean;
   /** Radio del superlift: +1 alejar (L), −1 acercar (K) */
   sl?: number;
+  /** Plumín: +1 bajar (G), −1 subir (T) (jd − ju de la referencia) */
+  jib?: number;
 }
 
 /** Límites que impone el LMI en un paso (ver guard en step() de la referencia). */
@@ -67,12 +74,20 @@ export interface StepLimits {
   teleMax?: number;
   /** ¿El giro deja la superestructura (bandeja del superlift) tocando algo? Si es así, se deshace */
   slewBlocked?: (S: CraneState) => boolean;
+  /**
+   * Choque del plumín (boomHit de la referencia, más el suelo): cuánto toca (0 = libre). Si al final del paso toca
+   * y toca más que al principio, se deshace todo el paso (como Object.assign(S, prev) de la referencia); así un
+   * movimiento que lo aleja sigue permitido.
+   */
+  jibHit?: (S: CraneState) => number;
+  /** Se deshizo el paso por un choque del plumín */
+  onHit?: () => void;
 }
 
 export const CABLE_MIN = 1.2;
 export const CABLE_MAX = 70;
-/** Largo máximo de cable: 70 m, o hasta 3 m bajo el suelo si la cabeza está más alta (la referencia: punta + 3) */
-export const cableMax = (T: CraneSpec, S: Pick<CraneState, 'ang' | 'Lb'>) => Math.max(CABLE_MAX, T.pivH + S.Lb * Math.sin(S.ang) + 3);
+/** Largo máximo de cable: 70 m, o hasta 3 m bajo el suelo si la punta está más alta (la referencia: punta + 3) */
+export const cableMax = (T: CraneSpec, S: Pick<CraneState, 'ang' | 'Lb' | 'slew' | 'jg' | 'jibRel'>) => Math.max(CABLE_MAX, tipPos(T, S).y + 3);
 const RAMP = 0.4; // s para llegar a velocidad plena
 const FINE = 0.3; // factor de mando fino (igual que la referencia)
 /** Lo que se levanta el chasis con los estabilizadores apoyados (lift() de la referencia) */
@@ -84,10 +99,11 @@ export function initialState(T: CraneSpec): CraneState {
     // orugas: gancho a 4 m del suelo como la referencia (S.L = punta − 4); las de ruedas conservan los 4 m
     // de cable de la fase 0
     slew: 0, ang: (T.crawler ? 70 : 40) * Math.PI / 180, Lb: T.boom.min,
-    cable: T.crawler ? Math.max(4, T.pivH + T.boom.min * Math.sin(70 * Math.PI / 180) - 4 - 1.5) : 4, v: { slew: 0, ang: 0, Lb: 0, cable: 0 },
+    cable: T.crawler ? Math.max(4, T.pivH + T.boom.min * Math.sin(70 * Math.PI / 180) - 4 - 1.5) : 4, v: { slew: 0, ang: 0, Lb: 0, cable: 0, jib: 0 },
     out: 0, outT: 0, phi: 0, phiV: 0, edge: -1,
     x: 0, z: 0, h: 0, vd: 0, steer: 0, spin: 0, trackL: 0, trackR: 0, turnKey: false, sus: { pitch: 0, bank: 0, vp: 0, vb: 0 },
     cw: 0, cwT: 0, yg: 0, ygT: 0,
+    jg: 0, jgT: 0, jibRel: 20 * Math.PI / 180, // la referencia empieza con jibRel = 20°
   };
 }
 
@@ -105,6 +121,8 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
 export function stepCrane(T: CraneSpec, S: CraneState, inp: CraneInput, dt: number, lim?: StepLimits): boolean {
   const k = inp.fine ? FINE : 1;
   let cut = false;
+  const prev = { slew: S.slew, ang: S.ang, Lb: S.Lb, jibRel: S.jibRel };
+  const hit0 = lim?.jibHit && jibOn(T, S) ? lim.jibHit(S) : 0;
   const guard = (apply: () => void, undo: () => void) => {
     apply();
     if (!lim) return true;
@@ -138,6 +156,26 @@ export function stepCrane(T: CraneSpec, S: CraneState, inp: CraneInput, dt: numb
     const max = Math.max(o, Math.min(T.boom.max, lim?.teleMax ?? Infinity));
     if (!guard(() => { S.Lb = clamp(S.Lb + S.v.Lb * dt, T.boom.min, max); }, () => { S.Lb = o; })) S.v.Lb = 0;
     if (S.Lb === T.boom.min || S.Lb === max) S.v.Lb = 0;
+  }
+  // plumín abatible (T/G): con el guard del LMI; inclinada, solo subirlo
+  const jd = T.jibDef;
+  if (jd && jibOn(T, S)) {
+    S.v.jib = ramp(S.v.jib, inp.jib ?? 0, jd.spd * k, dt);
+    if (lim?.tilted) S.v.jib = Math.min(0, S.v.jib);
+    if (S.v.jib) {
+      const o = S.jibRel;
+      if (!guard(() => { S.jibRel = clamp(S.jibRel + S.v.jib * dt, jd.relMin, jd.relMax); }, () => { S.jibRel = o; })) S.v.jib = 0;
+      if (S.jibRel === jd.relMin || S.jibRel === jd.relMax) S.v.jib = 0;
+    }
+  } else S.v.jib = 0;
+  // choque del plumín con el entorno o el suelo: se deshace el paso
+  if (lim?.jibHit && jibOn(T, S)) {
+    const h = lim.jibHit(S);
+    if (h > 0 && h > hit0 + 1e-9) {
+      Object.assign(S, prev);
+      S.v.slew = S.v.ang = S.v.Lb = S.v.jib = 0;
+      lim.onHit?.();
+    }
   }
   // cable: subir la carga (hoist < 0) se corta si la carga supera la capacidad
   let hoist = inp.hoist;
@@ -177,4 +215,18 @@ export function headPos(T: CraneSpec, S: Pick<CraneState, 'slew' | 'ang' | 'Lb'>
     y: T.pivH + S.Lb * Math.sin(S.ang),
     z: -r * Math.sin(S.slew),
   };
+}
+
+/** Plumín montado y tensado (la referencia pone T.jib al llegar jg a 1). */
+export const jibOn = (T: CraneSpec, S: Pick<CraneState, 'jg'>) => !!T.jibDef && S.jg >= 1;
+
+/**
+ * Punta donde cuelga el cable (tipPos de la referencia), en el mismo marco que headPos: la cabeza o, con el plumín
+ * montado, el extremo del plumín (largo jibDef.len desde la cabeza, ángulo absoluto ang − jibRel).
+ */
+export function tipPos(T: CraneSpec, S: Pick<CraneState, 'slew' | 'ang' | 'Lb' | 'jg' | 'jibRel'>) {
+  const hd = headPos(T, S);
+  if (!jibOn(T, S)) return hd;
+  const J = T.jibDef!.len, ja = S.ang - S.jibRel, r = J * Math.cos(ja);
+  return { x: hd.x + r * Math.cos(S.slew), y: hd.y + J * Math.sin(ja), z: hd.z - r * Math.sin(S.slew) };
 }

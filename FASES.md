@@ -170,19 +170,41 @@ Antes de programar, dime el plan.
 
 ---
 
-## Fase 8B — Pulido de modelos (antes de los niveles)
+## Fase 8B — Remodelado y pulido de los vehículos, con el contrapeso de cada grúa (antes de los niveles)
 
 ```
-Lee CLAUDE.md. Fase 8B: pulir los modelos de todas las grúas con referencia/imagenes/NOTAS.md.
+Lee CLAUDE.md. Fase 8B: remodelar y pulir los modelos de todas las grúas con referencia/imagenes/NOTAS.md, y
+llevar el sistema de contrapeso nuevo (el de dos torres de la fase 7, contrapeso-torres.png) a cada grúa donde
+tenga sentido.
 
 1. Primero mide fps, draw calls y triángulos del peor caso (LR 3000, AT 650-8) en la laptop para saber
    cuánto margen hay.
-2. Detalles de forma de las imágenes (barandillas, escalerillas, motón amarrado al parachoques, etc.),
-   sin pasar la meta de rendimiento.
-3. Lo que no esté en la referencia (grúa de 5 ejes, modos de dirección): preguntar antes.
+2. Haz una tabla con las 11 grúas: qué contrapeso tiene hoy (bloque fijo, torre, placas, bandeja del
+   superlift, lastre de la SK 60) y qué forma propones para cada una:
+   - Grúas de ruedas sin lastre (City 25, AT 60, RT 90, AT 220): contrapeso compacto con el mismo estilo de
+     placas (chaflán, placas apiladas), sin torres si no caben.
+   - Orugas (LR 300, LR 3000): contrapeso de la superestructura y placas de la bandeja del superlift con el
+     mismo estilo.
+   - SK 60: el lastre de la grúa torre, si la fase 8 lo dejó simple.
+   Espera a que apruebe la tabla antes de programar.
+3. Solo cambia el dibujo: la masa, cwDims y la estabilidad siguen la referencia. Si una forma necesita un dato
+   que no está en la referencia, pregúntamelo.
+4. Remodelado de los vehículos: chasis, cabinas, guardabarros, superestructura y proporciones de cada grúa
+   comparadas con las imágenes de referencia/imagenes/, y detalles de forma (barandillas, escalerillas, motón
+   amarrado al parachoques, etc.).
+5. Lo que no esté en la referencia (grúa de 5 ejes, modos de dirección): preguntar antes.
+6. Revisa en cada grúa el radio de cola (tailR), que nada se atraviese en todo el recorrido de la pluma y al
+   girar, y los choques del contrapeso con obstáculos (tailBlocked); amplía las pruebas de models.test.ts y
+   models/crawler.test.ts.
+7. Mide fps, draw calls y triángulos del peor caso antes y después; no pases la meta de rendimiento
+   (unas 150 draw calls, 60 fps en la laptop).
 
+Si sale muy grande, divídela: primero contrapesos (2–3 y 6), luego remodelado y detalles (4–5).
 Antes de programar, dime el plan.
 ```
+
+Para revisar: cada grúa con su contrapeso propio y del mismo estilo; formas parecidas a las imágenes; nada
+atraviesa nada al girar; los fps siguen en 60 en la laptop.
 
 ---
 

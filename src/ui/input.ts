@@ -5,11 +5,11 @@ import type { DriveInput } from '../crane/drive';
 const KEYMAP: Record<string, string> = {
   KeyA: 'sll', KeyD: 'slr', KeyW: 'lu', KeyS: 'ld', KeyE: 'to', KeyQ: 'ti', KeyR: 'hu', KeyF: 'hd',
   ArrowUp: 'fw', ArrowDown: 'bk', ArrowLeft: 'stl', ArrowRight: 'str',
-  KeyK: 'sli', KeyL: 'slo',
+  KeyK: 'sli', KeyL: 'slo', KeyT: 'ju', KeyG: 'jd',
 };
 
 export class Input {
-  private k: Record<string, number> = { sll: 0, slr: 0, lu: 0, ld: 0, to: 0, ti: 0, hu: 0, hd: 0, fw: 0, bk: 0, stl: 0, str: 0, sli: 0, slo: 0 };
+  private k: Record<string, number> = { sll: 0, slr: 0, lu: 0, ld: 0, to: 0, ti: 0, hu: 0, hd: 0, fw: 0, bk: 0, stl: 0, str: 0, sli: 0, slo: 0, ju: 0, jd: 0 };
   private fine = false;
   onHook: () => void = () => {};
   /** X: reponer la carga (ayuda de prueba, no está en la referencia) */
@@ -24,6 +24,8 @@ export class Input {
   onYGuy: () => void = () => {};
   /** V: cambiar de cámara */
   onView: () => void = () => {};
+  /** M: montaje del plumín */
+  onMount: () => void = () => {};
 
   constructor() {
     addEventListener('keydown', (e) => {
@@ -34,6 +36,7 @@ export class Input {
       if (e.code === 'KeyV' && !e.repeat) { this.onView(); return; }
       if (e.code === 'KeyB' && !e.repeat) { this.onBallast(); return; }
       if (e.code === 'KeyY' && !e.repeat) { this.onYGuy(); return; }
+      if (e.code === 'KeyM' && !e.repeat) { this.onMount(); return; }
       if (e.code === 'Space') {
         e.preventDefault();
         if (!e.repeat) this.onHook();
@@ -55,7 +58,7 @@ export class Input {
 
   state(): CraneInput {
     const k = this.k;
-    return { slew: k.sll - k.slr, luff: k.lu - k.ld, tele: k.to - k.ti, hoist: k.hd - k.hu, fine: this.fine, sl: k.slo - k.sli };
+    return { slew: k.sll - k.slr, luff: k.lu - k.ld, tele: k.to - k.ti, hoist: k.hd - k.hu, fine: this.fine, sl: k.slo - k.sli, jib: k.jd - k.ju };
   }
 
   drive(): DriveInput {
