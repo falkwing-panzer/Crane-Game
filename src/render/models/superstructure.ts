@@ -48,9 +48,9 @@ export function buildSuper(T: WheeledSpec, L: Layout, P: Parts) {
   P.cyl('steel', [ft, T.pivH, -(bw / 2 + 0.45)], [ft, T.pivH, bw / 2 + 0.45], 0.12 + 0.06 * bw, 12);
   // contrapeso: placas apiladas o torre de placas redondas
   if (T.cwStyle === 'stack') {
-    P.box('dark', cw.x - cw.len / 2 - 0.2, cw.x + cw.len / 2 + 0.2, cw.y0, cw.y0 + 0.4, -cw.w - 0.2, cw.w + 0.2);
-    // torre de placas rectangulares (la referencia las dibuja redondas). Con lastre crecen con el montaje: van
-    // aparte (CraneModel, ballastPlates)
+    // con lastre, las dos torres (base, placas y bastidor central) van aparte: CraneModel, ballastPlates
+    if (!L.ballast) P.box('dark', cw.x - cw.len / 2 - 0.2, cw.x + cw.len / 2 + 0.2, cw.y0, cw.y0 + 0.4, -cw.w - 0.2, cw.w + 0.2);
+    // torre de placas rectangulares (la referencia las dibuja redondas)
     const np = L.ballast ? 0 : stackPlates(cw.hgt);
     for (let i = 0; i < np; i++) {
       const y = cw.y0 + 0.4 + i * 0.42;

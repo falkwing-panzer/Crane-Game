@@ -89,6 +89,10 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   K/L (guard del LMI, choques de la bandeja al girar, al cambiar el radio y al conducir); cámara, niebla y sombras escaladas
   para 108 m; cable hasta el suelo; amortiguamiento del cable para cargas de cientos de t. Carga de prueba de 800 t
   (`TEST_HEAVY`). Pruebas en `superlift.test.ts` y `models/crawler.test.ts`.
+- **Fase 7** (AT 650-8 y contrapeso nuevo): contrapeso de **dos torres** con hueco central, chaflán exterior trasero,
+  bastidor con barandilla y argollas en las 4 grúas con lastre; choque de las torres al girar y al montar el lastre.
+  AT 650-8 en el menú (generador de ruedas, torre de lastre, Y-guy). Plumín: montaje con M (32 s, por fases), T/G con el
+  guard del LMI, cable y gancho en la punta, choques con obstáculos, cargas sueltas y suelo. Pruebas en `jib.test.ts`.
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -108,22 +112,31 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - `src/crane/superlift.ts`: `stepSuperlift` (K/L, 0,5 m/s, guard del LMI y choque), `trayCorners`, `trayHitsTracks`. El radio
   vive en `C.slR`; `Physics.step(S, pose, slR)`, `CrawlerModel.update(S, pose, slR)`, `phys.trayBlocked(x, z, h, slew, slR)`.
   `StepLimits.slewBlocked` deshace un paso de giro si la bandeja choca.
+- `src/crane/kinematics.ts` (fase 7): `S.jg`/`jgT`/`jibRel`/`v.jib`, `jibOn(T, S)`, `tipPos` (punta del cable: cabeza o punta
+  del plumín; la usan la física, `cableMax` y el vuelco). `StepLimits.jibHit`/`onHit`: si el plumín toca más que al empezar el
+  paso, se deshace el paso entero (como `Object.assign(S, prev)` de la referencia).
 - `src/crane/ops.ts`: `supportMode(S, T)` (`out` solo con `out = 1`; `move` con |vd| > 0,05; orugas `crawlMove` en marcha o
   con la dirección pulsada, si no `crawler`), `toggleOutriggers` (condiciones de la referencia),
   `dynamicStability` (tensión en `gp`), `stepTilt` (phi de la referencia), `TIP_PHI` = 0,06.
 - `src/crane/assembly.ts`: `toggleBallast`/`toggleYGuy` (condiciones de la referencia), `stepAssembly` (avance de `S.cw`/`S.yg`
-  y `syncConfig` → `C.mCw`, `C.yOn`), `blockWhileAssembling`, `teleLimit` (35 m sin Y-guy), `outriggersLocked`, `yGuyPhase`.
+  y `syncConfig` → `C.mCw`, `C.yOn`), `blockWhileAssembling`, `teleLimit` (35 m sin Y-guy), `outriggersLocked`, `yGuyPhase`; plumín: `toggleMount`, `jibPhase`,
+  `JIB_REST_H`; `syncConfig` pasa `C.jib`/`C.jibRel`.
 - `src/crane/pose.ts`: `carrierPose` = `carrierFrame` (x, z, rumbo h) ∘ elevación y `phi` ∘ `suspensionPose`; `edgeAxis`
   (marco del chasis), `worldToCarrier`, `compose`, cuaterniones sin three.js.
 - `src/physics/world.ts`: mundo Rapier; `Physics.step(S, pose)`, `tension`/`gp`, `tipOver()`, `reset()`, `headWorld()`,
   `toggleHook()` (condiciones de enganche de la referencia), `resetLoads()` (tecla X; cada `Load` guarda su `home`),
-  `addObstacle`, `carrierBlocked(x, z, h)` y `padsBlocked(S)` (consultas `intersectionsWithShape`), `SITE_HALF` = 150 m.
+  `addObstacle`, `carrierBlocked(x, z, h)` y `padsBlocked(S)` (consultas `intersectionsWithShape`, sin contar el suelo), `SITE_HALF` = 150 m.
+  Fase 7: `towerBox(cw)`, `tailBlocked(S, slew, cw)` (torres de lastre; también son colisionadores de `supBody` que se
+  redimensionan con el montaje), `jibHits(S, pose)`, `jibGroundBlocked(S, pose)`, `placeHook` (el gancho salta debajo de la
+  nueva punta si el ancla del cable se mueve > 3 m en un paso).
 - `src/render/camera.ts` (`CameraRig`: modos de cámara y luz que sigue a la grúa), `site.ts` (obstáculos de prueba `TEST_OBSTACLES`).
 - `src/render/models/`: `layout.ts` (todas las cotas del modelo sin three.js: cabina, apoyo de pluma, cola de pluma, ranura de la
   placa, contrapeso `cwDims`, cabrestante, radio de cola `tailR`, `hookScale`/`hookFalls`, `WHEELED_IDS`), `carrier.ts` (chasis y
   cabina), `superstructure.ts` (superestructura, tramos, cabeza con poleas), `builder.ts` (`Parts`: caja, cilindro, extrusión de
   perfil; fusiona por material), `materials.ts` (paleta compartida, materiales por color), `ballastPlates(T, L, cw)` en
-  `layout.ts` (placas de lastre) y `yguy.ts` (`yGuyGeom` sin three.js, `YGuyView` instanciado en el grupo de la pluma).
+  `layout.ts` (placas de lastre) y `yguy.ts` (`yGuyGeom` sin three.js, `YGuyView` instanciado en el grupo de la pluma). Lastre (fase 7):
+  `towerPlan`/`towerOutline`/`ballastPlates` → `{ plates, frame, boxes }`. Plumín: `models/jib.ts` (`jibLattice`, `jibGeom` sin
+  three.js, `JibView` en el grupo de la superestructura).
 - Orugas: `models/crawlerLayout.ts` (cotas sin three.js: orugas, contorno de las tejas `loopPoint`, superestructura, pie de
   pluma, `derrick` y `tray` de la LR 3000), `models/lattice.ts` (`latticeSegs` genérica, `boomLattice`), `render/crawlerModel.ts` (`CrawlerModel`, misma
   interfaz que `CraneModel`: `update`, `eye`, `lateral`, `cab`).
@@ -258,6 +271,22 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - **Y-guy** (`yGuyModel` de la referencia, marco de la pluma): el cable delantero se ata en lo alto de la cabeza (`Lb + 0,1`), no
   1,1 m detrás como la referencia (con la pluma recogida quedaba dentro del tramo base). Sin masa en la estabilidad (referencia).
 
+- **Contrapeso de dos torres (fase 7)**: solo dibujo, dentro de la planta de `cwDims` (la masa no cambia). Hueco central
+  = 28 % de la media anchura (0,35–0,6 m); chaflán = 30 % del largo × 40 % del ancho de la torre. Placas instanciadas con una
+  geometría unitaria achaflanada (la torre izquierda se gira 180° en x, no se refleja). Las 2 placas de arriba del lastre
+  completo en el color de la grúa (lastre básico arriba, como la imagen). `stack` (AT 450-8, AT 650-8): pieza base de 0,4 m +
+  placas de 0,42 m; `slab` (AT 300-6, AT 500-8): las torres crecen en largo, ancho y alto detrás del contrapeso base, que
+  sigue llevando el cabrestante. `tailR` usa el contorno achaflanado.
+- **Choque del contrapeso** (no está en la referencia): las torres (cajas sin chaflán + 0,1 m) contra obstáculos y cargas
+  sueltas al girar (`slewBlocked`) y al pulsar B con el lastre completo. No al conducir (con lastre no se conduce).
+- **Plumín (fase 7)**: lógica de la referencia (`toggleMount`, avance `jg` en `jibDef.t`, `jibRel` al terminar para dejar la
+  punta a 0,7 m, T/G a `spd` con guard, `structCap` ≤ `jib.cap`). Disponible siempre con la AT 650-8 (en la referencia solo en
+  el nivel "Sobre la nave"); M en otra grúa avisa. **Añadido**: hace falta sitio en el suelo para armarlo (caja de 42 × 1,8 m
+  delante de la cabeza); choque del plumín con el suelo (eje a ≥ 0,5 m) además de obstáculos y cargas (8 cajas de 1,5 m).
+  Al montarlo el cable pasa a la punta y el gancho se coloca junto a ella en el suelo con 3 m de cable; al desmontar vuelve a
+  la cabeza con 4 m. El plumín empieza en la cabeza (la referencia lo dibuja 0,3 m más adelante) para que dibujo y física
+  coincidan. Sin colisionador en Rapier (la carga lo atraviesa, como la pluma).
+
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
   grúas grandes (fases 4–6): cabeza cinemática, izado a velocidad plena, estiramiento máximo del cable.
@@ -288,20 +317,23 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - Fase 6B (LR 3000, vista inicial, sombras incluidas): 86 draw calls y ~21.000 triángulos; render CPU ~1,8 ms; 60 fps en el panel
   de la app (con el panel visible). **En la laptop de Jesús: 60 fps.**
 
+- Fase 7 (AT 650-8 con lastre, Y-guy y plumín montados, pluma de 24 m a 46°): **146 draw calls** y ~30.600 triángulos
+  (sombras incluidas), al límite de la meta de 150; render CPU ~3,4 ms con `gl.finish` en el panel de la app; física
+  0,18 ms por paso. AT 450-8 con lastre: 118. **Pendiente medir en la laptop.**
+
 ### Pendientes
 - Al volcar la LR 3000, la bandeja del superlift se dibuja girando con la grúa (en física desaparece); debería quedarse en el suelo.
 - El superlift no cambia el ángulo del derrick (referencia); la bandeja no se puede desmontar (la LR 3000 "ya está montada").
 - `dampRope` y el filtro de 0,3 s afectan a todas las grúas: si un tirón se nota menos que antes, revisar `ROPE_DAMP`/`TENSION_TAU`.
-- Colisión de la carga con la pluma (no existe todavía).
-- Radio de cola: el contrapeso no choca con obstáculos al girar (`boomHit`/contrapeso de la referencia), ni la pluma.
-  Con lastre la cola llega a ~7,8 m en la AT 500-8; el colisionador de la superestructura no incluye el lastre.
+- Colisión de la carga con la pluma y el plumín (no existe todavía). La pluma principal no choca con obstáculos (el plumín sí).
+- AT 650-8: sin lastre, al subir el plumín apoyado con la pluma el LMI llega a ~90 % (modelo de la referencia).
 - Terreno (agua, barro, `offroad`) y límites reales de la obra llegan con los niveles (fase 9); ahora el límite es ±150 m.
 - `CLEARANCE` y la suspensión siguen siendo los de la AT 60; el colisionador de la superestructura (`supBox`) no cubre la
   cabina del operador. Revisar si molesta con otras grúas.
 - La caja despedida 45 m de la fase 1 no se reprodujo con el nuevo ajuste del solver; si vuelve a pasar, anotar cómo.
 - Pruebas en el navegador: no teletransportar la pluma (`S.slew = …` de golpe) con el gancho colgado: el salto da un
   tirón enorme en el cable y vuelca la grúa. Usar las teclas con `__gruas.advance`.
-- **Referencias visuales** de Jesús en `referencia/imagenes/` (ver `NOTAS.md`). Orden acordado: 6B → 7 (empieza por
-  el contrapeso de dos torres, compartido por todas las grúas con lastre) → 8 → 8B pulido de modelos → niveles.
+- **Referencias visuales** de Jesús en `referencia/imagenes/` (ver `NOTAS.md`). Orden acordado: 6B → 7 → 8 → 8B
+  pulido de modelos → niveles.
   No pulir modelos antes.
 - Vite avisa que el bundle pasa de 500 kB por el wasm de Rapier embebido: esperado, no es un error.

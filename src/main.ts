@@ -8,7 +8,7 @@ import { baseConfig, lmiStatic, ratedCap, reach } from './crane/stability';
 import { dynamicStability, stepTilt, supportMode, toggleOutriggers, TILTED_PHI, type Dyn } from './crane/ops';
 import { apply, carrierFrame, carrierPose, edgeAxis, rotate, worldToCarrier, type Pose } from './crane/pose';
 import { stepDrive, stepSuspension } from './crane/drive';
-import { blockWhileAssembling, outriggersLocked, stepAssembly, teleLimit, toggleBallast, toggleYGuy, yGuyPhase } from './crane/assembly';
+import { blockWhileAssembling, jibPhase, outriggersLocked, stepAssembly, teleLimit, toggleBallast, toggleMount, toggleYGuy, yGuyPhase } from './crane/assembly';
 import { CameraRig } from './render/camera';
 import { buildSite, TEST_HEAVY, TEST_OBSTACLES, TEST_SOFT } from './render/site';
 import { createScene } from './render/scene';
@@ -50,14 +50,17 @@ async function start() {
   const rig = new Rigging(ctx.scene, phys, T);
   // escala de la cámara con el largo del chasis; las orugas, con su pluma de celosía larga, más lejos
   // (la LR 3000, con 108 m de pluma, unas 3 veces la distancia de la AT 60)
-  const camSize = Math.max(isCrawler(T) ? Math.max(1.4, T.boom.max / 36) : 1, (T.len[1] - T.len[0]) / 12.3);
+  // con plumín (AT 650-8: 54 + 42 m), según el largo total
+  const camSize = Math.max(isCrawler(T) ? Math.max(1.4, T.boom.max / 36) : 1, (T.len[1] - T.len[0]) / 12.3,
+    T.jibDef ? (T.boom.max + T.jibDef.len) / 55 : 0);
   // encuadre de sombras: lo que llega la pluma más tumbada (y la bandeja del superlift), al menos ±45 m
   const shadowHalf = Math.max(45, T.foot + T.boom.max * Math.cos(T.boom.angMin) + 6,
+    T.jibDef ? T.foot + T.boom.min + T.jibDef.len + 8 : 0,
     T.superlift ? T.superlift.rMax + T.superlift.w / 2 + 4 : 0);
   const cam = new CameraRig(ctx, crane.cab, (s) => crane.eye(s), camSize, shadowHalf);
   const input = new Input();
   const hud = new Hud(document.getElementById('hud')!, T.name, id, MENU_IDS.map((k) => ({ id: k, name: CRANES[k].name })),
-    { ballast: !!T.ballast, yguy: !!T.yguy, outriggers: !!T.out, tele: T.boom.max > T.boom.min, superlift: !!T.superlift });
+    { ballast: !!T.ballast, yguy: !!T.yguy, outriggers: !!T.out, tele: T.boom.max > T.boom.min, superlift: !!T.superlift, jib: !!T.jibDef });
   hud.onCrane = (k) => {
     const u = new URL(location.href);
     u.searchParams.set('grua', k);
@@ -79,8 +82,13 @@ async function start() {
   input.onOutriggers = () => {
     if (!tipped()) hud.say(toggleOutriggers(T, C, S, { loadHanging: hanging(), padsBlocked: phys.padsBlocked(S), locked: outriggersLocked(S) }), 1.8);
   };
-  input.onBallast = () => { if (!tipped()) hud.say(toggleBallast(T, S, { loadHanging: hanging() }), 1.8); };
+  input.onBallast = () => {
+    if (!tipped()) hud.say(toggleBallast(T, S, { loadHanging: hanging(), tailBlocked: phys.tailBlocked(S, S.slew, 1) }), 1.8);
+  };
   input.onYGuy = () => { if (!tipped()) hud.say(toggleYGuy(T, S, { loadHanging: hanging() }), 2.2); };
+  input.onMount = () => {
+    if (!tipped()) hud.say(toggleMount(T, S, { loadAttached: !!phys.attached, groundBlocked: phys.jibGroundBlocked(S, pose) }), 2.4);
+  };
   input.onView = () => hud.say(cam.cycle(S, pose), 1.5);
   input.onBypass = () => {
     bypass = !bypass;
@@ -131,19 +139,26 @@ async function start() {
       // Como la referencia: los cortes usan el LMI estático; la carga cuenta solo si cuelga.
       const mEval = hanging() ? mLoad : T.hookM;
       const noHoistUp = !!att && lmiStatic(T, C, md, S.Lb, S.ang, S.slew, mLoad) >= 1;
+      let hitMsg = '';
       cut = stepCrane(T, S, inp, dt, {
-        lmi: bypass ? () => 0 : (s) => lmiStatic(T, C, md, s.Lb, s.ang, s.slew, mEval),
+        // C.jibRel sigue al ángulo del plumín que se está probando (T/G)
+        lmi: bypass ? () => 0 : (s) => { C.jibRel = s.jibRel; return lmiStatic(T, C, md, s.Lb, s.ang, s.slew, mEval); },
         L0: lmiStatic(T, C, md, S.Lb, S.ang, S.slew, mEval),
         noHoistUp: noHoistUp && !bypass,
         tilted: S.phi > TILTED_PHI, // la inclinación limita los movimientos aunque el LMI esté puenteado
         teleMax,
         // la bandeja del superlift no atraviesa obstáculos al girar (boomHit de la referencia)
-        slewBlocked: T.superlift ? (s) => {
-          const why = phys.trayBlocked(s.x, s.z, s.h, s.slew, C.slR);
+        // y las torres de lastre tampoco (no está en la referencia)
+        slewBlocked: T.superlift || T.ballast ? (s) => {
+          const why = phys.trayBlocked(s.x, s.z, s.h, s.slew, C.slR) ?? phys.tailBlocked(s, s.slew, s.cw);
           if (why) hud.sayOnce(why);
           return !!why;
         } : undefined,
+        // el plumín no atraviesa obstáculos, cargas sueltas ni el suelo
+        jibHit: T.jibDef ? (s) => { const r = phys.jibHits(s, pose); if (r.n) hitMsg = r.what; return r.n; } : undefined,
+        onHit: () => hud.sayOnce(hitMsg),
       });
+      C.jibRel = S.jibRel;
       // radio del superlift (K/L), con el guard del LMI y sin chocar
       if (T.superlift && inp.sl) {
         const why = stepSuperlift(T, C, inp.sl, inp.fine, dt, {
@@ -242,6 +257,7 @@ async function start() {
       ballast: T.ballast ? { t: T.ballast.m * S.cw, of: T.ballast.m, p: S.cw, target: S.cwT } : null,
       yguy: T.yguy ? { text: yGuyPhase(S.yg), p: S.yg } : null,
       superlift: T.superlift ? { r: C.slR, min: T.superlift.rMin, max: T.superlift.rMax } : null,
+      jib: T.jibDef ? { text: jibPhase(S.jg), p: S.jg, deg: ((S.ang - S.jibRel) * 180) / Math.PI, len: T.jibDef.len } : null,
     });
   }
   requestAnimationFrame(frame);

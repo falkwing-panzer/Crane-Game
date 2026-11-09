@@ -4,7 +4,7 @@ import { CRANES, type WheeledSpec } from '../../crane/cranes';
 import { initialState } from '../../crane/kinematics';
 import { carrierPose } from '../../crane/pose';
 import { CraneModel } from '../craneModel';
-import { ballastPlates, boomCorners, cwDims, layout, WHEELED_IDS, type Box3 } from './layout';
+import { ballastPlates, boomCorners, cwDims, layout, towerOutline, towerPlan, WHEELED_IDS, type Box3 } from './layout';
 import { yGuyGeom } from './yguy';
 import { sheaves } from './superstructure';
 
@@ -71,16 +71,43 @@ for (const id of WHEELED_IDS) {
       if (!L.ballast) { expect(ballastPlates(T, L, 1).boxes.length).toBe(0); return; }
       const d = L.drum, counts: number[] = [];
       for (let i = 0; i <= 20; i++) {
-        const { boxes } = ballastPlates(T, L, i / 20);
-        counts.push(boxes.length);
+        const { plates, boxes } = ballastPlates(T, L, i / 20);
+        counts.push(plates.length);
         for (const b of boxes) expect(b.x1).toBeLessThanOrEqual(d.x - 0.55 + 1e-9);
       }
       expect(new Set(counts).size).toBeGreaterThan(3); // aparecen placas a medida que se monta
       for (let i = 1; i < counts.length; i++) expect(counts[i]).toBeGreaterThanOrEqual(counts[i - 1]);
-      // el radio de cola cubre el lastre completo
-      const c1 = cwDims(T, 1);
-      for (const b of ballastPlates(T, L, 1).boxes) expect(L.tailR).toBeGreaterThanOrEqual(Math.hypot(b.x0, b.z1) - 1e-9);
-      if (L.ballast.kind === 'slab') expect(L.tailR).toBeGreaterThanOrEqual(Math.hypot(c1.x - c1.len / 2, c1.w));
+    });
+
+    if (L.ballast) it('contrapeso de dos torres: hueco central, chaflán, dentro de cwDims y bajo el radio de cola', () => {
+      for (const cwS of [0, 0.3, 0.7, 1]) {
+        const p = towerPlan(T, L.cw, L.ballast!, cwS);
+        if (!p) continue;
+        const cd = cwDims(T, cwS);
+        expect(p.zi).toBeGreaterThan(0.3); // hueco entre las torres
+        expect(p.zo).toBeCloseTo(cd.w, 9); // ancho total de la referencia
+        expect(p.chx).toBeGreaterThan(0);
+        expect(p.chz).toBeGreaterThan(0);
+        expect(p.xr).toBeGreaterThanOrEqual(cd.x - cd.len / 2 - 1e-9);
+        const { plates, frame } = ballastPlates(T, L, cwS);
+        // dos torres simétricas
+        expect(plates.filter((q) => q.side > 0).length).toBe(plates.filter((q) => q.side < 0).length);
+        for (const q of plates) {
+          expect(Math.min(Math.abs(q.box.z0), Math.abs(q.box.z1))).toBeCloseTo(p.zi, 9);
+          expect(Math.max(Math.abs(q.box.z0), Math.abs(q.box.z1))).toBeCloseTo(p.zo, 9);
+        }
+        // el bastidor y la barandilla van en el hueco
+        for (const f of frame.filter((x) => x.color !== 'lug')) expect(Math.max(Math.abs(f.box.z0), Math.abs(f.box.z1))).toBeLessThan(p.zi);
+        // radio de cola: cubre el contorno achaflanado de las torres (en su posición más atrás y ancha)
+        for (const [x, z] of towerOutline(p)) expect(L.tailR).toBeGreaterThanOrEqual(Math.hypot(x, z) - 1e-9);
+      }
+      // lastre completo: las dos placas de arriba de cada torre en el color de la grúa
+      const full = ballastPlates(T, L, 1).plates.filter((q) => q.side > 0);
+      expect(full.filter((q) => q.color === 'top').length).toBe(2);
+      expect(full[full.length - 1].color).toBe('top');
+      // el chaflán acorta el radio de cola respecto de la esquina sin recortar
+      const p1 = towerPlan(T, L.cw, L.ballast!, 1)!;
+      expect(Math.hypot(p1.xr, p1.zo)).toBeGreaterThan(Math.max(...towerOutline(p1).map(([x, z]) => Math.hypot(x, z))));
     });
 
     if (T.yguy) it('el arriostramiento en Y queda por encima de la pluma y sus cables llegan a la cabeza', () => {

@@ -1,9 +1,9 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import { SLING, bodyHalf, isCrawler, type CraneSpec } from '../crane/cranes';
-import { cwDims, hookScale } from '../render/models/layout';
+import { SLING, bodyHalf, isCrawler, type CraneSpec, type WheeledSpec } from '../crane/cranes';
+import { ballastPlates, cwDims, hookScale, layout, type Layout } from '../render/models/layout';
 import { crawlerLayout } from '../render/models/crawlerLayout';
 import { trayHitsTracks } from '../crane/superlift';
-import { carrierLift, headPos, type CraneState } from '../crane/kinematics';
+import { carrierLift, headPos, jibOn, tipPos, type CraneState } from '../crane/kinematics';
 import { craneMasses, supportRect, type CraneConfig, type SupportMode } from '../crane/stability';
 import { apply, axisAngle, mul, rotate, type Pose, type V3 } from '../crane/pose';
 import { padsOnSoft, terrainBlocked, type SoftZone } from '../crane/terrain';
@@ -64,12 +64,18 @@ export class Physics {
   slR: number;
   private slew = 0;
 
+  /** Suelo (las consultas de choques no lo cuentan: el suelo del plumín se mira aparte) */
+  private groundCol!: RAPIER.Collider;
   private chassisBody!: RAPIER.RigidBody;
   private supBody!: RAPIER.RigidBody;
   /** Bandeja del superlift (colisionador de la superestructura, se mueve con el radio) */
   private trayCol: RAPIER.Collider | null = null;
   private trayAt = NaN;
   private headBody!: RAPIER.RigidBody;
+  /** Torres de lastre (grúas de ruedas con lastre): colisionadores de la superestructura que crecen con el montaje */
+  private wheeledL: Layout | null = null;
+  private towerCols: RAPIER.Collider[] = [];
+  private towerAt = NaN;
   private cableJoint!: RAPIER.ImpulseJoint;
   private slingJoint: RAPIER.ImpulseJoint | null = null;
   /** Cabeza de pluma en el marco del cuerpo volcado */
@@ -84,6 +90,7 @@ export class Physics {
   constructor(private T: CraneSpec, S: CraneState, pose: Pose) {
     this.slR = T.superlift?.r0 ?? 0;
     this.slew = S.slew;
+    if (!isCrawler(T) && T.ballast) this.wheeledL = layout(T as WheeledSpec);
     const world = (this.world = new RAPIER.World({ x: 0, y: -G, z: 0 }));
     world.timestep = FIXED_DT;
     // Medido (fase 2): con 8 + 16 iteraciones internas el cable no se estira al izar ni con 200 t colgando
@@ -92,10 +99,10 @@ export class Physics {
     world.numInternalPgsIterations = 16;
 
     // Suelo
-    world.createCollider(RAPIER.ColliderDesc.cuboid(200, 0.5, 200).setTranslation(0, -0.5, 0).setFriction(0.8));
+    this.groundCol = world.createCollider(RAPIER.ColliderDesc.cuboid(200, 0.5, 200).setTranslation(0, -0.5, 0).setFriction(0.8));
 
     this.buildStanding(pose);
-    this.head = apply(pose, headPos(T, S));
+    this.head = apply(pose, tipPos(T, S));
 
     // Gancho
     const h = this.head;
@@ -168,6 +175,41 @@ export class Physics {
     return this.hitsSomething(pos, axisAngle(0, 1, 0, h + slew), shape) ? 'El lastre superlift golpearía un obstáculo' : null;
   }
 
+  /**
+   * Las dos torres de lastre al avance cwS (cajas envolventes, sin chaflán) en el marco de la superestructura:
+   * medias medidas y centro de la torre derecha (+z); la izquierda es la simétrica. null si no hay torres.
+   */
+  towerBox(cwS: number): { hx: number; hy: number; hz: number; cx: number; cy: number; cz: number } | null {
+    const L = this.wheeledL;
+    if (!L) return null;
+    const ps = ballastPlates(this.T, L, cwS).plates.filter((p) => p.side > 0).map((p) => p.box);
+    if (!ps.length) return null;
+    const x0 = Math.min(...ps.map((b) => b.x0)), x1 = Math.max(...ps.map((b) => b.x1));
+    const y0 = Math.min(...ps.map((b) => b.y0)), y1 = Math.max(...ps.map((b) => b.y1));
+    const z0 = Math.min(...ps.map((b) => b.z0)), z1 = Math.max(...ps.map((b) => b.z1));
+    return { hx: (x1 - x0) / 2, hy: (y1 - y0) / 2, hz: (z1 - z0) / 2, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, cz: (z0 + z1) / 2 };
+  }
+
+  /**
+   * ¿El contrapeso (las dos torres de lastre al avance cwS), con la grúa en S y el giro `slew`, toca un obstáculo o
+   * una carga suelta? (no está en la referencia: su boomHit no mira el contrapeso). Margen de 0,1 m.
+   */
+  tailBlocked(S: CraneState, slew: number, cwS: number): string | null {
+    const b = this.towerBox(cwS);
+    if (!b) return null;
+    const T = this.T, c = Math.cos(S.h), s = Math.sin(S.h), cs = Math.cos(slew), ss = Math.sin(slew);
+    const shape = new RAPIER.Cuboid(b.hx + 0.1, b.hy, b.hz + 0.1);
+    const rot = axisAngle(0, 1, 0, S.h + slew);
+    for (const side of [1, -1]) {
+      // superestructura → chasis (como trayCorners) → mundo
+      const lx = b.cx, lz = side * b.cz;
+      const px = T.piv + lx * cs + lz * ss, pz = -lx * ss + lz * cs;
+      const pos = { x: S.x + c * px + s * pz, y: b.cy + carrierLift(S), z: S.z - s * px + c * pz };
+      if (this.hitsSomething(pos, rot, shape)) return 'El contrapeso golpearía un obstáculo';
+    }
+    return null;
+  }
+
   /** ¿Hay sitio para las zapatas? (padsBlocked de la referencia, con un margen de 0,6 m alrededor). */
   padsBlocked(S: CraneState): string | null {
     const o = this.T.out;
@@ -182,12 +224,67 @@ export class Physics {
     return padsOnSoft(this.T, this.softs, S.x, S.z, S.h);
   }
 
+  /**
+   * Gancho debajo del punto `anchor` (mundo), quieto, a `cable` de distancia o apoyado en el suelo si no llega
+   * (al montar el plumín la punta queda a 0,7 m: el gancho se queda en el suelo con el cable flojo).
+   */
+  private placeHook(anchor: V3, cable: number) {
+    const y = Math.max(HOOK_HALF_H + 0.05, anchor.y - cable - HOOK_HALF_H);
+    const off = y > anchor.y - HOOK_HALF_H ? 1.2 : 0; // si la punta está muy baja, al lado y no debajo
+    this.hookBody.setTranslation({ x: anchor.x + off, y, z: anchor.z }, true);
+    this.hookBody.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+    this.hookBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    this.hookBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    this.trHook = newTrack();
+    this.headPrev = null;
+  }
+
+  /**
+   * Choque del plumín montado con la grúa en `pose` (boomHit de la referencia, que mira obstáculos y cargas sueltas
+   * con un margen; aquí también el suelo). Devuelve cuánto toca: 10 por metro bajo 0,5 m de altura de la punta y 1
+   * por cada uno de los 8 tramos que toca algo. 0 = libre.
+   */
+  jibHits(S: CraneState, pose: Pose): { n: number; what: string } {
+    const T = this.T, jd = T.jibDef;
+    if (!jd || !jibOn(T, S)) return { n: 0, what: '' };
+    const a = apply(pose, headPos(T, S)), b = apply(pose, tipPos(T, S));
+    let n = 0, what = '';
+    const low = Math.min(a.y, b.y);
+    if (low < JIB_MIN_H) { n += (JIB_MIN_H - low) * 10; what = 'El plumín tocaría el suelo'; }
+    const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z, len = Math.hypot(dx, dy, dz);
+    // el eje x de la caja a lo largo del plumín: primero el cabeceo (z), después el rumbo (y)
+    const rot = mul(axisAngle(0, 1, 0, Math.atan2(-dz, dx)), axisAngle(0, 0, 1, Math.atan2(dy, Math.hypot(dx, dz))));
+    const N = 8, shape = new RAPIER.Cuboid(len / N / 2, JIB_HALF, JIB_HALF);
+    for (let i = 0; i < N; i++) {
+      const k = (i + 0.5) / N;
+      if (this.hitsSomething({ x: a.x + dx * k, y: a.y + dy * k, z: a.z + dz * k }, rot, shape)) { n++; what = 'El plumín golpearía un obstáculo'; }
+    }
+    return { n, what };
+  }
+
+  /**
+   * ¿Se puede armar el plumín en el suelo? (no está en la referencia) Los tramos van delante de la cabeza, de 1,5 m a
+   * 1,5 m + largo, apoyados (1,5 m de alto y de ancho). Obstáculos, cargas sueltas y límite de la obra.
+   */
+  jibGroundBlocked(S: CraneState, pose: Pose): string | null {
+    const T = this.T, jd = T.jibDef;
+    if (!jd) return null;
+    const h = apply(pose, headPos(T, S)), th = S.h + S.slew;
+    const fx = Math.cos(th), fz = -Math.sin(th);
+    const end = { x: h.x + fx * (1.5 + jd.len), z: h.z + fz * (1.5 + jd.len) };
+    if (Math.max(Math.abs(end.x), Math.abs(end.z)) > SITE_HALF) return 'No hay sitio en la obra para armar el plumín';
+    const d = 1.5 + jd.len / 2;
+    const pos = { x: h.x + fx * d, y: 0.85, z: h.z + fz * d };
+    return this.hitsSomething(pos, axisAngle(0, 1, 0, th), new RAPIER.Cuboid(jd.len / 2, 0.75, 0.9))
+      ? 'Un obstáculo impide armar el plumín en el suelo: gira la pluma hacia un sitio libre' : null;
+  }
+
   private hitsSomething(pos: V3, rot: { x: number; y: number; z: number; w: number }, shape: RAPIER.Shape) {
     let hit = false;
     const own = new Set([this.chassisBody?.handle, this.supBody?.handle, this.headBody?.handle]);
     this.world.intersectionsWithShape(pos, rot, shape, () => { hit = true; return false; }, undefined, undefined, undefined, undefined,
       (col) => {
-        if (col.handle === this.hookCollider.handle) return false;
+        if (col.handle === this.hookCollider.handle || col.handle === this.groundCol.handle) return false;
         if (this.attached && col.handle === this.attached.collider.handle) return false;
         const b = col.parent();
         return !(b && own.has(b.handle));
@@ -209,6 +306,9 @@ export class Physics {
       .setTranslation(...xyz(apply(pose, { x: T.piv, y: 0, z: 0 }))).setRotation(pose.q));
     const b = this.supBox();
     world.createCollider(RAPIER.ColliderDesc.cuboid(b.hx, b.hy, b.hz).setTranslation(b.cx, b.cy, 0), this.supBody);
+    // torres de lastre: se dimensionan en step() según el avance del montaje
+    this.towerCols = this.wheeledL ? [1, -1].map(() => world.createCollider(RAPIER.ColliderDesc.cuboid(0.1, 0.1, 0.1).setFriction(0.8), this.supBody)) : [];
+    this.towerAt = NaN;
     const sl = T.superlift;
     if (sl) {
       this.trayCol = world.createCollider(RAPIER.ColliderDesc.cuboid(sl.d / 2, sl.h / 2, sl.w / 2)
@@ -281,7 +381,7 @@ export class Physics {
     this.slR = this.T.superlift?.r0 ?? 0;
     this.slew = S.slew;
     this.buildStanding(pose);
-    this.head = apply(pose, headPos(this.T, S));
+    this.head = apply(pose, tipPos(this.T, S));
     const h = this.head;
     this.hookBody.setTranslation({ x: h.x, y: h.y - S.cable - HOOK_HALF_H, z: h.z }, true);
     this.hookBody.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
@@ -301,12 +401,26 @@ export class Physics {
       this.trayCol.setTranslationWrtParent({ x: -slR, y: this.T.superlift!.h / 2, z: 0 });
       this.trayAt = slR;
     }
+    if (this.towerCols.length && this.towerAt !== S.cw && !this.tipped) {
+      const b = this.towerBox(S.cw);
+      this.towerCols.forEach((col, i) => {
+        const side = i ? -1 : 1;
+        col.setEnabled(!!b);
+        if (!b) return;
+        col.setHalfExtents({ x: b.hx, y: b.hy, z: b.hz });
+        col.setTranslationWrtParent({ x: b.cx, y: b.cy, z: side * b.cz });
+      });
+      this.towerAt = S.cw;
+    }
     if (!this.tipped) {
       this.chassisBody.setNextKinematicTranslation(pose.t);
       this.chassisBody.setNextKinematicRotation(pose.q);
       this.supBody.setNextKinematicTranslation(apply(pose, { x: this.T.piv, y: 0, z: 0 }));
       this.supBody.setNextKinematicRotation(mul(pose.q, axisAngle(0, 1, 0, S.slew)));
-      this.head = apply(pose, headPos(this.T, S));
+      const anchor = apply(pose, tipPos(this.T, S));
+      // el cable cambia de la cabeza a la punta del plumín (o al revés) al montarlo: el gancho se lleva debajo
+      if (Math.hypot(anchor.x - this.head.x, anchor.y - this.head.y, anchor.z - this.head.z) > 3) this.placeHook(anchor, S.cable);
+      this.head = anchor;
       this.headBody.setNextKinematicTranslation(this.head);
       // El rope joint de Rapier no expone setMaxDistance en JS: su largo es el límite del eje LinX.
       setRopeLength(this.cableJoint, S.cable);
@@ -425,7 +539,7 @@ export class Physics {
     // Orden de craneMasses: portador, superestructura, contrapeso, pluma, [plumín], [derrick], [superlift].
     const cwH = isCrawler(T) ? crawlerLayout(T).cw.y0 + cwDims(T, 0).hgt / 2 : T.deckHi + 1.05;
     const hs = [(T.deckLo + T.deckHi) / 2, T.deckHi + 1.0, cwH, T.pivH + (S.Lb / 2) * Math.sin(S.ang)];
-    if (C.jib) hs.push(T.pivH + S.Lb * Math.sin(S.ang));
+    if (C.jib) hs.push(T.pivH + S.Lb * Math.sin(S.ang) + (C.jib.len / 2) * Math.sin(S.ang - S.jibRel));
     if (T.derrick) hs.push(T.deckHi + 2.2 + (T.derrick.len / 2) * Math.sin(T.derrick.ang));
     const pts = craneMasses(T, C, S.Lb, S.ang, S.slew)
       .map(([m, x, y, r], i) => ({ m, x, y: hs[i] ?? T.pivH, z: -y, r }))
@@ -444,6 +558,7 @@ export class Physics {
     this.world.removeImpulseJoint(this.cableJoint, true);
     for (const b of [this.chassisBody, this.supBody, this.headBody]) world.removeRigidBody(b);
     this.trayCol = null; // la bandeja iba en supBody: desaparece de la física al volcar
+    this.towerCols = [];
 
     const body = world.createRigidBody(
       RAPIER.RigidBodyDesc.dynamic()
@@ -478,7 +593,7 @@ export class Physics {
     body.setLinvel({ x: w.y * rz - w.z * ry, y: w.z * rx - w.x * rz, z: w.x * ry - w.y * rx }, true);
 
     this.tipped = body;
-    const hp = headPos(T, S);
+    const hp = tipPos(T, S);
     this.headLocal = { x: hp.x, y: hp.y, z: hp.z };
     this.cableJoint = this.makeCable(body, this.headLocal, S.cable);
   }
@@ -544,6 +659,11 @@ export class Physics {
     return `Enganchada ${load.label} · ${load.mass.toFixed(1).replace('.', ',')} t`;
   }
 }
+
+/** Altura mínima del eje del plumín (la punta lleva poleas de 0,45 m) */
+const JIB_MIN_H = 0.5;
+/** Medio ancho de la caja de choques del plumín (celosía de 1,5 m con margen, como boomHit) */
+const JIB_HALF = 0.75;
 
 const xyz = (p: V3): [number, number, number] => [p.x, p.y, p.z];
 

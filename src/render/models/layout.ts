@@ -7,7 +7,7 @@ import { bodyHalf, type CraneSpec, type WheeledSpec } from '../../crane/cranes';
 // con el origen en el centro de giro (x = piv); la cabina del operador va a la izquierda (−z).
 
 /** Grúas de ruedas con modelo en esta fase (fase 4). */
-export const WHEELED_IDS = ['small', 'medium', 'rt', 'large', 'at300', 'at450', 'xl'] as const;
+export const WHEELED_IDS = ['small', 'medium', 'rt', 'large', 'at300', 'at450', 'xl', 'at650'] as const;
 export type WheeledId = (typeof WHEELED_IDS)[number];
 
 export interface CwDims { x: number; len: number; w: number; hgt: number }
@@ -188,15 +188,14 @@ export function layout(T: WheeledSpec): Layout {
   const housing: Box3 | null = wide - hz0 > 0.25 ? { x0: cwFront, x1: front - 0.2, y0: plateTop, y1: yd + 1.45, z0: hz0, z1: wide } : null;
   const rearBlock: Box3 | null = rbx1 - cwFront > 0.15 ? { x0: cwFront, x1: rbx1, y0: plateTop, y1: rbTop, z0: -wide, z1: wide } : null;
   const luffBase = { x: front - 0.9, y: plateTop + 0.05 };
+  // (con lastre, la placa base de la torre ya no sobresale 0,2 m: son las torres de towerPlan)
   const corners: [number, number][] = [
-    [cwRear - (stack ? 0.2 : 0), cw.w + (stack ? 0.2 : 0)], [cwRear + 0.2, wide], [front, wide],
+    [cwRear - (stack && !ballast ? 0.2 : 0), cw.w + (stack && !ballast ? 0.2 : 0)], [cwRear + 0.2, wide], [front, wide],
     [opCab.x0, -opCab.z0], [opCab.x1, -opCab.z0], [drum.x - dr, hl + 0.15],
   ];
-  // radio de cola con el lastre completo
-  if (T.ballast) {
-    const c1 = cwDims(T, 1);
-    if (!stack) corners.push([c1.x - c1.len / 2, c1.w]); // la torre tiene la planta de la placa base (ya incluida)
-  }
+  // radio de cola con el lastre completo: las dos torres con su chaflán
+  const tp = ballast && towerPlan(T, cw, ballast, 1);
+  if (tp) corners.push(...towerOutline(tp));
   const tailR = Math.max(...corners.map(([x, z]) => Math.hypot(x, z)));
 
   // equipo de la cubierta: entre el radio de cola y el apoyo de pluma, por debajo de la pluma tumbada
@@ -213,32 +212,107 @@ export function layout(T: WheeledSpec): Layout {
   };
 }
 
-/** Placas de lastre con el montaje al avance cwS (cwDims de la referencia; marco de la superestructura). */
-export function ballastPlates(T: CraneSpec, L: Layout, cwS: number): { boxes: Box3[]; stack: boolean } {
-  const boxes: Box3[] = [];
-  const b = L.ballast;
-  if (!b) return { boxes, stack: false };
+/**
+ * Planta de las dos torres de lastre (fase 7, referencia/imagenes/contrapeso-torres.png): una a cada lado de un
+ * bastidor central, con un hueco en medio y la esquina exterior trasera achaflanada. Solo es dibujo: ocupan la
+ * planta de cwDims() de la referencia (la masa no cambia). Marco de la superestructura; la torre izquierda es la
+ * simétrica (z → −z). null si con este avance todavía no hay placas.
+ */
+export interface TowerPlan {
+  /** Atrás y adelante (x) */
+  xr: number;
+  xf: number;
+  /** |z| del lado interior (hueco central) y exterior */
+  zi: number;
+  zo: number;
+  /** Chaflán de la esquina exterior trasera: lo que recorta en x y en z (fracción fija del largo y del ancho) */
+  chx: number;
+  chz: number;
+  /** Altura de la base de la torre (sobre la placa base de la superestructura) */
+  y0: number;
+  /** Pieza base de la torre (de y0 a y0 + base; 0 si no hay) y placas apiladas encima: [abajo, arriba] */
+  base: number;
+  plates: [number, number][];
+}
+
+/** Fracciones del chaflán (en planta) respecto del largo y del ancho de la torre */
+export const CHAMFER_X = 0.3;
+export const CHAMFER_Z = 0.4;
+/** Medio hueco entre las torres: un 28 % de la media anchura, entre 0,35 y 0,6 m (aproximación visual) */
+export const towerGap = (zo: number) => Math.max(0.35, Math.min(0.6, 0.28 * zo));
+
+export function towerPlan(T: CraneSpec, cw: Layout['cw'], ballast: NonNullable<Layout['ballast']>, cwS: number): TowerPlan | null {
   const cd = cwDims(T, cwS);
-  if (b.kind === 'stack') {
-    // torre de placas sobre la placa base. La referencia las dibuja redondas; aquí son rectangulares (pedido de
-    // Jesús), con la planta del contrapeso de la referencia: largo cwLen (recortado) × ancho 2·w = cwLen.
-    const np = stackPlates(cd.hgt), c = L.cw;
-    for (let i = 0; i < np; i++) {
-      const y = c.y0 + 0.4 + i * 0.42;
-      boxes.push({ x0: c.x - c.len / 2, x1: c.x + c.len / 2, y0: y, y1: y + 0.37, z0: -c.w, z1: c.w });
-    }
-    return { boxes, stack: true };
+  let xr: number, xf: number, base: number;
+  const plates: [number, number][] = [];
+  const y0 = cw.y0;
+  if (ballast.kind === 'stack') {
+    // torre que crece 4,4 m (cwDims) en placas de 0,42 m sobre una pieza base de 0,4 m
+    xr = cw.x - cw.len / 2;
+    xf = cw.front;
+    base = 0.4;
+    const np = stackPlates(cd.hgt);
+    for (let i = 0; i < np; i++) { const y = y0 + base + i * 0.42; plates.push([y, y + 0.37]); }
   } else {
-    // la referencia dibuja 1 + round(4·cwS) placas; la primera es el contrapeso base
-    const n = Math.round(4 * cwS), x0 = cd.x - cd.len / 2;
-    if (n > 0 && b.x1 - x0 > 0.05) {
-      const sh = cd.hgt / n;
-      for (let i = 0; i < n; i++) {
-        boxes.push({ x0, x1: b.x1, y0: L.cw.y0 + i * sh, y1: L.cw.y0 + (i + 1) * sh - (i < n - 1 ? 0.07 : 0), z0: -cd.w, z1: cd.w });
-      }
-    }
+    // placas detrás del contrapeso base (que lleva el cabrestante): crecen en largo, ancho y alto con cwDims
+    xr = cd.x - cd.len / 2;
+    xf = ballast.x1;
+    base = 0;
+    if (xf - xr <= 0.05) return null;
+    const np = Math.max(1, Math.round(cd.hgt / 0.42)), sh = cd.hgt / np;
+    for (let i = 0; i < np; i++) plates.push([y0 + i * sh, y0 + (i + 1) * sh - (i < np - 1 ? 0.05 : 0)]);
   }
-  return { boxes, stack: false };
+  const zo = cd.w, zi = towerGap(zo);
+  return { xr, xf, zi, zo, chx: CHAMFER_X * (xf - xr), chz: CHAMFER_Z * (zo - zi), y0, base, plates };
+}
+
+/** Contorno en planta (x, z) de la torre derecha (+z), con el chaflán. */
+export function towerOutline(p: TowerPlan): [number, number][] {
+  return [[p.xr + p.chx, p.zo], [p.xf, p.zo], [p.xf, p.zi], [p.xr, p.zi], [p.xr, p.zo - p.chz]];
+}
+
+/** Placa de una torre (caja envolvente; el dibujo recorta el chaflán). side: +1 derecha, −1 izquierda. */
+export interface Plate { box: Box3; side: 1 | -1; color: 'base' | 'grey' | 'top' }
+
+/** Bastidor central, barandillas y argollas (cajas) */
+export interface FramePart { box: Box3; color: 'frame' | 'rail' | 'lug' }
+
+/**
+ * Lastre con el montaje al avance cwS: placas de las dos torres, bastidor central con barandilla y argollas.
+ * `boxes` = todo junto (para las pruebas de choques). Las dos placas de arriba del lastre completo van en el color
+ * de la grúa (lastre básico arriba, como la imagen); las demás, grises.
+ */
+export function ballastPlates(T: CraneSpec, L: Layout, cwS: number): { plates: Plate[]; frame: FramePart[]; boxes: Box3[]; stack: boolean } {
+  const plates: Plate[] = [], frame: FramePart[] = [];
+  const b = L.ballast, stack = b?.kind === 'stack';
+  const p = b && towerPlan(T, L.cw, b, cwS);
+  if (!b || !p) return { plates, frame, boxes: [], stack };
+  const nFull = towerPlan(T, L.cw, b, 1)!.plates.length;
+  for (const side of [1, -1] as const) {
+    const z = (a: number, c: number) => (side > 0 ? { z0: a, z1: c } : { z0: -c, z1: -a });
+    const zz = z(p.zi, p.zo);
+    if (p.base > 0) plates.push({ box: { x0: p.xr, x1: p.xf, y0: p.y0, y1: p.y0 + p.base - 0.04, ...zz }, side, color: 'base' });
+    p.plates.forEach(([y0, y1], i) => {
+      plates.push({ box: { x0: p.xr, x1: p.xf, y0, y1, ...zz }, side, color: i >= nFull - 2 ? 'top' : 'grey' });
+    });
+    // argolla para izar la torre, arriba en el centro
+    const top = p.plates[p.plates.length - 1][1], xm = (p.xr + p.chx + p.xf) / 2, zm = (p.zi + p.zo) / 2;
+    const lh = Math.min(0.15, (p.xf - p.xr - p.chx) / 2);
+    frame.push({ box: { x0: xm - lh, x1: xm + lh, y0: top, y1: top + 0.22, ...z(zm - 0.06, zm + 0.06) }, color: 'lug' });
+  }
+  // bastidor central entre las torres y barandilla encima
+  const fh = stack ? 1.0 : Math.min(1.0, 0.5 * (p.plates[p.plates.length - 1][1] - p.y0));
+  const fz = p.zi - 0.05, fx0 = p.xr + 0.15, ft = p.y0 + fh;
+  // (al empezar a montar el lastre de placas las torres son todavía muy cortas: sin bastidor)
+  if (p.xf - fx0 < 0.5) return { plates, frame, boxes: [...plates.map((q) => q.box), ...frame.map((f) => f.box)], stack };
+  frame.push({ box: { x0: fx0, x1: p.xf, y0: p.y0, y1: ft, z0: -fz, z1: fz }, color: 'frame' });
+  const rz = fz - 0.08, rh = 1.0, t = 0.05;
+  for (const s of [-1, 1]) {
+    const z0 = s * rz - t / 2, z1 = s * rz + t / 2;
+    for (const x of [fx0 + 0.1, p.xf - 0.1]) frame.push({ box: { x0: x - t / 2, x1: x + t / 2, y0: ft, y1: ft + rh, z0, z1 }, color: 'rail' });
+    for (const y of [ft + rh - t, ft + rh / 2]) frame.push({ box: { x0: fx0 + 0.1, x1: p.xf - 0.1, y0: y, y1: y + t, z0, z1 }, color: 'rail' });
+  }
+  return { plates, frame, boxes: [...plates.map((q) => q.box), ...frame.map((f) => f.box)], stack };
 }
 
 /** Placas de 0,42 m de la torre de lastre para una altura (como la referencia). */

@@ -4,7 +4,7 @@
 // (mCw, yOn), así CRANES no se modifica.
 
 import type { CraneSpec } from './cranes';
-import type { CraneInput, CraneState } from './kinematics';
+import { carrierLift, type CraneInput, type CraneState } from './kinematics';
 import type { CraneConfig } from './stability';
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -13,6 +13,8 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
 export interface AssemblyCtx {
   /** Hay carga enganchada que no está apoyada */
   loadHanging: boolean;
+  /** Choque del lastre completo con algo (al montarlo), o null */
+  tailBlocked?: string | null;
 }
 
 /** Tecla B. Devuelve el mensaje para el operador. */
@@ -20,6 +22,7 @@ export function toggleBallast(T: CraneSpec, S: CraneState, ctx: AssemblyCtx): st
   if (!T.ballast) return 'Esta grúa no monta lastre';
   if (!S.cwT) {
     if (S.out < 1) return 'Despliega los estabilizadores antes de montar el lastre';
+    if (ctx.tailBlocked) return 'No hay sitio para el lastre: el contrapeso tocaría un obstáculo';
     S.cwT = 1;
     return `Montando lastre · ${T.ballast.m} t`;
   }
@@ -38,10 +41,36 @@ export function toggleYGuy(T: CraneSpec, S: CraneState, ctx: AssemblyCtx): strin
   return S.ygT ? 'Montando arriostramiento: brazos arriba → abrir → tensar' : 'Plegando arriostramiento';
 }
 
-/** Pasa el estado de montaje a la configuración de estabilidad (masa del contrapeso, Y-guy tensado). */
+/** Pasa el estado de montaje a la configuración de estabilidad (masa del contrapeso, Y-guy tensado, plumín). */
 export function syncConfig(T: CraneSpec, S: CraneState, C: CraneConfig) {
   if (T.ballast) C.mCw = (T.cwBase ?? T.mCw) + T.ballast.m * S.cw;
   C.yOn = !!T.yguy && S.yg >= 1;
+  C.jib = T.jibDef && S.jg >= 1 ? T.jibDef : null;
+  C.jibRel = S.jibRel;
+}
+
+const D = Math.PI / 180;
+/** Altura de la punta del plumín al terminar de montarlo (referencia: el plumín queda apoyado, punta a 0,7 m) */
+export const JIB_REST_H = 0.7;
+
+export interface MountCtx {
+  /** Hay carga enganchada (apoyada o no) */
+  loadAttached: boolean;
+  /** Motivo por el que no se puede armar el plumín en el suelo delante de la cabeza, o null */
+  groundBlocked: string | null;
+}
+
+/** Tecla M: montar o desmontar el plumín (toggleMount de la referencia). Devuelve el mensaje para el operador. */
+export function toggleMount(T: CraneSpec, S: CraneState, ctx: MountCtx): string {
+  if (!T.jibDef) return 'Esta grúa no lleva plumín';
+  if (S.out < 1) return 'Despliega los estabilizadores antes de montar el plumín';
+  if (ctx.loadAttached) return 'Suelta la carga antes de montar o desmontar el plumín';
+  if (S.Lb > T.boom.min + 0.3 || S.ang > 10 * D) return 'Para el plumín: pluma retraída del todo y casi horizontal (menos de 10°)';
+  if (S.jgT && S.jg >= 1 && S.jibRel < S.ang + 3 * D) return 'Baja el plumín hasta el suelo (G) antes de desmontarlo';
+  // (no está en la referencia) los tramos se arman en el suelo delante de la cabeza: tiene que haber sitio
+  if (!S.jgT && ctx.groundBlocked) return ctx.groundBlocked;
+  S.jgT = S.jgT ? 0 : 1;
+  return S.jgT ? 'Montaje del plumín: tramos en el suelo → bulonar → puntales → tensar' : 'Desmontando el plumín';
 }
 
 /** Avance de los montajes hacia su objetivo (como step() de la referencia). Devuelve un aviso o null. */
@@ -59,12 +88,30 @@ export function stepAssembly(T: CraneSpec, S: CraneState, C: CraneConfig, dt: nu
     if (g0 < 1 && S.yg >= 1) msg = 'Arriostramiento tensado: pluma larga habilitada';
     if (g0 > 0 && S.yg <= 0) msg = 'Arriostramiento plegado';
   }
+  const jd = T.jibDef;
+  if (jd) {
+    const g0 = S.jg;
+    S.jg = clamp(S.jg + clamp(S.jgT - S.jg, -dt / jd.t, dt / jd.t), 0, 1);
+    if (g0 < 1 && S.jg >= 1) {
+      // como la referencia: el plumín queda apoyado, con la punta a 0,7 m del suelo
+      const hy = T.pivH + S.Lb * Math.sin(S.ang) + carrierLift(S);
+      S.jibRel = clamp(S.ang + Math.asin(clamp((hy - JIB_REST_H) / jd.len, 0, 1)), jd.relMin, jd.relMax);
+      // el cable pasa a la punta del plumín: el gancho queda en el suelo junto a ella, con el cable flojo
+      S.cable = 3;
+      S.v.cable = 0;
+      msg = 'Plumín montado y tensado: súbelo con la pluma (W) y T/G';
+    }
+    // al empezar a desmontarlo, el cable vuelve a la cabeza de la pluma
+    if (g0 >= 1 && S.jg < 1) { S.cable = 4; S.v.cable = 0; }
+    if (g0 > 0 && S.jg <= 0) msg = 'Plumín desmontado';
+  }
   syncConfig(T, S, C);
   return msg;
 }
 
 /** Montaje en curso (no está en la referencia para el lastre: allí solo la torre y el plumín bloqueaban). */
-export function assembling(S: CraneState): 'lastre' | 'arriostramiento' | null {
+export function assembling(S: CraneState): 'lastre' | 'arriostramiento' | 'plumín' | null {
+  if (S.jg !== S.jgT) return 'plumín';
   if (S.yg !== S.ygT) return 'arriostramiento';
   if (S.cw !== S.cwT) return 'lastre';
   return null;
@@ -77,8 +124,8 @@ export function assembling(S: CraneState): 'lastre' | 'arriostramiento' | null {
 export function blockWhileAssembling(S: CraneState, inp: CraneInput): string | null {
   const what = assembling(S);
   if (!what) return null;
-  const tried = inp.slew || inp.luff || inp.tele || inp.hoist;
-  inp.slew = inp.luff = inp.tele = inp.hoist = 0;
+  const tried = inp.slew || inp.luff || inp.tele || inp.hoist || inp.jib;
+  inp.slew = inp.luff = inp.tele = inp.hoist = inp.jib = 0;
   return tried ? `Espera a que termine el montaje del ${what}` : null;
 }
 
@@ -91,6 +138,7 @@ export function teleLimit(T: CraneSpec, S: CraneState) {
 export function outriggersLocked(S: CraneState): string | null {
   if (S.cw > 0 || S.cwT) return 'Desmonta el lastre antes de recoger los estabilizadores (B)';
   if (S.yg > 0 || S.ygT) return 'Pliega el arriostramiento antes de recoger los estabilizadores (Y)';
+  if (S.jg > 0 || S.jgT) return 'Desmonta el plumín antes de recoger los estabilizadores (M)';
   return null;
 }
 
@@ -98,4 +146,11 @@ export function outriggersLocked(S: CraneState): string | null {
 export function yGuyPhase(yg: number) {
   const p = Math.round(yg * 100);
   return yg >= 1 ? 'tensado' : yg <= 0 ? 'plegado' : yg < 0.5 ? `levantando ${p} %` : yg < 0.8 ? `abriendo ${p} %` : `tensando ${p} %`;
+}
+
+/** Fase del montaje del plumín para el HUD (dibujo de la referencia: tramos hasta 45 %, bulonar, puntales 60–85 %, tensar). */
+export function jibPhase(jg: number) {
+  const p = Math.round(jg * 100);
+  return jg >= 1 ? 'montado' : jg <= 0 ? 'desmontado' : jg < 0.45 ? `tramos en el suelo ${p} %`
+    : jg < 0.6 ? `bulonando ${p} %` : jg < 0.85 ? `puntales ${p} %` : `tensando ${p} %`;
 }
