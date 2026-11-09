@@ -5,7 +5,7 @@ import type { Pose } from '../crane/pose';
 import { Parts } from './models/builder';
 import { palette } from './models/materials';
 import { crawlerLayout, loopLength, loopPoint, type CrawlerLayout } from './models/crawlerLayout';
-import { boomLattice, type Seg } from './models/lattice';
+import { boomLattice, latticeSegs, type Seg } from './models/lattice';
 import type { Eye } from './craneModel';
 
 // Grúa sobre orugas (fase 6): rama T.crawler de craneModel() en la referencia. Cada grupo rígido (tren de
@@ -54,6 +54,9 @@ export class CrawlerModel {
   private ropeA: THREE.Mesh;
   private ropeB: THREE.Mesh;
   private pendant: THREE.Mesh | null = null;
+  /** Bandeja del superlift (se coloca en x = −slR) y tirantes del derrick */
+  private tray = new THREE.Group();
+  private ties: THREE.InstancedMesh | null = null;
   private half: (d: number) => number;
   /** Piezas que se ocultan en la vista de cabina (la del operador: no hay cabina de conductor) */
   readonly cab: THREE.Object3D[] = [];
@@ -99,6 +102,43 @@ export class CrawlerModel {
     this.half = lat.half;
     bars(this.boom, lat.chords, pal.lattice);
     bars(this.boom, lat.diags, pal.latticeDiag);
+    // --- Derrick y superlift (LR 3000) ---
+    const dk = L.derrick;
+    if (dk) {
+      // mástil: grupo con origen en el bulón y eje x a lo largo del mástil (celosía colocada una sola vez)
+      const g = new THREE.Group();
+      g.position.set(dk.foot[0], dk.foot[1], 0);
+      g.rotation.z = dk.dirAng;
+      this.sup.add(g);
+      const dl = latticeSegs({
+        d0: 0, d1: dk.len, hw: (d) => (dk.w0 + (dk.w1 - dk.w0) * (d / dk.len)) / 2, bay: Math.max(1.6, dk.w0 * 1.1), stop: dk.len - 0.2,
+        rChord: 0.06 * Math.max(1, dk.w0 / 2), rDiag: 0.03 * Math.max(1, dk.w0 / 2),
+      });
+      bars(g, dl.chords, pal.lattice);
+      bars(g, dl.diags, pal.latticeDiag);
+      const dp = new Parts();
+      dp.box('dark', dk.len - 0.9, dk.len + 0.9, -0.9, 0.9, -1.0, 1.0);
+      dp.build(g, pal);
+    }
+    if (L.tray) {
+      const t = L.tray, tp = new Parts();
+      tp.box('dark', -t.d / 2, t.d / 2, 0, t.base, -t.w / 2, t.w / 2);
+      const ph = (t.h - t.base) / t.plates;
+      for (let i = 0; i < t.plates; i++) {
+        tp.box(i % 2 ? 'greyDark' : 'greyDeep', -t.d / 2 + 0.3, t.d / 2 - 0.3, t.base + i * ph, t.base + (i + 1) * ph - 0.06, -t.w / 2 + 0.3, t.w / 2 - 0.3);
+      }
+      for (const [x, z] of t.hangers) tp.box('dark', x - 0.2, x + 0.2, t.h, t.h + 0.3, z - 0.15, z + 0.15);
+      tp.build(this.tray, pal);
+      this.sup.add(this.tray);
+    }
+    if (dk) {
+      // tirantes: 2 del derrick a la cabeza de pluma, 1 al contrapeso y los de la bandeja (se recolocan cada cuadro)
+      this.ties = new THREE.InstancedMesh(cyl, pal.pendant, 3 + (L.tray?.hangers.length ?? 0));
+      this.ties.castShadow = true;
+      this.ties.frustumCulled = false;
+      this.sup.add(this.ties);
+    }
+
     const bp = new Parts();
     this.buildBoomParts(bp);
     bp.build(this.boom, pal);
@@ -169,6 +209,12 @@ export class CrawlerModel {
     P.box('glass', c.x0 + 0.35, c.x1 - 0.2, c.y0 + 0.75, c.y1 - 0.2, c.z0 - 0.04, c.z0);
     P.box('dark', c.x0 - 0.05, c.x1 + 0.05, c.y1, c.y1 + 0.08, c.z0, c.z1);
     P.cyl('beacon', [(c.x0 + c.x1) / 2, c.y1 + 0.08, (c.z0 + c.z1) / 2], [(c.x0 + c.x1) / 2, c.y1 + 0.25, (c.z0 + c.z1) / 2], 0.1, 8);
+    // soportes y bulón del pie del derrick
+    if (L.derrick) {
+      const dk = L.derrick;
+      for (const b of dk.brackets) P.box('yellowShade', b.x0, b.x1, b.y0, b.y1, b.z0, b.z1);
+      P.cyl('greyDeep', [dk.foot[0], dk.foot[1], -2.2], [dk.foot[0], dk.foot[1], 2.2], 0.25, 10);
+    }
     // caballete (A) y su tirante al contrapeso
     if (L.mast) {
       const [mx, my] = L.mast.top;
@@ -191,7 +237,8 @@ export class CrawlerModel {
     return { x: this.T.piv + e.x * c + e.z * s, y: e.y, z: -e.x * s + e.z * c, fx: c, fz: -s };
   }
 
-  update(S: CraneState, pose: Pose) {
+  /** slR = radio actual del superlift (C.slR); se ignora en la LR 300 */
+  update(S: CraneState, pose: Pose, slR = this.T.superlift?.r0 ?? 0) {
     const T = this.T, L = this.L;
     this.root.position.set(pose.t.x, pose.t.y, pose.t.z);
     this.root.quaternion.set(pose.q.x, pose.q.y, pose.q.z, pose.q.w);
@@ -213,6 +260,25 @@ export class CrawlerModel {
       _a.set(L.mast.top[0], L.mast.top[1], 0);
       bp(Lb - 0.6, this.half(Lb), _b);
       this.placeCyl(this.pendant, _a, _b, 0.03);
+    }
+    // derrick: tirantes a la cabeza de pluma, al contrapeso y a la bandeja del superlift
+    const dk = L.derrick;
+    if (dk && this.ties) {
+      let i = 0;
+      const [tx, ty] = dk.top;
+      for (const z of [-dk.pendantZ, dk.pendantZ]) {
+        _a.set(tx, ty, z);
+        bp(Lb - 0.8, 0, _b).setZ(z);
+        this.tie(i++, _a, _b, 0.07);
+      }
+      this.tie(i++, _a.set(tx, ty - 0.5, 0), _b.set(L.cw.x, L.cw.top, 0), 0.06);
+      if (L.tray) {
+        this.tray.position.x = -slR;
+        for (const [x, z] of L.tray.hangers) {
+          this.tie(i++, _a.set(tx, ty, Math.sign(z) * dk.hangerZ), _b.set(x - slR, L.tray.h + 0.3, z), 0.05);
+        }
+      }
+      this.ties.instanceMatrix.needsUpdate = true;
     }
     this.root.updateMatrixWorld();
   }
@@ -238,6 +304,15 @@ export class CrawlerModel {
   /** Eje lateral de la superestructura en el mundo (para repartir los ramales del gancho). */
   lateral(out: THREE.Vector3) {
     return out.setFromMatrixColumn(this.sup.matrixWorld, 2).normalize();
+  }
+
+  /** Coloca el tirante i (cilindro de a a b) en el InstancedMesh de tirantes. */
+  private tie(i: number, a: THREE.Vector3, b: THREE.Vector3, r: number) {
+    _dir.subVectors(b, a);
+    const len = _dir.length();
+    _q.setFromUnitVectors(_up, _dir.normalize());
+    _m4.compose(_p.addVectors(a, b).multiplyScalar(0.5), _q, _s.set(r, Math.max(0.01, len), r));
+    this.ties!.setMatrixAt(i, _m4);
   }
 
   private placeCyl(m: THREE.Mesh, a: THREE.Vector3, b: THREE.Vector3, r: number) {

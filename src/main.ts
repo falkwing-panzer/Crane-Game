@@ -10,7 +10,7 @@ import { apply, carrierFrame, carrierPose, edgeAxis, rotate, worldToCarrier, typ
 import { stepDrive, stepSuspension } from './crane/drive';
 import { blockWhileAssembling, outriggersLocked, stepAssembly, teleLimit, toggleBallast, toggleYGuy, yGuyPhase } from './crane/assembly';
 import { CameraRig } from './render/camera';
-import { buildSite, TEST_OBSTACLES, TEST_SOFT } from './render/site';
+import { buildSite, TEST_HEAVY, TEST_OBSTACLES, TEST_SOFT } from './render/site';
 import { createScene } from './render/scene';
 import { CraneModel } from './render/craneModel';
 import { CrawlerModel } from './render/crawlerModel';
@@ -18,9 +18,10 @@ import { Rigging } from './render/rigging';
 import { Physics, FIXED_DT } from './physics/world';
 import { Input } from './ui/input';
 import { Hud } from './ui/hud';
+import { stepSuperlift } from './crane/superlift';
 
-/** Grúas del menú: las de ruedas (fase 4) y la LR 300 (fase 6; la LR 3000 llega en la parte B) */
-const MENU_IDS: CraneId[] = [...WHEELED_IDS, 'crawler'];
+/** Grúas del menú: las de ruedas (fase 4) y las de orugas (fase 6) */
+const MENU_IDS: CraneId[] = [...WHEELED_IDS, 'crawler', 'lr'];
 
 const MODE_TEXT = { out: 'estabilizadores', tire: 'neumáticos', move: 'en marcha', crawler: 'orugas', crawlMove: 'orugas en marcha' };
 
@@ -42,14 +43,21 @@ async function start() {
   let pose: Pose = carrierPose(T, S, supportMode(S, T));
   const phys = new Physics(T, S, pose);
   for (const o of TEST_OBSTACLES) phys.addObstacle(o);
+  // carga pesada de prueba para la LR 3000 (hasta que lleguen los niveles)
+  if (T.superlift) phys.addLoad(TEST_HEAVY.label, TEST_HEAVY.mass, TEST_HEAVY.half, TEST_HEAVY.pos);
   phys.softs.push(...TEST_SOFT);
   buildSite(ctx.scene, phys.obstacles, phys.softs);
   const rig = new Rigging(ctx.scene, phys, T);
-  // escala de la cámara con el largo del chasis; las orugas, con su pluma de celosía larga, un poco más lejos
-  const cam = new CameraRig(ctx, crane.cab, (s) => crane.eye(s), Math.max(isCrawler(T) ? 1.4 : 1, (T.len[1] - T.len[0]) / 12.3));
+  // escala de la cámara con el largo del chasis; las orugas, con su pluma de celosía larga, más lejos
+  // (la LR 3000, con 108 m de pluma, unas 3 veces la distancia de la AT 60)
+  const camSize = Math.max(isCrawler(T) ? Math.max(1.4, T.boom.max / 36) : 1, (T.len[1] - T.len[0]) / 12.3);
+  // encuadre de sombras: lo que llega la pluma más tumbada (y la bandeja del superlift), al menos ±45 m
+  const shadowHalf = Math.max(45, T.foot + T.boom.max * Math.cos(T.boom.angMin) + 6,
+    T.superlift ? T.superlift.rMax + T.superlift.w / 2 + 4 : 0);
+  const cam = new CameraRig(ctx, crane.cab, (s) => crane.eye(s), camSize, shadowHalf);
   const input = new Input();
   const hud = new Hud(document.getElementById('hud')!, T.name, id, MENU_IDS.map((k) => ({ id: k, name: CRANES[k].name })),
-    { ballast: !!T.ballast, yguy: !!T.yguy, outriggers: !!T.out, tele: T.boom.max > T.boom.min });
+    { ballast: !!T.ballast, yguy: !!T.yguy, outriggers: !!T.out, tele: T.boom.max > T.boom.min, superlift: !!T.superlift });
   hud.onCrane = (k) => {
     const u = new URL(location.href);
     u.searchParams.set('grua', k);
@@ -89,7 +97,8 @@ async function start() {
     hud.showTipped(null);
     hud.say('Grúa reiniciada', 1.5);
   };
-  hud.say(T.crawler ? `${T.name} · flechas para conducir (← → gira en el sitio) · puede llevar la carga colgada · V cambia la cámara`
+  hud.say(T.superlift ? `${T.name} · K/L acercan o alejan el lastre superlift · la bandeja barre un círculo detrás · V cambia la cámara`
+    : T.crawler ? `${T.name} · flechas para conducir (← → gira en el sitio) · puede llevar la carga colgada · V cambia la cámara`
     : `${T.name} · flechas para conducir · O despliega los estabilizadores · V cambia la cámara`, 4);
 
   /** Un paso fijo de la lógica de la grúa y de la física. */
@@ -128,7 +137,22 @@ async function start() {
         noHoistUp: noHoistUp && !bypass,
         tilted: S.phi > TILTED_PHI, // la inclinación limita los movimientos aunque el LMI esté puenteado
         teleMax,
+        // la bandeja del superlift no atraviesa obstáculos al girar (boomHit de la referencia)
+        slewBlocked: T.superlift ? (s) => {
+          const why = phys.trayBlocked(s.x, s.z, s.h, s.slew, C.slR);
+          if (why) hud.sayOnce(why);
+          return !!why;
+        } : undefined,
       });
+      // radio del superlift (K/L), con el guard del LMI y sin chocar
+      if (T.superlift && inp.sl) {
+        const why = stepSuperlift(T, C, inp.sl, inp.fine, dt, {
+          lmi: () => (bypass ? 0 : lmiStatic(T, C, md, S.Lb, S.ang, S.slew, mEval)),
+          L0: bypass ? 0 : lmiStatic(T, C, md, S.Lb, S.ang, S.slew, mEval),
+          hit: (r) => phys.trayBlocked(S.x, S.z, S.h, S.slew, r),
+        });
+        if (why === 'lmi') { cut = true; } else if (why) hud.sayOnce(why);
+      }
       if (cut && !cutMsg) {
         hud.say(noHoistUp && inp.hoist < 0 ? 'LMI: la carga supera la capacidad en esta posición'
           : 'LMI: movimiento cortado · solo se permiten los que reducen el momento');
@@ -137,7 +161,7 @@ async function start() {
       stepOutriggers(T, S, dt);
       pose = carrierPose(T, S, supportMode(S, T));
     }
-    phys.step(S, pose);
+    phys.step(S, pose, C.slR);
     if (tipped()) {
       pose = phys.tippedPose()!;
       if (tipClock >= 0 && (tipClock += dt) >= CARD_DELAY) { hud.showTipped(tipText); tipClock = -1; }
@@ -186,7 +210,7 @@ async function start() {
   /** Dibuja el cuadro y actualiza el HUD (physMs = tiempo de física de este cuadro). */
   function draw(dt: number, physMs: number) {
     const t1 = performance.now();
-    crane.update(S, pose);
+    crane.update(S, pose, C.slR);
     rig.update(crane.lateral(_lat));
     cam.update(dt, S, pose);
     ctx.renderer.render(ctx.scene, ctx.camera);
@@ -217,6 +241,7 @@ async function start() {
       steerDeg: T.crawler ? null : (S.steer * 180) / Math.PI,
       ballast: T.ballast ? { t: T.ballast.m * S.cw, of: T.ballast.m, p: S.cw, target: S.cwT } : null,
       yguy: T.yguy ? { text: yGuyPhase(S.yg), p: S.yg } : null,
+      superlift: T.superlift ? { r: C.slR, min: T.superlift.rMin, max: T.superlift.rMax } : null,
     });
   }
   requestAnimationFrame(frame);

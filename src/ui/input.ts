@@ -5,10 +5,11 @@ import type { DriveInput } from '../crane/drive';
 const KEYMAP: Record<string, string> = {
   KeyA: 'sll', KeyD: 'slr', KeyW: 'lu', KeyS: 'ld', KeyE: 'to', KeyQ: 'ti', KeyR: 'hu', KeyF: 'hd',
   ArrowUp: 'fw', ArrowDown: 'bk', ArrowLeft: 'stl', ArrowRight: 'str',
+  KeyK: 'sli', KeyL: 'slo',
 };
 
 export class Input {
-  private k: Record<string, number> = { sll: 0, slr: 0, lu: 0, ld: 0, to: 0, ti: 0, hu: 0, hd: 0, fw: 0, bk: 0, stl: 0, str: 0 };
+  private k: Record<string, number> = { sll: 0, slr: 0, lu: 0, ld: 0, to: 0, ti: 0, hu: 0, hd: 0, fw: 0, bk: 0, stl: 0, str: 0, sli: 0, slo: 0 };
   private fine = false;
   onHook: () => void = () => {};
   /** X: reponer la carga (ayuda de prueba, no está en la referencia) */
@@ -54,7 +55,7 @@ export class Input {
 
   state(): CraneInput {
     const k = this.k;
-    return { slew: k.sll - k.slr, luff: k.lu - k.ld, tele: k.to - k.ti, hoist: k.hd - k.hu, fine: this.fine };
+    return { slew: k.sll - k.slr, luff: k.lu - k.ld, tele: k.to - k.ti, hoist: k.hd - k.hu, fine: this.fine, sl: k.slo - k.sli };
   }
 
   drive(): DriveInput {
