@@ -286,7 +286,7 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - Fase 6A (LR 300): 63 draw calls y ~11.600 triángulos (75 con la carga colgada); física ~0,2 ms, render CPU ~1 ms; 60 fps en
   el panel de la app. **Pendiente medir en la laptop.**
 - Fase 6B (LR 3000, vista inicial, sombras incluidas): 86 draw calls y ~21.000 triángulos; render CPU ~1,8 ms; 60 fps en el panel
-  de la app (con el panel visible). **Pendiente medir en la laptop.**
+  de la app (con el panel visible). **En la laptop de Jesús: 60 fps.**
 
 ### Pendientes
 - Al volcar la LR 3000, la bandeja del superlift se dibuja girando con la grúa (en física desaparece); debería quedarse en el suelo.
