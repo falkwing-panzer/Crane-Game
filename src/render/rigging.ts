@@ -71,9 +71,12 @@ export class Rigging {
     this.falls.frustumCulled = false;
     scene.add(this.falls);
 
-    const crateMat = new THREE.MeshLambertMaterial({ map: crateTexture() });
+    // un material por masa (la etiqueta de la textura dice las toneladas); las piezas pesadas, en acero
+    const mats = new Map<number, THREE.MeshLambertMaterial>();
     for (const l of phys.loads) {
-      const m = new THREE.Mesh(box, crateMat);
+      let mt = mats.get(l.mass);
+      if (!mt) mats.set(l.mass, (mt = new THREE.MeshLambertMaterial({ map: crateTexture(l.mass) })));
+      const m = new THREE.Mesh(box, mt);
       m.scale.set(l.half.x * 2, l.half.y * 2, l.half.z * 2);
       m.castShadow = m.receiveShadow = true;
       scene.add(m);
@@ -134,20 +137,21 @@ export class Rigging {
   }
 }
 
-function crateTexture() {
+function crateTexture(mass: number) {
+  const steel = mass >= 100;
   const c = document.createElement('canvas');
   c.width = c.height = 128;
   const g = c.getContext('2d')!;
-  g.fillStyle = '#9a6a3a';
+  g.fillStyle = steel ? '#8d969e' : '#9a6a3a';
   g.fillRect(0, 0, 128, 128);
-  g.strokeStyle = '#5e3d1d';
+  g.strokeStyle = steel ? '#4f565d' : '#5e3d1d';
   g.lineWidth = 8;
   g.strokeRect(4, 4, 120, 120);
   g.beginPath(); g.moveTo(8, 8); g.lineTo(120, 120); g.stroke();
   g.fillStyle = '#f4e7c8';
   g.font = 'bold 30px sans-serif';
   g.textAlign = 'center';
-  g.fillText('2 t', 64, 50);
+  g.fillText(`${mass.toLocaleString('es')} t`, 64, 50);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;

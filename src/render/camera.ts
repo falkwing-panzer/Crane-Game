@@ -25,13 +25,31 @@ export class CameraRig {
   private last = new THREE.Vector3();
   private yaw = 0;
   private look = new THREE.Vector3();
-  private sunAt = new THREE.Vector3();
+  private sunAt = new THREE.Vector3(1e9, 0, 0); // fuerza el primer centrado
+  /** Posición del sol respecto del centro del encuadre de sombras */
+  private sunOffset = SUN_OFFSET.clone();
 
   /**
    * cab = piezas que se ocultan en la vista de cabina; eye(S) = ojo y mirada en el marco del chasis;
-   * size = escala de las distancias de cámara (1 = AT 60)
+   * size = escala de las distancias de cámara (1 = AT 60); shadowHalf = medio lado del encuadre de sombras (m).
+   * Con un encuadre mayor que 45 m el sol se aleja en proporción, para que la pluma alta quede dentro.
    */
-  constructor(private ctx: SceneCtx, private cab: THREE.Object3D[], private eye: (S: CraneState) => Eye, private size = 1) {}
+  constructor(private ctx: SceneCtx, private cab: THREE.Object3D[], private eye: (S: CraneState) => Eye, private size = 1, shadowHalf = 45) {
+    const k = shadowHalf / 45, sc = ctx.sun.shadow.camera;
+    sc.left = sc.bottom = -shadowHalf;
+    sc.right = sc.top = shadowHalf;
+    sc.far = 140 * Math.max(1, k * 1.15);
+    sc.updateProjectionMatrix();
+    this.sunOffset.multiplyScalar(Math.max(1, k));
+    ctx.controls.maxDistance = Math.max(200, 75 * size);
+    if (size > 2) {
+      // grúa colosal (LR 3000): vista inicial más lejos y niebla más lejana
+      if (ctx.scene.fog instanceof THREE.Fog) { ctx.scene.fog.near = 60 * size; ctx.scene.fog.far = 420 + 40 * size; }
+      ctx.controls.target.set(0, 5 * size, 0);
+      ctx.camera.position.set(22 * size, 16 * size, 26 * size);
+      ctx.controls.update();
+    }
+  }
 
   cycle(S: CraneState, pose: Pose): string {
     this.mode = ORDER[(ORDER.indexOf(this.mode) + 1) % ORDER.length];
@@ -89,7 +107,7 @@ export class CameraRig {
     if (this.sunAt.distanceTo(c) > SUN_RECENTER) {
       this.sunAt.copy(c);
       sun.target.position.copy(c);
-      sun.position.copy(c).add(SUN_OFFSET);
+      sun.position.copy(c).add(this.sunOffset);
       sun.target.updateMatrixWorld();
     }
   }

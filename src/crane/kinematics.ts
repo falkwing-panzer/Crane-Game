@@ -49,6 +49,8 @@ export interface CraneInput {
   tele: number; // +1 extiende (E)
   hoist: number; // +1 baja gancho (F), -1 sube (R)
   fine: boolean;
+  /** Radio del superlift: +1 alejar (L), −1 acercar (K) */
+  sl?: number;
 }
 
 /** Límites que impone el LMI en un paso (ver guard en step() de la referencia). */
@@ -63,10 +65,14 @@ export interface StepLimits {
   tilted: boolean;
   /** Largo máximo de pluma permitido ahora (sin Y-guy tensado: yguy.teleMax) */
   teleMax?: number;
+  /** ¿El giro deja la superestructura (bandeja del superlift) tocando algo? Si es así, se deshace */
+  slewBlocked?: (S: CraneState) => boolean;
 }
 
 export const CABLE_MIN = 1.2;
 export const CABLE_MAX = 70;
+/** Largo máximo de cable: 70 m, o hasta 3 m bajo el suelo si la cabeza está más alta (la referencia: punta + 3) */
+export const cableMax = (T: CraneSpec, S: Pick<CraneState, 'ang' | 'Lb'>) => Math.max(CABLE_MAX, T.pivH + S.Lb * Math.sin(S.ang) + 3);
 const RAMP = 0.4; // s para llegar a velocidad plena
 const FINE = 0.3; // factor de mando fino (igual que la referencia)
 /** Lo que se levanta el chasis con los estabilizadores apoyados (lift() de la referencia) */
@@ -75,7 +81,10 @@ export const OUT_LIFT = 0.3;
 export function initialState(T: CraneSpec): CraneState {
   return {
     // la referencia empieza las orugas con la pluma a 70°
-    slew: 0, ang: (T.crawler ? 70 : 40) * Math.PI / 180, Lb: T.boom.min, cable: 4, v: { slew: 0, ang: 0, Lb: 0, cable: 0 },
+    // orugas: gancho a 4 m del suelo como la referencia (S.L = punta − 4); las de ruedas conservan los 4 m
+    // de cable de la fase 0
+    slew: 0, ang: (T.crawler ? 70 : 40) * Math.PI / 180, Lb: T.boom.min,
+    cable: T.crawler ? Math.max(4, T.pivH + T.boom.min * Math.sin(70 * Math.PI / 180) - 4 - 1.5) : 4, v: { slew: 0, ang: 0, Lb: 0, cable: 0 },
     out: 0, outT: 0, phi: 0, phiV: 0, edge: -1,
     x: 0, z: 0, h: 0, vd: 0, steer: 0, spin: 0, trackL: 0, trackR: 0, turnKey: false, sus: { pitch: 0, bank: 0, vp: 0, vb: 0 },
     cw: 0, cwT: 0, yg: 0, ygT: 0,
@@ -110,6 +119,7 @@ export function stepCrane(T: CraneSpec, S: CraneState, inp: CraneInput, dt: numb
   if (S.v.slew) {
     const o = S.slew;
     if (!guard(() => { S.slew += S.v.slew * dt; }, () => { S.slew = o; })) S.v.slew = 0;
+    else if (lim?.slewBlocked?.(S)) { S.slew = o; S.v.slew = 0; }
   }
   // pluma (inclinada: solo subir)
   S.v.ang = ramp(S.v.ang, inp.luff, T.spd.luff * k, dt);
@@ -135,7 +145,8 @@ export function stepCrane(T: CraneSpec, S: CraneState, inp: CraneInput, dt: numb
   S.v.cable = ramp(S.v.cable, hoist, T.spd.hoist * k, dt);
   S.cable += S.v.cable * dt;
   if (S.cable <= CABLE_MIN) { S.cable = CABLE_MIN; if (S.v.cable < 0) S.v.cable = 0; }
-  if (S.cable >= CABLE_MAX) { S.cable = CABLE_MAX; if (S.v.cable > 0) S.v.cable = 0; }
+  const cmax = cableMax(T, S);
+  if (S.cable >= cmax) { S.cable = cmax; if (S.v.cable > 0) S.v.cable = 0; }
   return cut;
 }
 

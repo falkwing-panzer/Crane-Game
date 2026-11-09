@@ -17,6 +17,9 @@ export const TEST_OBSTACLES: Obstacle[] = [
   { label: 'Contenedor', kind: 'container', half: { x: 3.03, y: 1.3, z: 1.22 }, pos: { x: 4, y: 1.3, z: -18 }, rotY: 0.25, color: '#7a3b33' },
 ];
 
+/** Carga pesada de prueba para la LR 3000: pieza de 800 t delante a la derecha, a unos 43 m del centro de giro */
+export const TEST_HEAVY = { label: 'Pieza', mass: 800, half: { x: 3, y: 2.5, z: 3 }, pos: { x: 40, y: 2.5, z: 16 } };
+
 /**
  * Terreno blando de prueba (fase 6), detrás de la grúa: barro (solo orugas y la RT 90) y, al lado, agua
  * (nadie). Colores de la referencia.

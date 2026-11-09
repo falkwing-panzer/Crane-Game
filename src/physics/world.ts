@@ -1,6 +1,8 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import { SLING, bodyHalf, type CraneSpec } from '../crane/cranes';
-import { hookScale } from '../render/models/layout';
+import { SLING, bodyHalf, isCrawler, type CraneSpec } from '../crane/cranes';
+import { cwDims, hookScale } from '../render/models/layout';
+import { crawlerLayout } from '../render/models/crawlerLayout';
+import { trayHitsTracks } from '../crane/superlift';
 import { carrierLift, headPos, type CraneState } from '../crane/kinematics';
 import { craneMasses, supportRect, type CraneConfig, type SupportMode } from '../crane/stability';
 import { apply, axisAngle, mul, rotate, type Pose, type V3 } from '../crane/pose';
@@ -58,9 +60,15 @@ export class Physics {
   gp = { x: 0, z: 0 };
   /** Cuerpo dinámico de la grúa volcada (null mientras está de pie) */
   tipped: RAPIER.RigidBody | null = null;
+  /** Radio actual del superlift (C.slR; se pasa en step) y giro de la superestructura */
+  slR: number;
+  private slew = 0;
 
   private chassisBody!: RAPIER.RigidBody;
   private supBody!: RAPIER.RigidBody;
+  /** Bandeja del superlift (colisionador de la superestructura, se mueve con el radio) */
+  private trayCol: RAPIER.Collider | null = null;
+  private trayAt = NaN;
   private headBody!: RAPIER.RigidBody;
   private cableJoint!: RAPIER.ImpulseJoint;
   private slingJoint: RAPIER.ImpulseJoint | null = null;
@@ -68,9 +76,14 @@ export class Physics {
   private headLocal: V3 = { x: 0, y: 0, z: 0 };
   private head: V3 = { x: 0, y: 0, z: 0 };
   private trHook = newTrack();
+  /** Cabeza en el paso anterior (velocidad de la cabeza para dampRope) */
+  private headPrev: V3 | null = null;
+  private cablePrev = 0;
   private trLoad = newTrack();
 
   constructor(private T: CraneSpec, S: CraneState, pose: Pose) {
+    this.slR = T.superlift?.r0 ?? 0;
+    this.slew = S.slew;
     const world = (this.world = new RAPIER.World({ x: 0, y: -G, z: 0 }));
     world.timestep = FIXED_DT;
     // Medido (fase 2): con 8 + 16 iteraciones internas el cable no se estira al izar ni con 200 t colgando
@@ -102,8 +115,8 @@ export class Physics {
     );
     this.cableJoint = this.makeCable(this.headBody, { x: 0, y: 0, z: 0 }, S.cable);
 
-    // Carga de prueba: caja de 2 t delante a la derecha de la grúa
-    this.addLoad('Caja', 2.0, { x: 1.0, y: 0.5, z: 0.7 }, { x: 9, y: 0.5, z: 6 });
+    // Carga de prueba: caja de 2 t delante a la derecha de la grúa (fuera del chasis de la LR 3000)
+    this.addLoad('Caja', 2.0, { x: 1.0, y: 0.5, z: 0.7 }, { x: Math.max(9, T.len[1] + 3), y: 0.5, z: 6 });
   }
 
   addObstacle(o: Obstacle) {
@@ -132,7 +145,27 @@ export class Physics {
     const cx = (L0 + L1) / 2, hy = (T.deckHi - CLEARANCE) / 2;
     const shape = new RAPIER.Cuboid((L1 - L0) / 2, hy, bodyHalf(T));
     const pos = { x: x + c * cx, y: CLEARANCE + hy, z: z - s * cx };
-    return this.hitsSomething(pos, axisAngle(0, 1, 0, h), shape) ? 'El chasis toca un obstáculo' : null;
+    if (this.hitsSomething(pos, axisAngle(0, 1, 0, h), shape)) return 'El chasis toca un obstáculo';
+    // la bandeja del superlift se arrastra con la grúa (no está en la referencia, que solo mira el chasis)
+    return T.superlift ? this.trayBlocked(x, z, h, this.slew, this.slR) : null;
+  }
+
+  /**
+   * ¿La bandeja del superlift, con el chasis en (x, z, h), el giro `slew` y el radio `slR`, toca un obstáculo,
+   * una carga suelta o las orugas? (parte superlift de boomHit en la referencia, que mira solo obstáculos).
+   * Lo que mide menos de 0,2 m de alto no cuenta.
+   */
+  trayBlocked(x: number, z: number, h: number, slew: number, slR: number): string | null {
+    const T = this.T, sl = T.superlift;
+    if (!sl) return null;
+    if (trayHitsTracks(T, slR, slew)) return 'El lastre superlift tocaría las orugas';
+    const c = Math.cos(h), s = Math.sin(h);
+    // centro de la bandeja: en el marco del chasis (piv − slR·cos slew, slR·sin slew), luego al mundo
+    const lx = T.piv - slR * Math.cos(slew), lz = slR * Math.sin(slew);
+    const pos = { x: x + c * lx + s * lz, y: 0.2 + (sl.h - 0.2) / 2, z: z - s * lx + c * lz };
+    if (Math.max(Math.abs(pos.x), Math.abs(pos.z)) + Math.hypot(sl.d, sl.w) / 2 > SITE_HALF) return 'Límite de la obra';
+    const shape = new RAPIER.Cuboid(sl.d / 2 + 0.2, (sl.h - 0.2) / 2, sl.w / 2 + 0.2);
+    return this.hitsSomething(pos, axisAngle(0, 1, 0, h + slew), shape) ? 'El lastre superlift golpearía un obstáculo' : null;
   }
 
   /** ¿Hay sitio para las zapatas? (padsBlocked de la referencia, con un margen de 0,6 m alrededor). */
@@ -174,15 +207,30 @@ export class Physics {
     this.chassisBody.setRotation(pose.q, false);
     this.supBody = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased()
       .setTranslation(...xyz(apply(pose, { x: T.piv, y: 0, z: 0 }))).setRotation(pose.q));
-    const [hx, cx, cy] = this.supBox();
-    world.createCollider(RAPIER.ColliderDesc.cuboid(hx, 0.85, 1.15).setTranslation(cx, cy, 0), this.supBody);
+    const b = this.supBox();
+    world.createCollider(RAPIER.ColliderDesc.cuboid(b.hx, b.hy, b.hz).setTranslation(b.cx, b.cy, 0), this.supBody);
+    const sl = T.superlift;
+    if (sl) {
+      this.trayCol = world.createCollider(RAPIER.ColliderDesc.cuboid(sl.d / 2, sl.h / 2, sl.w / 2)
+        .setTranslation(-this.slR, sl.h / 2, 0).setFriction(0.8), this.supBody);
+      this.trayAt = this.slR;
+    }
     this.headBody = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased());
   }
 
-  /** Caja de la plataforma giratoria + contrapeso en el marco de la superestructura: [medio largo, x, y]. */
-  private supBox(): [number, number, number] {
-    const T = this.T, px0 = T.xCw - T.cwLen / 2, px1 = 1.3;
-    return [(px1 - px0) / 2, (px0 + px1) / 2, T.deckHi + 1.05];
+  /**
+   * Caja de la plataforma giratoria + contrapeso en el marco de la superestructura (medias medidas y centro).
+   * Grúas de ruedas: la de la fase 2. Orugas: toda la plataforma (del contrapeso al frente, todo el ancho y
+   * hasta lo alto del contrapeso), con las cotas del modelo.
+   */
+  private supBox(): { hx: number; hy: number; hz: number; cx: number; cy: number } {
+    const T = this.T;
+    if (isCrawler(T)) {
+      const L = crawlerLayout(T), x0 = L.cw.x - L.cw.len / 2, x1 = L.front, y0 = L.yd, y1 = Math.max(L.cw.top, L.rearBody.y1);
+      return { hx: (x1 - x0) / 2, hy: (y1 - y0) / 2, hz: Math.max(L.wide, L.cw.w), cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 };
+    }
+    const px0 = T.xCw - T.cwLen / 2, px1 = 1.3;
+    return { hx: (px1 - px0) / 2, hy: 0.85, hz: 1.15, cx: (px0 + px1) / 2, cy: T.deckHi + 1.05 };
   }
 
   private makeCable(body: RAPIER.RigidBody, anchor: V3, len: number) {
@@ -230,6 +278,8 @@ export class Physics {
       this.world.removeImpulseJoint(this.cableJoint, true);
       for (const b of [this.chassisBody, this.supBody, this.headBody]) this.world.removeRigidBody(b);
     }
+    this.slR = this.T.superlift?.r0 ?? 0;
+    this.slew = S.slew;
     this.buildStanding(pose);
     this.head = apply(pose, headPos(this.T, S));
     const h = this.head;
@@ -244,7 +294,13 @@ export class Physics {
   }
 
   /** Un paso de física. `pose` = pose del portador según el modelo analítico (se ignora si ya volcó). */
-  step(S: CraneState, pose: Pose) {
+  step(S: CraneState, pose: Pose, slR = this.slR) {
+    this.slR = slR;
+    this.slew = S.slew;
+    if (this.trayCol && this.trayAt !== slR) {
+      this.trayCol.setTranslationWrtParent({ x: -slR, y: this.T.superlift!.h / 2, z: 0 });
+      this.trayAt = slR;
+    }
     if (!this.tipped) {
       this.chassisBody.setNextKinematicTranslation(pose.t);
       this.chassisBody.setNextKinematicRotation(pose.q);
@@ -256,9 +312,34 @@ export class Physics {
       setRopeLength(this.cableJoint, S.cable);
     }
     this.dampSling();
+    this.dampRope(S);
     this.world.step();
     if (this.tipped) this.head = this.bodyPoint(this.tipped, this.headLocal.x, this.headLocal.y, this.headLocal.z);
     this.measureTension(S);
+  }
+
+  /**
+   * Amortiguamiento interno del cable (fase 6B): con una carga colgada, frena la velocidad del gancho y de la
+   * carga A LO LARGO del cable que no corresponde a la del cabrestante (cambio de S.cable) ni a la de la cabeza.
+   * Sin él, al despegar 800 t la cadena cabeza–gancho–carga quedaba rebotando (±30 % de tensión durante todo
+   * el izado). No frena el péndulo: el balanceo es perpendicular al cable. Solo con el cable tenso.
+   */
+  private dampRope(S: CraneState) {
+    const L = this.attached, prev = this.headPrev, rate = (S.cable - this.cablePrev) / FIXED_DT;
+    this.headPrev = { ...this.head };
+    this.cablePrev = S.cable;
+    if (!L || !prev || this.tipped || this.touching(L)) return;
+    const tip = this.head, top = this.hookTop();
+    const dx = top.x - tip.x, dy = top.y - tip.y, dz = top.z - tip.z, dist = Math.hypot(dx, dy, dz);
+    if (dist < S.cable - 0.25 || dist < 0.5) return;
+    const nx = dx / dist, ny = dy / dist, nz = dz / dist;
+    const vh = (tip.x - prev.x) * nx + (tip.y - prev.y) * ny + (tip.z - prev.z) * nz;
+    for (const [b, m] of [[this.hookBody, this.T.hookM], [L.body, L.mass]] as const) {
+      const v = b.linvel();
+      const dev = v.x * nx + v.y * ny + v.z * nz - vh / FIXED_DT - rate;
+      const j = -ROPE_DAMP * dev * m;
+      b.applyImpulse({ x: j * nx, y: j * ny, z: j * nz }, true);
+    }
   }
 
   /**
@@ -296,16 +377,18 @@ export class Physics {
    * Así un balanceo o un tirón también cuentan. Punto de aplicación = gp de la referencia.
    * La aceleración sale de las POSICIONES (segunda diferencia): Rapier corrige el límite del rope moviendo
    * el cuerpo sin cambiar su velocidad, así que con linvel() un izado no se notaría.
+   * La segunda diferencia es de paso ACC_STEPS (0,1 s), no de un paso: al izar, esa corrección deja la
+   * velocidad en diente de sierra paso a paso (la carga "cae" g·dt y la junta la sube; ±1 cm) y, derivada
+   * paso a paso, daba ±150 % de tensión con 800 t en la LR 3000 (fase 6B). Con 0,1 s el tirón se sigue viendo.
    */
   private measureTension(S: CraneState) {
-    const dt = FIXED_DT;
+    const h = ACC_STEPS * FIXED_DT;
     const acc = (k: Track, p: V3) => {
-      // hacen falta dos pasos previos para tener velocidad y aceleración
-      const v = k.n > 0 ? { x: (p.x - k.p.x) / dt, y: (p.y - k.p.y) / dt, z: (p.z - k.p.z) / dt } : { x: 0, y: 0, z: 0 };
-      const a = k.n > 1 ? { x: (v.x - k.v.x) / dt, y: (v.y - k.v.y) / dt, z: (v.z - k.v.z) / dt } : { x: 0, y: 0, z: 0 };
-      k.n++;
-      k.p = { x: p.x, y: p.y, z: p.z }; k.v = v;
-      return a;
+      k.hist.push({ x: p.x, y: p.y, z: p.z });
+      if (k.hist.length > 2 * ACC_STEPS + 1) k.hist.shift();
+      if (k.hist.length < 2 * ACC_STEPS + 1) return { x: 0, y: 0, z: 0 }; // hace falta historia
+      const a0 = k.hist[0], a1 = k.hist[ACC_STEPS], a2 = k.hist[2 * ACC_STEPS];
+      return { x: (a2.x - 2 * a1.x + a0.x) / (h * h), y: (a2.y - 2 * a1.y + a0.y) / (h * h), z: (a2.z - 2 * a1.z + a0.z) / (h * h) };
     };
     const ah = acc(this.trHook, this.hookBody.translation());
     let fx = this.T.hookM * ah.x, fy = this.T.hookM * (ah.y + G), fz = this.T.hookM * ah.z;
@@ -317,9 +400,11 @@ export class Physics {
     const tip = this.head, top = this.hookTop();
     const dx = top.x - tip.x, dy = top.y - tip.y, dz = top.z - tip.z, dist = Math.hypot(dx, dy, dz) || 1;
     let t = 0;
-    if (dist >= S.cable - 0.02) t = Math.max(0, -(fx * dx + fy * dy + fz * dz) / dist) / G; // cable tenso
-    // Filtro de primer orden (~0,1 s): quita el ruido de derivar velocidades sin perder un tirón.
-    this.tension += (t - this.tension) * Math.min(1, dt / 0.1);
+    // cable tenso: tolerancia de 0,25 m porque al izar la junta deja el gancho unos cm más cerca de la cabeza que
+    // el largo nominal (con 2 cm la tensión de 800 t salía en 300–700 t); flojo de verdad, la fórmula ya da ~0
+    if (dist >= S.cable - 0.25) t = Math.max(0, -(fx * dx + fy * dy + fz * dz) / dist) / G;
+    // Filtro de primer orden (0,3 s; 0,1 s hasta la fase 6B): quita el ruido de derivar sin perder un tirón.
+    this.tension += (t - this.tension) * Math.min(1, FIXED_DT / TENSION_TAU);
     // gp: prolongación del cable hasta el suelo, a lo sumo 10 m de la punta (como la referencia)
     const k = tip.y / Math.max(0.5, tip.y - top.y);
     let gx = dx * k, gz = dz * k;
@@ -337,10 +422,14 @@ export class Physics {
     const T = this.T, world = this.world, lift = carrierLift(S);
     // Masas puntuales en el marco del chasis (x, altura, z). Las alturas son aproximaciones:
     // la referencia solo tiene el modelo en planta. Las de solo-estabilizar (superlift) se quedan en el suelo.
-    const hs = [(T.deckLo + T.deckHi) / 2, T.deckHi + 1.0, T.deckHi + 1.05, T.pivH + (S.Lb / 2) * Math.sin(S.ang)];
+    // Orden de craneMasses: portador, superestructura, contrapeso, pluma, [plumín], [derrick], [superlift].
+    const cwH = isCrawler(T) ? crawlerLayout(T).cw.y0 + cwDims(T, 0).hgt / 2 : T.deckHi + 1.05;
+    const hs = [(T.deckLo + T.deckHi) / 2, T.deckHi + 1.0, cwH, T.pivH + (S.Lb / 2) * Math.sin(S.ang)];
+    if (C.jib) hs.push(T.pivH + S.Lb * Math.sin(S.ang));
+    if (T.derrick) hs.push(T.deckHi + 2.2 + (T.derrick.len / 2) * Math.sin(T.derrick.ang));
     const pts = craneMasses(T, C, S.Lb, S.ang, S.slew)
-      .filter((p) => !p[3])
-      .map(([m, x, y], i) => ({ m, x, y: hs[i] ?? T.pivH, z: -y })); // marco del chasis: la elevación va en la pose
+      .map(([m, x, y, r], i) => ({ m, x, y: hs[i] ?? T.pivH, z: -y, r }))
+      .filter((p) => !p.r); // marco del chasis: la elevación va en la pose
     const M = pts.reduce((s, p) => s + p.m, 0);
     const com = { x: 0, y: 0, z: 0 };
     for (const p of pts) { com.x += p.m * p.x / M; com.y += p.m * p.y / M; com.z += p.m * p.z / M; }
@@ -354,6 +443,7 @@ export class Physics {
 
     this.world.removeImpulseJoint(this.cableJoint, true);
     for (const b of [this.chassisBody, this.supBody, this.headBody]) world.removeRigidBody(b);
+    this.trayCol = null; // la bandeja iba en supBody: desaparece de la física al volcar
 
     const body = world.createRigidBody(
       RAPIER.RigidBodyDesc.dynamic()
@@ -373,9 +463,9 @@ export class Physics {
     // superestructura y pluma, giradas con el slew actual alrededor del centro de giro
     const qs = axisAngle(0, 1, 0, S.slew);
     const at = (x: number, y: number) => { const p = rotate(qs, { x, y, z: 0 }); return { x: T.piv + p.x, y: p.y, z: p.z }; };
-    const [hx, cx, cy] = this.supBox();
-    const sp = at(cx, cy);
-    cub(hx, 0.85, 1.15, sp.x, sp.y, sp.z, qs);
+    const b = this.supBox();
+    const sp = at(b.cx, b.cy);
+    cub(b.hx, b.hy, b.hz, sp.x, sp.y, sp.z, qs);
     const c = Math.cos(S.ang), s = Math.sin(S.ang);
     const bp = at(T.foot + (S.Lb / 2) * c, T.pivH + (S.Lb / 2) * s);
     cub(S.Lb / 2, T.boom.w * 0.6, T.boom.w / 2, bp.x, bp.y, bp.z, mul(qs, axisAngle(0, 0, 1, S.ang)));
@@ -458,8 +548,14 @@ export class Physics {
 const xyz = (p: V3): [number, number, number] => [p.x, p.y, p.z];
 
 /** Seguimiento de posición para derivar velocidad y aceleración */
-interface Track { p: V3; v: V3; n: number }
-const newTrack = (): Track => ({ p: { x: 0, y: 0, z: 0 }, v: { x: 0, y: 0, z: 0 }, n: 0 });
+interface Track { hist: V3[] }
+const newTrack = (): Track => ({ hist: [] });
+/** Paso de la segunda diferencia de la tensión (6 pasos = 0,1 s) */
+const ACC_STEPS = 6;
+/** Constante de tiempo del filtro de la tensión (s) */
+const TENSION_TAU = 0.3;
+/** Fracción de la velocidad sobrante a lo largo del cable que se quita en cada paso (dampRope) */
+const ROPE_DAMP = 0.3;
 
 function setRopeLength(joint: RAPIER.ImpulseJoint, length: number) {
   const raw = (joint as unknown as { rawSet: { jointSetLimits(h: number, axis: number, min: number, max: number): void } }).rawSet;

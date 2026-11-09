@@ -156,7 +156,7 @@ export class CraneModel {
   }
 
   /** pose = pose del portador (elevación por estabilizadores, inclinación o cuerpo volcado de Rapier) */
-  update(S: CraneState, pose: Pose) {
+  update(S: CraneState, pose: Pose, _slR?: number) {
     const T = this.T, L = this.L;
     this.root.position.set(pose.t.x, pose.t.y, pose.t.z);
     this.root.quaternion.set(pose.q.x, pose.q.y, pose.q.z, pose.q.w);

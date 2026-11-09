@@ -36,6 +36,8 @@ export interface Readout {
   ballast: { t: number; of: number; p: number; target: number } | null;
   /** Y-guy: texto de la fase y avance 0…1 (null si no tiene) */
   yguy: { text: string; p: number } | null;
+  /** Radio del lastre superlift (m) y sus límites (null si no tiene) */
+  superlift: { r: number; min: number; max: number } | null;
 }
 
 /** Indicadores de montaje: verde montado, amarillo montando, gris desmontado. */
@@ -47,6 +49,10 @@ function assemblyLine(r: Readout) {
     out.push(`<span class="lamp ${cls(b.p)}">Lastre ${Math.round(b.t)} / ${b.of} t${moving ? (b.target ? ' · montando' : ' · desmontando') : ''}</span>`);
   }
   if (r.yguy) out.push(`<span class="lamp ${cls(r.yguy.p)}">Arriostr. Y ${r.yguy.text}</span>`);
+  if (r.superlift) {
+    const s = r.superlift;
+    out.push(`<span class="lamp ok">Superlift r ${s.r.toFixed(1).replace('.', ',')} m (${s.min}–${s.max})</span>`);
+  }
   return out.length ? `<div class="lamps">${out.join('')}</div>` : '';
 }
 
@@ -68,7 +74,7 @@ export class Hud {
   private renderAcc = 0;
 
   constructor(root: HTMLElement, private title: string, current: string, cranes: { id: string; name: string }[],
-    has = { ballast: false, yguy: false, outriggers: true, tele: true }) {
+    has = { ballast: false, yguy: false, outriggers: true, tele: true, superlift: false }) {
     const opts = cranes.map((c) => `<option value="${c.id}"${c.id === current ? ' selected' : ''}>${c.name}</option>`).join('');
     root.innerHTML = `
       <div class="panel perf" id="perf">— fps</div>
@@ -77,7 +83,7 @@ export class Hud {
       <div class="msg" id="msg"></div>
       <div class="panel keys">
         <b>Flechas</b> conducir · <b>A/D</b> giro · <b>W/S</b> pluma · ${has.tele ? '<b>Q/E</b> telescopio · ' : ''}<b>R/F</b> gancho ·
-        ${has.outriggers ? '<b>O</b> estabilizadores · ' : ''}${has.ballast ? '<b>B</b> lastre · ' : ''}${has.yguy ? '<b>Y</b> arriostramiento · ' : ''}<b>Espacio</b> enganchar/soltar · <b>X</b> reponer carga · <b>P</b> puentear LMI · <b>Shift</b> fino · <b>V</b> cámara
+        ${has.outriggers ? '<b>O</b> estabilizadores · ' : ''}${has.ballast ? '<b>B</b> lastre · ' : ''}${has.yguy ? '<b>Y</b> arriostramiento · ' : ''}${has.superlift ? '<b>K/L</b> radio superlift · ' : ''}<b>Espacio</b> enganchar/soltar · <b>X</b> reponer carga · <b>P</b> puentear LMI · <b>Shift</b> fino · <b>V</b> cámara
       </div>
       <div class="card" id="card" hidden>
         <h2>Grúa volcada</h2>

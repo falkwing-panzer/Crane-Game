@@ -48,6 +48,39 @@ export interface CrawlerLayout {
   /** Pie macizo de la pluma (perfil x-y en el marco de la pluma, extruido en |z| < footHalf) */
   foot: [number, number][];
   footHalf: number;
+  /** Mástil derrick (LR 3000), en el marco de la superestructura */
+  derrick: DerrickLayout | null;
+  /** Bandeja del superlift (LR 3000), centrada en x = 0: se coloca en x = −slR */
+  tray: TrayLayout | null;
+}
+
+export interface DerrickLayout {
+  /** Pie (bulón) del mástil en el plano x-y */
+  foot: [number, number];
+  /** Ángulo del eje del mástil sobre +x (π − ang: inclinado hacia atrás); la normal es el eje girado 90° */
+  dirAng: number;
+  len: number;
+  /** Ancho de la sección en el pie y en la punta (3,2 y 1,6 m en la referencia) */
+  w0: number;
+  w1: number;
+  /** Punta (donde se atan los tirantes) */
+  top: [number, number];
+  /** Soportes del pie sobre el cuerpo trasero */
+  brackets: Box3[];
+  /** Separación lateral (±) de los tirantes a la cabeza de pluma y de los de la bandeja */
+  pendantZ: number;
+  hangerZ: number;
+}
+
+export interface TrayLayout {
+  d: number;
+  w: number;
+  h: number;
+  /** Base de la bandeja (0 … base) y placas encima */
+  base: number;
+  plates: number;
+  /** Amarres de los tirantes sobre las placas, relativos al centro de la bandeja (x, z) */
+  hangers: [number, number][];
 }
 
 export function crawlerLayout(T: CrawlerSpec): CrawlerLayout {
@@ -98,10 +131,32 @@ export function crawlerLayout(T: CrawlerSpec): CrawlerLayout {
   const foot: [number, number][] = [[-0.3, -0.35], [2.4, -fh], [2.4, fh], [-0.3, 0.35]];
   const slot: [number, number] = [ft - 0.6, front];
 
+  // --- derrick y superlift (LR 3000): derrick de la referencia (pie en (foot, yd + 2,2), mástil a 180° − ang,
+  // celosía de 3,2 a 1,6 m). Soportes del pie: aproximación visual.
+  let derrick: DerrickLayout | null = null, tray: TrayLayout | null = null;
+  const dg = T.derrick, sl = T.superlift;
+  if (dg) {
+    const fx = dg.foot, fy = yd + 2.2, da = Math.PI - dg.ang;
+    const brackets: Box3[] = [-1, 1].map((sg) => {
+      const a = sg * 1.75, c = sg * 2.1;
+      return { x0: fx - 0.9, x1: fx + 0.9, y0: rearBody.y1, y1: fy + 0.5, z0: Math.min(a, c), z1: Math.max(a, c) };
+    });
+    derrick = {
+      foot: [fx, fy], dirAng: da, len: dg.len, w0: 3.2, w1: 1.6,
+      top: [fx + dg.len * Math.cos(da), fy + dg.len * Math.sin(da)], brackets, pendantZ: 1.2, hangerZ: 0.8,
+    };
+  }
+  if (sl) {
+    // Amarres: la referencia ata los tirantes en las 4 esquinas. Con el radio corto (15 m) los de delante
+    // atravesarían el contrapeso, así que van en la mitad trasera de la bandeja (aproximación visual).
+    const xr = -sl.d / 2 + 0.6, xm = -sl.d / 2 + 1.6, zz = sl.w / 2 - 0.6;
+    tray = { d: sl.d, w: sl.w, h: sl.h, base: 0.5, plates: 6, hangers: [[xr, -zz], [xr, zz], [xm, -zz], [xm, zz]] };
+  }
+
   return {
     kk, tracks, loop, rollers, carbody, crossbeams,
     yd, wide, front, ringR: T.ringR || 2.3, carRingR: T.ringR || 2.2, plateTop, slot, cw, rearBody, housing, drum, opCab, mast, tailR, eye,
-    bw, foot, footHalf: fh,
+    bw, foot, footHalf: fh, derrick, tray,
   };
 }
 

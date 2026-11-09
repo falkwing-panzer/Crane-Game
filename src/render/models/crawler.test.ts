@@ -103,3 +103,66 @@ describe('LR 300: modelo', () => {
     expect(-L.opCab.z1).toBeGreaterThan(L.bw / 2 + 0.36); // por fuera de los soportes del pie
   });
 });
+
+// LR 3000 (fase 6B): derrick, tirantes y bandeja del superlift.
+describe('LR 3000: modelo', () => {
+  const T3 = CRANES.lr as CrawlerSpec;
+  const L3 = crawlerLayout(T3);
+  const sl = T3.superlift!, dk = L3.derrick!;
+  const D3 = Math.PI / 180;
+
+  it('se construye con derrick y bandeja, sin NaN y con pocas mallas', () => {
+    const m = new CrawlerModel(T3);
+    const S = initialState(T3);
+    for (const r of [sl.rMin, sl.r0, sl.rMax]) m.update(S, carrierPose(T3, S, 'crawler'), r);
+    let meshes = 0;
+    m.root.traverse((o) => {
+      if (!(o instanceof THREE.Mesh)) return;
+      meshes++;
+      const p = o.geometry.attributes.position.array as Float32Array;
+      for (let i = 0; i < p.length; i++) if (!Number.isFinite(p[i])) throw new Error('NaN');
+      if (o instanceof THREE.InstancedMesh) {
+        const a = o.instanceMatrix.array;
+        for (let i = 0; i < o.count * 16; i++) if (!Number.isFinite(a[i])) throw new Error('NaN en instancias');
+      }
+    });
+    expect(meshes).toBeLessThan(60);
+    expect(L3.mast).toBeNull(); // lleva derrick, no caballete
+    // punta del derrick (referencia: pie en (−2; yd + 2,2), 60 m a 105° sobre +x)
+    expect(dk.top[0]).toBeCloseTo(-2 - 60 * Math.cos(75 * D3), 6);
+    expect(dk.top[1]).toBeCloseTo(T3.deckHi + 2.2 + 60 * Math.sin(75 * D3), 6);
+  });
+
+  it('el derrick no toca la pluma (45°–85°), el cuerpo trasero ni el contrapeso', () => {
+    const c = Math.cos(dk.dirAng), s = Math.sin(dk.dirAng), nx = -s, ny = c, rc = 0.1;
+    const h0 = dk.w0 / 2 + rc, h1 = dk.w1 / 2 + rc, [fx, fy] = dk.foot, [tx, ty] = dk.top;
+    const mast: V2[] = [[fx + nx * h0, fy + ny * h0], [tx + nx * h1, ty + ny * h1], [tx - nx * h1, ty - ny * h1], [fx - nx * h0, fy - ny * h0]];
+    const cw = L3.cw;
+    expect(overlap(mast, rectXY(L3.rearBody))).toBe(false);
+    expect(overlap(mast, rectXY({ x0: cw.x - cw.len / 2, x1: cw.x + cw.len / 2, y0: cw.y0, y1: cw.top }))).toBe(false);
+    const lat = boomLattice(L3.bw, T3.boom.min);
+    const toSup3 = (ang: number, [d, u]: V2): V2 => [T3.foot + d * Math.cos(ang) - u * Math.sin(ang), T3.pivH + d * Math.sin(ang) + u * Math.cos(ang)];
+    for (let a = T3.boom.angMin; a <= T3.boom.angMax + 1e-9; a += D3) {
+      const h0b = lat.half(2.4) + lat.chords[0].r, h1b = lat.half(T3.boom.min) + lat.chords[0].r;
+      const body: V2[] = [[-0.3, -h0b], [T3.boom.min + 0.3, -h1b], [T3.boom.min + 0.3, h1b], [-0.3, h0b]].map((p) => toSup3(a, p as V2));
+      expect(overlap(body, mast), `pluma a ${(a / D3).toFixed(0)}°`).toBe(false);
+    }
+  });
+
+  it('los tirantes de la bandeja no atraviesan el contrapeso en todo el radio (15–30 m)', () => {
+    const cw = L3.cw, t = L3.tray!, m = 0.06;
+    for (let r = sl.rMin; r <= sl.rMax + 1e-9; r += 0.5) {
+      for (const [x, z] of t.hangers) {
+        const a = [dk.top[0], dk.top[1], Math.sign(z) * dk.hangerZ], b = [x - r, t.h + 0.3, z];
+        for (let k = 0; k <= 200; k++) {
+          const u = k / 200, p = a.map((v, i) => v + (b[i] - v) * u);
+          const inside = Math.abs(p[0] - cw.x) < cw.len / 2 + m && p[1] > cw.y0 - m && p[1] < cw.top + m && Math.abs(p[2]) < cw.w + m;
+          expect(inside, `r = ${r}`).toBe(false);
+        }
+      }
+    }
+    // la bandeja pasa por debajo del contrapeso y de la plataforma al girar
+    expect(t.h + 0.3).toBeLessThan(cw.y0);
+    expect(t.h + 0.3).toBeLessThan(L3.yd + 0.3); // fondo de la plataforma
+  });
+});

@@ -84,8 +84,11 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   Pruebas en `assembly.test.ts` y `models.test.ts`.
 - **Fase 6, parte A** (LR 300): modelo de orugas con pluma de celosía instanciada y caballete, conducción sobre orugas
   (giro en el sitio, `crawler`/`crawlMove`, pick & carry al 45 %), terreno blando de prueba (barro y agua). Pruebas en
-  `crawler.test.ts` (conducción, terreno, física) y `models/crawler.test.ts`. **Falta la parte B**: LR 3000 (derrick,
-  superlift con K/L, choques de la bandeja, cámara y sombras para 108 m, cable con cargas de cientos de t, fps).
+  `crawler.test.ts` (conducción, terreno, física) y `models/crawler.test.ts`.
+- **Fase 6, parte B** (LR 3000): derrick de celosía con tirantes a la cabeza, al contrapeso y a la bandeja; superlift con
+  K/L (guard del LMI, choques de la bandeja al girar, al cambiar el radio y al conducir); cámara, niebla y sombras escaladas
+  para 108 m; cable hasta el suelo; amortiguamiento del cable para cargas de cientos de t. Carga de prueba de 800 t
+  (`TEST_HEAVY`). Pruebas en `superlift.test.ts` y `models/crawler.test.ts`.
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -102,6 +105,9 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   Orugas (`stepCrawl`): giro en el sitio a `spd.turn`, invertido marcha atrás; con carga 45 % de velocidad y 50 % de giro;
   `S.trackL`/`trackR` (recorrido de cada oruga, para las tejas) y `S.turnKey` (dirección pulsada).
 - `src/crane/terrain.ts`: `SoftZone` (barro/agua, centro y medidas como la referencia), `terrainBlocked`, `padsOnSoft`.
+- `src/crane/superlift.ts`: `stepSuperlift` (K/L, 0,5 m/s, guard del LMI y choque), `trayCorners`, `trayHitsTracks`. El radio
+  vive en `C.slR`; `Physics.step(S, pose, slR)`, `CrawlerModel.update(S, pose, slR)`, `phys.trayBlocked(x, z, h, slew, slR)`.
+  `StepLimits.slewBlocked` deshace un paso de giro si la bandeja choca.
 - `src/crane/ops.ts`: `supportMode(S, T)` (`out` solo con `out = 1`; `move` con |vd| > 0,05; orugas `crawlMove` en marcha o
   con la dirección pulsada, si no `crawler`), `toggleOutriggers` (condiciones de la referencia),
   `dynamicStability` (tensión en `gp`), `stepTilt` (phi de la referencia), `TIP_PHI` = 0,06.
@@ -119,7 +125,7 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   perfil; fusiona por material), `materials.ts` (paleta compartida, materiales por color), `ballastPlates(T, L, cw)` en
   `layout.ts` (placas de lastre) y `yguy.ts` (`yGuyGeom` sin three.js, `YGuyView` instanciado en el grupo de la pluma).
 - Orugas: `models/crawlerLayout.ts` (cotas sin three.js: orugas, contorno de las tejas `loopPoint`, superestructura, pie de
-  pluma), `models/lattice.ts` (`latticeSegs` genérica, `boomLattice`), `render/crawlerModel.ts` (`CrawlerModel`, misma
+  pluma, `derrick` y `tray` de la LR 3000), `models/lattice.ts` (`latticeSegs` genérica, `boomLattice`), `render/crawlerModel.ts` (`CrawlerModel`, misma
   interfaz que `CraneModel`: `update`, `eye`, `lateral`, `cab`).
 - `src/render/craneModel.ts` (`CraneModel`: grupos rígidos, llantas y estabilizadores instanciados, `eye(S)`, `lateral()`),
   `scene.ts`, `rigging.ts` (gancho escalado y 2/4 ramales).
@@ -227,6 +233,28 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - **Terreno blando**: solo las reglas de la referencia (no calcula presión al suelo, y no se inventó): nadie entra al agua;
   ruedas no entran al barro salvo `offroad` (RT 90); orugas sí; zapatas no en barro ni agua (margen 0,6 m). Zonas de prueba
   `TEST_SOFT` en `site.ts` detrás de la grúa hasta que lleguen los niveles.
+- **LR 3000 (fase 6B)**: derrick fijo a 75° como la referencia (no cambia con el radio del superlift); celosía de 3,2 a 1,6 m
+  colocada una vez; tirantes (2 a la cabeza, 1 al contrapeso, 4 a la bandeja) en **un** InstancedMesh que se recoloca cada
+  cuadro. Bandeja en el suelo (referencia), grupo hijo de la superestructura en x = −slR, y colisionador en `supBody`.
+  **Ajustes** (aproximación visual): los tirantes de la bandeja se atan en su mitad trasera, no en las esquinas (con 15 m
+  delante atravesarían el contrapeso); soportes del pie del derrick sobre el cuerpo trasero.
+- **Bandeja contra las orugas** (no está en la referencia): con `rMin` = 15 m y 7 × 10 m, entre 15 y 15,8 m de radio la bandeja
+  pisa la esquina de las orugas al girar unos 14–55°; se bloquea el giro/radio ("tocaría las orugas"). Por encima de 15,8 m, nunca.
+- **Choques de la bandeja**: obstáculos y cargas sueltas de más de 0,2 m (consulta de Rapier con margen 0,2 como `boomHit`);
+  también al conducir (la referencia solo miraba el chasis).
+- **Cable con cargas pesadas** (fase 6B): con 800 t el cable no se estira (< 6 cm), pero la cadena cabeza–gancho–carga quedaba
+  rebotando después del despegue y la tensión medida iba de 200 a 2.000 t al izar. Arreglo: (1) `dampRope`, amortiguamiento
+  interno del cable **a lo largo del cable** (quita el 30 % por paso de la velocidad radial que no es la del cabrestante ni la
+  de la cabeza; no frena el péndulo); (2) aceleración por segunda diferencia de paso 0,1 s (6 pasos), no de un paso; (3) cable
+  "flojo" solo si queda 0,25 m más corto (con 2 cm se perdían pasos al izar); (4) filtro de la tensión de 0,3 s (antes 0,1).
+  Resultado: ±15 % al izar 800 t a velocidad plena; en reposo exacto. Las pruebas de tirones de las fases 2–3 siguen pasando.
+- **Cable**: largo máximo = max(70 m, altura de la cabeza + 3) como la referencia (punta + 3). Las orugas empiezan con el gancho a
+  ~5 m del suelo (referencia: punta − 4); las de ruedas conservan los 4 m de cable de la fase 0.
+- **Cámara y sombras por grúa**: `CameraRig(…, size, shadowHalf)`. Encuadre de sombras = max(45, pie + pluma·cos(ángulo mínimo)
+  + 6, radio superlift + 9): LR 3000 ±85 m, LR 300 ±51 m, de ruedas hasta ~±60 m (antes ±45 fijo); el sol se aleja en
+  proporción y `far` crece. Orugas: `size` = max(1,4; pluma / 36) → LR 3000 ≈ 3 (vista inicial, niebla y `maxDistance`).
+- **Colisionador de la superestructura de las orugas**: toda la plataforma (del contrapeso al frente, ancho completo y alto del
+  contrapeso), con las cotas de `crawlerLayout`. En el vuelco, alturas de contrapeso y derrick con esas cotas.
 - **Y-guy** (`yGuyModel` de la referencia, marco de la pluma): el cable delantero se ata en lo alto de la cabeza (`Lb + 0,1`), no
   1,1 m detrás como la referencia (con la pluma recogida quedaba dentro del tramo base). Sin masa en la estabilidad (referencia).
 
@@ -257,11 +285,13 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 
 - Fase 6A (LR 300): 63 draw calls y ~11.600 triángulos (75 con la carga colgada); física ~0,2 ms, render CPU ~1 ms; 60 fps en
   el panel de la app. **Pendiente medir en la laptop.**
+- Fase 6B (LR 3000, vista inicial, sombras incluidas): 86 draw calls y ~21.000 triángulos; render CPU ~1,8 ms; 60 fps en el panel
+  de la app (con el panel visible). **Pendiente medir en la laptop.**
 
 ### Pendientes
-- El colisionador de la superestructura (`supBox`) y el del vuelco son los de las grúas de ruedas: en las orugas no cubren
-  todo el ancho de la plataforma ni el contrapeso alto. Revisar en la parte B.
-- El encuadre de sombras (±45 m) no cubre plumas de 64–85 m enteras; la cámara se escala con el largo del chasis.
+- Al volcar la LR 3000, la bandeja del superlift se dibuja girando con la grúa (en física desaparece); debería quedarse en el suelo.
+- El superlift no cambia el ángulo del derrick (referencia); la bandeja no se puede desmontar (la LR 3000 "ya está montada").
+- `dampRope` y el filtro de 0,3 s afectan a todas las grúas: si un tirón se nota menos que antes, revisar `ROPE_DAMP`/`TENSION_TAU`.
 - Colisión de la carga con la pluma (no existe todavía).
 - Radio de cola: el contrapeso no choca con obstáculos al girar (`boomHit`/contrapeso de la referencia), ni la pluma.
   Con lastre la cola llega a ~7,8 m en la AT 500-8; el colisionador de la superestructura no incluye el lastre.
