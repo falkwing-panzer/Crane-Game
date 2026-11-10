@@ -3,6 +3,7 @@ import type { CraneSpec } from '../../crane/cranes';
 import { Parts } from './builder';
 import type { Palette } from './materials';
 import { towerDeck, towerParts, type OBox } from './tower';
+import { plateColors, plateGeo } from './plates';
 import type { Seg } from './lattice';
 
 // Dibujo de la grúa torre de la SK 60 (fase 8) en el grupo de la superestructura: piezas fijas fusionadas
@@ -20,6 +21,8 @@ const _d = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 const _z = new THREE.Vector3(0, 0, 1);
 const _c = new THREE.Color();
+const _qz = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI);
+const _qy = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
 
 const MAX_SEGS = 900;
 const MAX_BOXES = 16;
@@ -28,6 +31,9 @@ export class TowerView {
   private chords: THREE.InstancedMesh;
   private diags: THREE.InstancedMesh;
   private boxes: THREE.InstancedMesh;
+  /** Placas de lastre de la contrapluma (achaflanadas, fase 8B) */
+  private plates: THREE.InstancedMesh;
+  private plateCol: Record<'grey' | 'top', string>;
   private key = '';
   private colors: Record<OBox['color'], string>;
   /** Cabina del operador (se oculta en su vista) */
@@ -51,12 +57,15 @@ export class TowerView {
     this.chords = new THREE.InstancedMesh(cyl, pal.yellow, MAX_SEGS);
     this.diags = new THREE.InstancedMesh(cyl, pal.yellowDark, MAX_SEGS);
     this.boxes = new THREE.InstancedMesh(boxG, new THREE.MeshLambertMaterial({ color: '#ffffff' }), MAX_BOXES);
-    for (const m of [this.chords, this.diags, this.boxes]) {
+    this.plates = new THREE.InstancedMesh(plateGeo, new THREE.MeshLambertMaterial({ color: '#ffffff' }), 6);
+    const pc = plateColors(T);
+    this.plateCol = { grey: pc.grey, top: pc.top };
+    for (const m of [this.chords, this.diags, this.boxes, this.plates]) {
       m.castShadow = m.receiveShadow = true;
       m.frustumCulled = false;
       parent.add(m);
     }
-    this.colors = { mast: T.color, dark: '#3a3f45', ballast: '#62666c', trolley: '#2f353d', tie: '#d6d9dd' };
+    this.colors = { mast: T.color, dark: '#3a3f45', trolley: '#2f353d', tie: '#d6d9dd' };
   }
 
   update(er: number, ang: number, Lb: number) {
@@ -74,6 +83,17 @@ export class TowerView {
       b.setColorAt(i, _c.set(this.colors[o.color]));
     });
     b.count = P.boxes.length;
+    // placas: la geometría tiene el chaflán en (−x, +z); se lleva al extremo (+x) de su lado girándola 180° en z (+z)
+    // o en y (−z)
+    P.plates.forEach((o, i) => {
+      _q.setFromAxisAngle(_z, Math.atan2(o.ax[1], o.ax[0])).multiply(o.side > 0 ? _qz : _qy);
+      _m.compose(_p.set(...o.c), _q, _s.set(...o.size));
+      this.plates.setMatrixAt(i, _m);
+      this.plates.setColorAt(i, _c.set(this.plateCol[o.color]));
+    });
+    this.plates.count = P.plates.length;
+    this.plates.instanceMatrix.needsUpdate = true;
+    if (this.plates.instanceColor) this.plates.instanceColor.needsUpdate = true;
     b.instanceMatrix.needsUpdate = true;
     if (b.instanceColor) b.instanceColor.needsUpdate = true;
   }

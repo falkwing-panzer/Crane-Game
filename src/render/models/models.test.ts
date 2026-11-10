@@ -4,7 +4,7 @@ import { CRANES, type WheeledSpec } from '../../crane/cranes';
 import { initialState } from '../../crane/kinematics';
 import { carrierPose } from '../../crane/pose';
 import { CraneModel } from '../craneModel';
-import { ballastPlates, boomCorners, cwDims, layout, towerOutline, towerPlan, WHEELED_IDS, type Box3 } from './layout';
+import { ballastPlates, boomCorners, cwPieces, cwDims, layout, towerOutline, towerPlan, WHEELED_IDS, type Box3 } from './layout';
 import { yGuyGeom } from './yguy';
 import { sheaves } from './superstructure';
 
@@ -59,7 +59,7 @@ for (const id of WHEELED_IDS) {
       ];
       if (L.rearBlock) obstacles.push(rectXY(L.rearBlock));
       // lastre montado del todo
-      const full = ballastPlates(T, L, 1);
+      const full = cwPieces(T, L, 1);
       for (const b of full.boxes) obstacles.push(rectXY(b));
       for (const a of angs) {
         const boom = boomCorners(T, L, a);

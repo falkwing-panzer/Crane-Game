@@ -25,8 +25,8 @@ function points(er: number, ang: number, Lb: number) {
       pts.push({ p: [s.a[0] + (s.b[0] - s.a[0]) * k, s.a[1] + (s.b[1] - s.a[1]) * k, s.a[2] + (s.b[2] - s.a[2]) * k], r });
     }
   }
-  for (const b of P.boxes) {
-    if (b.color === 'tie') continue;
+  for (const b of [...P.boxes, ...P.plates]) {
+    if ('color' in b && b.color === 'tie') continue;
     const [ux, uy] = b.ax, nx = -uy, ny = ux;
     for (const a of [-0.5, 0.5]) for (const c of [-0.5, 0.5]) for (const z of [-0.5, 0.5]) {
       pts.push({ p: [b.c[0] + ux * a * b.size[0] + nx * c * b.size[1], b.c[1] + uy * a * b.size[0] + ny * c * b.size[1], b.c[2] + z * b.size[2]], r: 0 });

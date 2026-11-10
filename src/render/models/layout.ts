@@ -193,8 +193,11 @@ export function layout(T: WheeledSpec): Layout {
   const rearBlock: Box3 | null = rbx1 - cwFront > 0.15 ? { x0: cwFront, x1: rbx1, y0: plateTop, y1: rbTop, z0: -wide, z1: wide } : null;
   const luffBase = { x: front - 0.9, y: plateTop + 0.05 };
   // (con lastre, la placa base de la torre ya no sobresale 0,2 m: son las torres de towerPlan)
+  // contrapeso fijo sin lastre: el contorno achaflanado de su bloque (fase 8B)
+  const fb = ballast ? null : fixedBlock({ cw, ballast });
+  const cwCorners: [number, number][] = fb ? towerOutline(blockPieces(fb).plan) : [[cwRear, cw.w]];
   const corners: [number, number][] = [
-    [cwRear - (stack && !ballast ? 0.2 : 0), cw.w + (stack && !ballast ? 0.2 : 0)], [cwRear + 0.2, wide], [front, wide],
+    ...cwCorners, [cwRear + 0.2, wide], [front, wide],
     [opCab.x0, -opCab.z0], [opCab.x1, -opCab.z0], [drum.x - dr, hl + 0.15],
   ];
   // radio de cola con el lastre completo: las dos torres con su chaflán
@@ -271,6 +274,73 @@ export function towerPlan(T: CraneSpec, cw: Layout['cw'], ballast: NonNullable<L
   return { xr, xf, zi, zo, chx: CHAMFER_X * (xf - xr), chz: CHAMFER_Z * (zo - zi), y0, base, plates };
 }
 
+/**
+ * Bloque de contrapeso en el estilo de contrapeso-torres.png (fase 8B), sin three.js: dos mitades (+z y −z) de placas
+ * apiladas con la esquina exterior trasera (−x) achaflanada. Con `zi` = 0 las mitades se tocan (un solo bloque, para
+ * los contrapesos cortos donde no caben dos torres); con `zi` > 0 queda un hueco central, opcionalmente con bastidor
+ * ('low': medio alto, 'full': todo el alto, como en las orugas, donde se atan los tirantes), barandilla y argollas.
+ * `chamfer` = false: placas rectas (van en `frame`, como cajas). Las `top` placas de arriba van en el color de la grúa.
+ */
+export interface BlockSpec {
+  xr: number; xf: number; zi: number; zo: number; y0: number; hgt: number;
+  /** número de placas (por defecto, una cada ~0,42 m) */
+  n?: number;
+  top?: number;
+  frame?: 'none' | 'low' | 'full';
+  rail?: boolean;
+  lugs?: boolean;
+  chamfer?: boolean;
+}
+
+export function blockPieces(b: BlockSpec): { plates: Plate[]; frame: FramePart[]; plan: TowerPlan } {
+  const n = b.n ?? Math.max(1, Math.round(b.hgt / 0.42)), sh = b.hgt / n, top = b.top ?? 2;
+  const ys: [number, number][] = [];
+  for (let i = 0; i < n; i++) ys.push([b.y0 + i * sh, b.y0 + (i + 1) * sh - (i < n - 1 ? 0.05 : 0)]);
+  const chamfer = b.chamfer ?? true;
+  const plan: TowerPlan = { xr: b.xr, xf: b.xf, zi: b.zi, zo: b.zo, chx: chamfer ? CHAMFER_X * (b.xf - b.xr) : 0,
+    chz: chamfer ? CHAMFER_Z * (b.zo - b.zi) : 0, y0: b.y0, base: 0, plates: ys };
+  const plates: Plate[] = [], frame: FramePart[] = [];
+  for (const side of [1, -1] as const) {
+    const zz = side > 0 ? { z0: b.zi, z1: b.zo } : { z0: -b.zo, z1: -b.zi };
+    ys.forEach(([y0, y1], i) => {
+      const color = i >= n - top ? 'top' : 'grey';
+      const box = { x0: b.xr, x1: b.xf, y0, y1, ...zz };
+      if (chamfer) plates.push({ box, side, color }); else frame.push({ box, color });
+    });
+    if (b.lugs) {
+      const xm = (b.xr + plan.chx + b.xf) / 2, zm = (side * (b.zi + b.zo)) / 2, yt = b.y0 + b.hgt;
+      frame.push({ box: { x0: xm - 0.15, x1: xm + 0.15, y0: yt, y1: yt + 0.22, z0: zm - 0.06, z1: zm + 0.06 }, color: 'lug' });
+    }
+  }
+  if (b.zi > 0.1 && b.frame && b.frame !== 'none') {
+    const fz = b.zi - 0.05, fx0 = b.xr + 0.15, ft = b.y0 + (b.frame === 'full' ? b.hgt : 0.5 * b.hgt);
+    frame.push({ box: { x0: fx0, x1: b.xf, y0: b.y0, y1: ft, z0: -fz, z1: fz }, color: 'frame' });
+    if (b.rail) {
+      const rz = fz - 0.08, rh = 1.0, t = 0.05;
+      for (const s2 of [-1, 1]) {
+        const z0 = s2 * rz - t / 2, z1 = s2 * rz + t / 2;
+        for (const x of [fx0 + 0.1, b.xf - 0.1]) frame.push({ box: { x0: x - t / 2, x1: x + t / 2, y0: ft, y1: ft + rh, z0, z1 }, color: 'rail' });
+        for (const y of [ft + rh - t, ft + rh / 2]) frame.push({ box: { x0: fx0 + 0.1, x1: b.xf - 0.1, y0: y, y1: y + t, z0, z1 }, color: 'rail' });
+      }
+    }
+  }
+  return { plates, frame, plan };
+}
+
+/**
+ * Contrapeso fijo de una grúa de ruedas (fase 8B), dentro de la planta de `L.cw` (cwDims de la referencia, con el frente
+ * recortado si la pluma lo tocaría). Sin lastre: un bloque de placas achaflanadas; dos torres con hueco y bastidor si
+ * mide 2,5 m de largo o más (AT 220). Con lastre de placas ('slab'): el contrapeso base (lleva el cabrestante) en placas
+ * rectas, porque las torres de lastre van detrás. Torre de lastre ('stack'): la pieza base ya es parte de la torre.
+ */
+export function fixedBlock(L: Pick<Layout, 'cw' | 'ballast'>): BlockSpec | null {
+  const cw = L.cw, xr = cw.x - cw.len / 2;
+  if (L.ballast?.kind === 'stack') return null;
+  if (L.ballast) return { xr, xf: cw.front, zi: 0, zo: cw.w, y0: cw.y0, hgt: cw.hgt, chamfer: false, top: 0 };
+  const towers = cw.len >= 2.5;
+  return { xr, xf: cw.front, zi: towers ? towerGap(cw.w) : 0, zo: cw.w, y0: cw.y0, hgt: cw.hgt, frame: towers ? 'low' : 'none', lugs: towers };
+}
+
 /** Contorno en planta (x, z) de la torre derecha (+z), con el chaflán. */
 export function towerOutline(p: TowerPlan): [number, number][] {
   return [[p.xr + p.chx, p.zo], [p.xf, p.zo], [p.xf, p.zi], [p.xr, p.zi], [p.xr, p.zo - p.chz]];
@@ -280,7 +350,7 @@ export function towerOutline(p: TowerPlan): [number, number][] {
 export interface Plate { box: Box3; side: 1 | -1; color: 'base' | 'grey' | 'top' }
 
 /** Bastidor central, barandillas y argollas (cajas) */
-export interface FramePart { box: Box3; color: 'frame' | 'rail' | 'lug' }
+export interface FramePart { box: Box3; color: 'frame' | 'rail' | 'lug' | 'grey' | 'top' }
 
 /**
  * Lastre con el montaje al avance cwS: placas de las dos torres, bastidor central con barandilla y argollas.
@@ -290,8 +360,9 @@ export interface FramePart { box: Box3; color: 'frame' | 'rail' | 'lug' }
 export function ballastPlates(T: CraneSpec, L: Layout, cwS: number): { plates: Plate[]; frame: FramePart[]; boxes: Box3[]; stack: boolean } {
   const plates: Plate[] = [], frame: FramePart[] = [];
   const b = L.ballast, stack = b?.kind === 'stack';
+  const all = () => [...plates.map((q) => q.box), ...frame.map((f) => f.box)];
   const p = b && towerPlan(T, L.cw, b, cwS);
-  if (!b || !p) return { plates, frame, boxes: [], stack };
+  if (!b || !p) return { plates, frame, boxes: all(), stack };
   const nFull = towerPlan(T, L.cw, b, 1)!.plates.length;
   for (const side of [1, -1] as const) {
     const z = (a: number, c: number) => (side > 0 ? { z0: a, z1: c } : { z0: -c, z1: -a });
@@ -309,7 +380,7 @@ export function ballastPlates(T: CraneSpec, L: Layout, cwS: number): { plates: P
   const fh = stack ? 1.0 : Math.min(1.0, 0.5 * (p.plates[p.plates.length - 1][1] - p.y0));
   const fz = p.zi - 0.05, fx0 = p.xr + 0.15, ft = p.y0 + fh;
   // (al empezar a montar el lastre de placas las torres son todavía muy cortas: sin bastidor)
-  if (p.xf - fx0 < 0.5) return { plates, frame, boxes: [...plates.map((q) => q.box), ...frame.map((f) => f.box)], stack };
+  if (p.xf - fx0 < 0.5) return { plates, frame, boxes: all(), stack };
   frame.push({ box: { x0: fx0, x1: p.xf, y0: p.y0, y1: ft, z0: -fz, z1: fz }, color: 'frame' });
   const rz = fz - 0.08, rh = 1.0, t = 0.05;
   for (const s of [-1, 1]) {
@@ -317,7 +388,19 @@ export function ballastPlates(T: CraneSpec, L: Layout, cwS: number): { plates: P
     for (const x of [fx0 + 0.1, p.xf - 0.1]) frame.push({ box: { x0: x - t / 2, x1: x + t / 2, y0: ft, y1: ft + rh, z0, z1 }, color: 'rail' });
     for (const y of [ft + rh - t, ft + rh / 2]) frame.push({ box: { x0: fx0 + 0.1, x1: p.xf - 0.1, y0: y, y1: y + t, z0, z1 }, color: 'rail' });
   }
-  return { plates, frame, boxes: [...plates.map((q) => q.box), ...frame.map((f) => f.box)], stack };
+  return { plates, frame, boxes: all(), stack };
+}
+
+/**
+ * Todo el contrapeso dibujado de una grúa de ruedas (fase 8B): el fijo (fixedBlock) más el lastre al avance cwS.
+ * Es lo que dibuja CraneModel y lo que usan los choques del contrapeso.
+ */
+export function cwPieces(T: CraneSpec, L: Layout, cwS: number): { plates: Plate[]; frame: FramePart[]; boxes: Box3[] } {
+  const b = ballastPlates(T, L, cwS), fb = fixedBlock(L);
+  if (!fb) return b;
+  const f = blockPieces(fb);
+  return { plates: [...f.plates, ...b.plates], frame: [...f.frame, ...b.frame],
+    boxes: [...f.plates.map((q) => q.box), ...f.frame.map((q) => q.box), ...b.boxes] };
 }
 
 /** Placas de 0,42 m de la torre de lastre para una altura (como la referencia). */

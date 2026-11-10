@@ -1,6 +1,6 @@
 import type { WheeledSpec } from '../../crane/cranes';
 import type { Parts } from './builder';
-import { stackPlates, type Layout } from './layout';
+import type { Layout } from './layout';
 
 // Superestructura y pluma telescópica (port de craneModel() de la referencia).
 // Superestructura: marco con origen en el centro de giro; las alturas son las del chasis (y absoluta).
@@ -46,22 +46,7 @@ export function buildSuper(T: WheeledSpec, L: Layout, P: Parts) {
     P.box('yellowShade', ft - 0.9, ft + 1.1, L.plateTop, T.pivH + 0.4, Math.min(a, b), Math.max(a, b));
   }
   P.cyl('steel', [ft, T.pivH, -(bw / 2 + 0.45)], [ft, T.pivH, bw / 2 + 0.45], 0.12 + 0.06 * bw, 12);
-  // contrapeso: placas apiladas o torre de placas redondas
-  if (T.cwStyle === 'stack') {
-    // con lastre, las dos torres (base, placas y bastidor central) van aparte: CraneModel, ballastPlates
-    if (!L.ballast) P.box('dark', cw.x - cw.len / 2 - 0.2, cw.x + cw.len / 2 + 0.2, cw.y0, cw.y0 + 0.4, -cw.w - 0.2, cw.w + 0.2);
-    // torre de placas rectangulares (la referencia las dibuja redondas)
-    const np = L.ballast ? 0 : stackPlates(cw.hgt);
-    for (let i = 0; i < np; i++) {
-      const y = cw.y0 + 0.4 + i * 0.42;
-      P.box(i % 2 ? 'greyDark' : 'greyDeep', cw.x - cw.len / 2, cw.x + cw.len / 2, y, y + 0.37, -cw.w, cw.w);
-    }
-  } else {
-    const n = T.ballast ? 1 : 3, sh = cw.hgt / n;
-    for (let i = 0; i < n; i++) {
-      P.box(i % 2 ? 'greyDeep' : 'dark', cw.x - cw.len / 2, cw.x + cw.len / 2, cw.y0 + i * sh, cw.y0 + (i + 1) * sh - (i < n - 1 ? 0.07 : 0), -cw.w, cw.w);
-    }
-  }
+  // contrapeso: placas instanciadas en CraneModel (ballastPlates: contrapeso fijo y torres de lastre, fase 8B)
   // cabrestante principal sobre el frente del contrapeso (delante de la torre de lastre)
   const d = L.drum;
   for (const s of [-1, 1]) {
