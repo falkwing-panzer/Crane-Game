@@ -105,7 +105,7 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - **Fase 8B, parte 2** (remodelado, con orugas y SK incluidas): chasis gris con franjas rojas y blancas, cabina del conductor
   con parabrisas inclinado en dos piezas, cabina del operador con frente inclinado (`details.ts`, la usan las 11 grúas),
   pluma con cantos de abajo achaflanados, cabeza con chapas redondeadas, barandilla y escalerillas. Pruebas en
-  `models.test.ts` y `models/crawler.test.ts`. **Pendiente que Jesús lo mire en la laptop.**
+  `models.test.ts` y `models/crawler.test.ts`. **En la laptop de Jesús: 60 fps.**
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -394,7 +394,7 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 
 - Fase 8B parte 2 (vistas de prueba en el panel de la app, sombras incluidas): AT 650-8 montada 145 draw calls y ~31.900
   triángulos (antes 146 / 30.600); AT 500-8 con la pluma tumbada 134 / ~20.000 (antes 136 / 18.700); AT 60 128; RT 90 117;
-  LR 300 75; LR 3000 86 / ~23.200; SK 60 plegada 95. **Pendiente medir en la laptop.**
+  LR 300 75; LR 3000 86 / ~23.200; SK 60 plegada 95. **En la laptop de Jesús: 60 fps.**
 
 ### Pendientes
 - SK 60: el lastre es el de la referencia (3 bloques en la contrapluma); su forma va en la fase 8B. Se puede plegar con el
