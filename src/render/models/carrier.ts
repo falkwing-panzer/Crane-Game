@@ -119,6 +119,11 @@ export function buildCarrier(T: WheeledSpec, L: Layout, P: Parts, cabP: Parts) {
     P.box('red', L0 - 0.05, L0, dLo + 0.85, dLo + 1.1, Math.min(za, zb), Math.max(za, zb));
   }
   P.cyl('dark', [L0 + 0.9, dLo + 0.05, -hf + 0.35], [L0 - 0.08, dLo + 0.05, -hf + 0.35], 0.09, 8);
+  // matrícula y enganche de remolque (fase 8B)
+  P.box('chrome', L0 - 0.04, L0, dLo + 0.8, dLo + 0.95, -0.28, 0.28);
+  P.box('black', L0 - 0.14, L0 + 0.1, dLo + 0.02, dLo + 0.22, -0.18, 0.18);
+  P.cyl('chrome', [L0 - 0.1, dLo + 0.12, -0.08], [L0 - 0.1, dLo + 0.12, 0.08], 0.06, 8);
+  detailCarrier(T, L, P);
   // escalerilla trasera a la derecha, para subir a la cubierta (fase 8B)
   const lz = hf - 0.75;
   ladder(P, 'greyDeep', [L0 - 0.1, lz], [L0 - 0.1, lz + 0.4], dLo - 0.2, dHi + 0.02);
@@ -167,6 +172,12 @@ function buildCab(T: WheeledSpec, L: Layout, P: Parts) {
   P.box('yellowShade', dX, dX + 0.03, cabLow + 0.1, cabTop - 0.1, cw0 - 0.04, cw0);
   P.box('dark', dX + 0.25, dX + 0.5, cabTop - 1.1, cabTop - 1.02, cw0 - 0.05, cw0);
   if (cabLow - 0.3 > 0.12) P.box('dark', dX + 0.1, dX + 0.75, cabLow - 0.3, cabLow - 0.23, cw0 - 0.25, cw0 + 0.05);
+  if (cabLow - 0.62 > 0.25) P.box('dark', dX + 0.1, dX + 0.75, cabLow - 0.62, cabLow - 0.55, cw0 - 0.3, cw0 + 0.05);
+  // limpiaparabrisas (sobre el cristal) y visera encima (fase 8B)
+  const nx = (wb[1] - wa[1]) / Math.hypot(wb[0] - wa[0], wb[1] - wa[1]), ny = -(wb[0] - wa[0]) / Math.hypot(wb[0] - wa[0], wb[1] - wa[1]);
+  const onGlass = (u: number, z: number): [number, number, number] => { const q = wt(u); return [q[0] + nx * 0.045, q[1] + ny * 0.045, z]; };
+  for (const z of [cw0 + 0.3, zm + 0.15]) P.cyl('black', onGlass(0.1, z), onGlass(0.6, z + 0.35), 0.014, 4);
+  P.box('dark', L1 - 0.36, L1 - 0.14, cabTop - 0.09, cabTop - 0.04, cw0 + 0.05, cw1 - 0.05);
   P.box('yellowDark', cabX0 + 0.05, L1 - 0.45, cabTop, cabTop + 0.06, cw0 + 0.05, cw1 - 0.05);
   // asidero junto a la puerta
   P.cyl('black', [dX - 0.06, cabLow + 0.35, cw0 - 0.07], [dX - 0.06, cabTop - 0.45, cw0 - 0.07], 0.022, 5);
@@ -181,5 +192,39 @@ function buildCab(T: WheeledSpec, L: Layout, P: Parts) {
     // a la derecha de la cabina: cubierta baja hasta el frente con rejillas
     P.ext('yellowDark', [[cabX0, cabLow], [L1, cabLow], [L1, dHi - 0.1], [L1 - 0.12, dHi + 0.02], [cabX0, dHi + 0.02]], cw1, hf);
     for (let i = 0; i < 3; i++) P.box('black', cabX0 + 0.3 + i * 0.32, cabX0 + 0.45 + i * 0.32, cabLow + 0.15, dHi - 0.2, hf, hf + 0.02);
+  }
+}
+
+/**
+ * Detalles del chasis (fase 8B, aproximación visual): pilotos de gálibo ámbar a los lados, calderines de aire bajo los
+ * cofres y faldones detrás de cada grupo de ejes. Todo por debajo de la cubierta y dentro del ancho del chasis.
+ */
+function detailCarrier(T: WheeledSpec, L: Layout, P: Parts) {
+  const [L0] = T.len, hf = L.hf, dLo = T.deckLo, dHi = T.deckHi, wR = T.wheelR;
+  const inOut = (x: number, m: number) => L.outBox.some(([a, b]) => x > a - m && x < b + m);
+  // pilotos de gálibo sobre el filete, cada ~2,2 m (no sobre los cajones de los estabilizadores)
+  for (let x = L0 + 0.6; x < L.cab.x0 - 0.3; x += 2.2) {
+    if (inOut(x, 0.15)) continue;
+    for (const s of [-1, 1]) P.box('beacon', x - 0.07, x + 0.07, dHi - 0.2, dHi - 0.13, Math.min(s * hf, s * (hf + 0.025)), Math.max(s * hf, s * (hf + 0.025)));
+  }
+  // calderines de aire bajo los cofres (en los huecos libres que no son el del motor ni el del depósito de la izquierda)
+  const byLen = [...L.freeGaps].sort((p, q) => (q[1] - q[0]) - (p[1] - p[0]));
+  const tank = byLen.filter((g) => g !== L.engGap)[0];
+  for (const g of L.freeGaps) {
+    if (g === L.engGap || g[1] - g[0] < 1.3) continue;
+    for (const s of [-1, 1]) {
+      if (s < 0 && g === tank && g[1] - g[0] > 1.6) continue;
+      const z = s * (hf - 0.42), hl = Math.min(0.6, (g[1] - g[0]) / 2 - 0.25), m = (g[0] + g[1]) / 2;
+      P.cyl('grey', [m - hl, dLo + 0.04, z], [m + hl, dLo + 0.04, z], 0.16, 12);
+      for (const e of [-1, 1]) P.box('dark', m + e * (hl - 0.15) - 0.03, m + e * (hl - 0.15) + 0.03, dLo - 0.13, dLo + 0.24, z - 0.18, z + 0.18);
+    }
+  }
+  // faldones detrás de cada grupo de ejes (salvo el de más atrás si toca el voladizo trasero y el escape)
+  const axles = [...T.axles].sort((p, q) => p - q), groups: number[][] = [];
+  for (const a of axles) { const gg = groups[groups.length - 1]; if (gg && a - gg[gg.length - 1] < 2.0) gg.push(a); else groups.push([a]); }
+  for (const gg of groups) {
+    const x = gg[0] - wR - 0.17;
+    if (x < L0 + 1.0 || inOut(x, 0.02)) continue;
+    for (const s of [-1, 1]) P.box('black', x, x + 0.03, 0.3, wR + 0.25, Math.min(s * (hf - 0.62), s * (hf - 0.06)), Math.max(s * (hf - 0.62), s * (hf - 0.06)));
   }
 }

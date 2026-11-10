@@ -68,6 +68,13 @@ export function operatorCab(P: Parts, c: Box3, outer: -1 | 1 = -1, beacon = true
   // techo con cristal y visera
   P.box('dark', c.x0 - 0.04, c.x1 - sl - 0.05, c.y1, c.y1 + 0.06, c.z0, c.z1);
   P.box('glass', c.x0 + 0.35, c.x1 - sl - 0.25, c.y1 + 0.06, c.y1 + 0.08, c.z0 + 0.12, c.z1 - 0.12);
+  // limpiaparabrisas sobre el cristal y rejilla de protección sobre el techo (fase 8B)
+  const ux = fb[0] - fa[0], uy = fb[1] - fa[1], ul = Math.hypot(ux, uy), nx = uy / ul, ny = -ux / ul;
+  const on = (u: number, z: number): P3 => { const q = t(u); return [q[0] + nx * 0.045, q[1] + ny * 0.045, z]; };
+  const zc = (c.z0 + c.z1) / 2;
+  P.cyl('dark', on(0.12, zc - 0.1), on(0.62, zc + 0.15), 0.013, 4);
+  for (let x = c.x0 + 0.3; x < c.x1 - sl - 0.2; x += 0.3) P.box('dark', x, x + 0.03, c.y1 + 0.1, c.y1 + 0.13, c.z0 + 0.06, c.z1 - 0.06);
+  for (const z of [c.z0 + 0.06, c.z1 - 0.09]) P.box('dark', c.x0 + 0.25, c.x1 - sl - 0.15, c.y1 + 0.1, c.y1 + 0.13, z, z + 0.03);
   if (beacon) {
     const xm = c.x0 + 0.3, zm = (c.z0 + c.z1) / 2;
     P.cyl('beacon', [xm, c.y1 + 0.06, zm], [xm, c.y1 + 0.22, zm], 0.09, 8);

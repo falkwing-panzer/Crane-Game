@@ -65,6 +65,13 @@ export function buildSuper(T: WheeledSpec, L: Layout, P: Parts) {
     railing(P, 'dark', [[h.x0 + 0.1, h.z0 + 0.1], [h.x0 + 0.1, zr], [h.x1 - 0.3, zr]], h.y1, 0.8);
     const lx = h.x0 + 0.35;
     ladder(P, 'dark', [lx, h.z1 + 0.05], [lx + 0.4, h.z1 + 0.05], yd + 0.15, h.y1);
+    // filtro de aire del motor sobre el capó (lado de la pluma, lejos del escape) y tapa del depósito hidráulico
+    const fx = h.x1 - 0.55, fz = h.z0 + 0.25;
+    if (fx > h.x0 + 0.5) {
+      P.cyl('steel', [fx, h.y1, fz], [fx, h.y1 + 0.35, fz], 0.17, 12);
+      P.cyl('dark', [fx, h.y1 + 0.35, fz], [fx, h.y1 + 0.42, fz], 0.2, 12);
+    }
+    P.box('dark', h.x0 + 0.5, h.x0 + 0.8, h.y1, h.y1 + 0.06, fz - 0.1, fz + 0.1);
   }
 }
 
@@ -83,6 +90,19 @@ export function buildBoomBase(T: WheeledSpec, L: Layout, P: Parts) {
   P.extX('yellow', boomSection(bw, hu), -L.tail, min);
   P.extX('yellowShade', boomSection(bw, hu, 0.04), min - 0.45, min);
   P.box('dark', 0.5, min - 0.8, hu / 2, hu / 2 + 0.03, -bw * 0.18, bw * 0.18);
+  boomBaseDetails(T, L, P);
+}
+
+/**
+ * Detalles del tramo base (fase 8B, aproximación visual): mangueras hidráulicas por el costado izquierdo, placa lateral
+ * a ambos lados y patines de desgaste en la boca. Pegados a la chapa (≤ 7,5 cm), por dentro de los soportes del pie.
+ */
+export function boomBaseDetails(T: WheeledSpec, L: Layout, P: Parts) {
+  const min = T.boom.min, bw = T.boom.w, hu = L.hu;
+  for (const y of [0.36 * hu, 0.42 * hu]) P.cyl('dark', [0.4, y, -(bw / 2 + 0.04)], [min - 0.6, y, -(bw / 2 + 0.04)], 0.032, 6);
+  for (const x of [min * 0.3, min * 0.55, min * 0.8]) P.box('dark', x - 0.05, x + 0.05, 0.32 * hu, 0.46 * hu, -(bw / 2 + 0.075), -bw / 2);
+  for (const s of [-1, 1]) P.box('yellowShade', min * 0.35, min * 0.6, -0.15 * hu, 0.28 * hu, Math.min(s * bw / 2, s * (bw / 2 + 0.012)), Math.max(s * bw / 2, s * (bw / 2 + 0.012)));
+  for (const s of [-1, 1]) P.box('dark', min - 0.42, min - 0.3, -0.2 * hu, 0.2 * hu, Math.min(s * (bw / 2 + 0.04), s * (bw / 2 + 0.07)), Math.max(s * (bw / 2 + 0.04), s * (bw / 2 + 0.07)));
 }
 
 /** Tramo interior k (1 = el más grueso). Origen en su extremo delantero. */
@@ -112,4 +132,12 @@ export function buildHead(T: WheeledSpec, L: Layout, P: Parts) {
     P.cyl(i % 2 ? 'chrome' : 'steel', [sv.x, sv.y, z - 0.05], [sv.x, sv.y, z + 0.05], sv.r, 18);
   }
   P.cyl('greyDeep', [sv.x, sv.y, -(zp + 0.06)], [sv.x, sv.y, zp + 0.06], 0.12, 8);
+  // chapa superior entre las placas laterales y anemómetro (no con plumín: el plumín se articula en la cabeza)
+  P.box('yellow', -1.0, -0.2, 0.4 * hu - 0.06, 0.4 * hu, -zp, zp);
+  if (!T.jibDef) {
+    const ax = -0.7, ay = 0.4 * hu, az = -zp + 0.05, top = ay + 0.9;
+    P.cyl('greyDeep', [ax, ay, az], [ax, top, az], 0.03, 6);
+    P.cyl('steel', [ax, top, az - 0.2], [ax, top, az + 0.2], 0.012, 4);
+    for (const dz of [-0.2, 0.2]) P.cyl('steel', [ax - 0.06, top, az + dz], [ax + 0.06, top, az + dz], 0.05, 8);
+  }
 }

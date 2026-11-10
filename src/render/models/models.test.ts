@@ -6,7 +6,7 @@ import { carrierPose } from '../../crane/pose';
 import { CraneModel } from '../craneModel';
 import { ballastPlates, boomCorners, cwPieces, cwDims, layout, towerOutline, towerPlan, WHEELED_IDS, type Box3 } from './layout';
 import { yGuyGeom } from './yguy';
-import { boomSection, buildHead, sheaves } from './superstructure';
+import { boomBaseDetails, boomSection, buildHead, sheaves } from './superstructure';
 import { Parts } from './builder';
 import { operatorCab } from './details';
 import { palette } from './materials';
@@ -190,6 +190,17 @@ for (const id of WHEELED_IDS) {
       expect(cb.max.x).toBeLessThanOrEqual(c.x1 + 0.04);
       expect(cb.min.z).toBeGreaterThanOrEqual(c.z0 - 0.031);
       expect(cb.max.y).toBeLessThanOrEqual(c.y1 + 0.23);
+      // detalles del tramo base pegados a la chapa, por dentro de los soportes del pie
+      const bb = partsBox(T, (P) => boomBaseDetails(T, L, P));
+      expect(Math.max(-bb.min.z, bb.max.z)).toBeLessThan(T.boom.w / 2 + 0.1);
+      expect(bb.max.y).toBeLessThanOrEqual(L.hu / 2 + 1e-6);
+      // chasis con sus detalles: no baja de 0,15 m (parachoques) ni sale más que los retrovisores y el parachoques
+      const m = new CraneModel(T), cb2 = new THREE.Box3();
+      m.root.children.filter((o) => o instanceof THREE.Mesh && !(o instanceof THREE.InstancedMesh)).forEach((o) => cb2.expandByObject(o));
+      expect(cb2.min.y).toBeGreaterThanOrEqual(0.15);
+      expect(cb2.min.x).toBeGreaterThanOrEqual(T.len[0] - 0.31);
+      expect(cb2.max.x).toBeLessThanOrEqual(T.len[1] + 0.45);
+      expect(Math.max(-cb2.min.z, cb2.max.z)).toBeLessThanOrEqual(L.hf + 0.45);
       // escalerilla del capó dentro del radio de cola
       if (L.housing) expect(Math.hypot(L.housing.x0 + 0.75, L.housing.z1 + 0.08)).toBeLessThanOrEqual(L.tailR + 1e-9);
     });

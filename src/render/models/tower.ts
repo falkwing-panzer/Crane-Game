@@ -138,6 +138,10 @@ export function towerDeck(T: CraneSpec) {
     platform: { x0: -2.1, x1: 2.9, y0: yd + 0.35, y1: yd + TOWER_BASE_DY, z0: -2.1, z1: 1.25 },
     // cabina del operador a la izquierda, por fuera de la torre tumbada (referencia: x 1,5–2,9, 1,0–2,1 m de lado)
     cab: { x0: 1.5, x1: 2.9, y0: yd + TOWER_BASE_DY, y1: yd + 2.3, z0: -2.1, z1: -(MAST_HALF + 0.1) },
+    // (fase 8B, aproximación visual) armario eléctrico colgado del costado derecho de la plataforma y barandilla en
+    // ese borde; todo a |z| > MAST_HALF + 0,1: la torre, la pluma y la contrapluma plegadas no pasan de MAST_HALF
+    cabinet: { x0: 0.4, x1: 1.4, y0: yd + 0.15, y1: yd + 1.4, z0: 1.25, z1: 1.55 },
+    rail: { x0: 0.15, x1: 2.8, z: 1.17, y: yd + TOWER_BASE_DY },
   };
 }
 

@@ -105,7 +105,13 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - **Fase 8B, parte 2** (remodelado, con orugas y SK incluidas): chasis gris con franjas rojas y blancas, cabina del conductor
   con parabrisas inclinado en dos piezas, cabina del operador con frente inclinado (`details.ts`, la usan las 11 grúas),
   pluma con cantos de abajo achaflanados, cabeza con chapas redondeadas, barandilla y escalerillas. Pruebas en
-  `models.test.ts` y `models/crawler.test.ts`. **Pendiente que Jesús lo mire en la laptop.**
+  `models.test.ts` y `models/crawler.test.ts`. **En la laptop de Jesús: 60 fps.** Después (pedido de Jesús con una foto): la
+  LR 3000 y la LR 300 llevan equipos sobre el cuerpo trasero (`gear`: grupo de potencia, depósito, radiador, cabrestantes,
+  barandillas) y la bandeja del superlift va sobre un remolque con 8 ruedas que ruedan al girar. Detalles en el resto:
+  chasis (`detailCarrier`: pilotos de gálibo, calderines de aire, faldones, matrícula y enganche), cabina del conductor
+  (limpiaparabrisas, visera, segundo estribo), cabina del operador (limpiaparabrisas, rejilla en el techo), capó (filtro de
+  aire), tramo base (`boomBaseDetails`: mangueras con abrazaderas, placas laterales, patines), cabeza (chapa superior y
+  anemómetro, salvo con plumín) y plataforma de la SK 60 (armario eléctrico, barandilla y escalerilla en `towerDeck`).
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -351,6 +357,13 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   queda en 145 draw calls. **No se hizo**: motón amarrado al parachoques (cambia el estado inicial de la física; se haría
   aparte como "posición de transporte").
 
+- **LR 3000 / LR 300, equipos y remolque** (aproximación visual): en la LR 3000 los equipos van a los lados fuera del ancho
+  del derrick (|z| ≥ 2,5) y los cabrestantes en el centro detrás de su pie; en la LR 300, detrás de las patas del caballete
+  (bajo su tirante) y el cabrestante de la pluma entre el caballete y el principal; todo bajo el alto del contrapeso, así que el colisionador de la
+  superestructura ya los cubre. El remolque cabe en la caja de la bandeja (7 × 10 × 3 m, la de la referencia y la de los
+  choques): ruedas de 0,6 m con el eje a lo largo de x (ruedan en z, hacia donde avanza la bandeja al girar; al cambiar el
+  radio con K/L patinan), bastidor de 1,3 a 1,55 m y 4 placas encima (antes 6 desde 0,5 m). No dirigen ni se mueven solas.
+
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
   grúas grandes (fases 4–6): cabeza cinemática, izado a velocidad plena, estiramiento máximo del cable.
@@ -394,7 +407,11 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 
 - Fase 8B parte 2 (vistas de prueba en el panel de la app, sombras incluidas): AT 650-8 montada 145 draw calls y ~31.900
   triángulos (antes 146 / 30.600); AT 500-8 con la pluma tumbada 134 / ~20.000 (antes 136 / 18.700); AT 60 128; RT 90 117;
-  LR 300 75; LR 3000 86 / ~23.200; SK 60 plegada 95. **Pendiente medir en la laptop.**
+  LR 300 75; LR 3000 86 / ~23.200; SK 60 plegada 95. **En la laptop de Jesús: 60 fps.**
+  LR 3000 con equipos y remolque: 96 draw calls y ~28.600 triángulos (vista inicial); LR 300 con equipos: 75 y ~15.200.
+  Con los detalles del resto (sin materiales nuevos por grupo): AT 650-8 montada sigue en 145 (~33.200 triángulos), AT 500-8
+  134 (~21.500), SK 60 plegada 91 de cerca (~24.100).
+  **Pendiente medir en la laptop.**
 
 ### Pendientes
 - SK 60: el lastre es el de la referencia (3 bloques en la contrapluma); su forma va en la fase 8B. Se puede plegar con el
