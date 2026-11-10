@@ -107,7 +107,11 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   pluma con cantos de abajo achaflanados, cabeza con chapas redondeadas, barandilla y escalerillas. Pruebas en
   `models.test.ts` y `models/crawler.test.ts`. **En la laptop de Jesús: 60 fps.** Después (pedido de Jesús con una foto): la
   LR 3000 y la LR 300 llevan equipos sobre el cuerpo trasero (`gear`: grupo de potencia, depósito, radiador, cabrestantes,
-  barandillas) y la bandeja del superlift va sobre un remolque con 8 ruedas que ruedan al girar.
+  barandillas) y la bandeja del superlift va sobre un remolque con 8 ruedas que ruedan al girar. Detalles en el resto:
+  chasis (`detailCarrier`: pilotos de gálibo, calderines de aire, faldones, matrícula y enganche), cabina del conductor
+  (limpiaparabrisas, visera, segundo estribo), cabina del operador (limpiaparabrisas, rejilla en el techo), capó (filtro de
+  aire), tramo base (`boomBaseDetails`: mangueras con abrazaderas, placas laterales, patines), cabeza (chapa superior y
+  anemómetro, salvo con plumín) y plataforma de la SK 60 (armario eléctrico, barandilla y escalerilla en `towerDeck`).
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -405,6 +409,8 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   triángulos (antes 146 / 30.600); AT 500-8 con la pluma tumbada 134 / ~20.000 (antes 136 / 18.700); AT 60 128; RT 90 117;
   LR 300 75; LR 3000 86 / ~23.200; SK 60 plegada 95. **En la laptop de Jesús: 60 fps.**
   LR 3000 con equipos y remolque: 96 draw calls y ~28.600 triángulos (vista inicial); LR 300 con equipos: 75 y ~15.200.
+  Con los detalles del resto (sin materiales nuevos por grupo): AT 650-8 montada sigue en 145 (~33.200 triángulos), AT 500-8
+  134 (~21.500), SK 60 plegada 91 de cerca (~24.100).
   **Pendiente medir en la laptop.**
 
 ### Pendientes

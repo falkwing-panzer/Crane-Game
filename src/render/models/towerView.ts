@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { CraneSpec } from '../../crane/cranes';
 import { Parts } from './builder';
-import { operatorCab } from './details';
+import { ladder, operatorCab, railing } from './details';
 import type { Palette } from './materials';
 import { towerDeck, towerParts, type OBox } from './tower';
 import { plateColors, plateGeo } from './plates';
@@ -47,6 +47,16 @@ export class TowerView {
     p.box('dark', pl.x0, pl.x1, pl.y0, pl.y1, pl.z0, pl.z1);
     // articulación de la torre: dos orejetas a los lados de la bisagra
     for (const s of [-1, 1]) p.box('greyDeep', -0.35, 0.35, pl.y1, pl.y1 + 0.5, s * 0.97, s * 1.15);
+    // armario eléctrico con dos puertas y asas, barandilla en el borde derecho y escalerilla (fase 8B)
+    const k = d.cabinet, km = (k.x0 + k.x1) / 2;
+    p.box('dark', k.x0, k.x1, k.y0, k.y1, k.z0, k.z1);
+    for (const [a0, a1] of [[k.x0 + 0.05, km - 0.02], [km + 0.02, k.x1 - 0.05]]) {
+      p.box('greyDark', a0, a1, k.y0 + 0.08, k.y1 - 0.08, k.z1, k.z1 + 0.015);
+      p.box('greyDeep', (a0 + a1) / 2 - 0.03, (a0 + a1) / 2 + 0.03, (k.y0 + k.y1) / 2 - 0.1, (k.y0 + k.y1) / 2 + 0.1, k.z1 + 0.015, k.z1 + 0.04);
+    }
+    const r = d.rail;
+    railing(p, 'dark', [[r.x0, r.z], [r.x1, r.z]], r.y, 0.9);
+    ladder(p, 'dark', [2.2, pl.z1 + 0.05], [2.6, pl.z1 + 0.05], T.deckHi + 0.15, pl.y1);
     p.build(parent, pal);
     const c = d.cab, cp = new Parts();
     operatorCab(cp, c, -1, false); // cabina con frente inclinado (fase 8B), sin rotativo: la torre tumbada pasa encima

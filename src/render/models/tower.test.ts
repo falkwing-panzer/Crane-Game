@@ -106,3 +106,21 @@ describe('grúa torre SK 60: dibujo', () => {
     expect(tr.c[1]).toBeLessThan(P.top[1]);
   });
 });
+
+describe('SK 60: detalles de la plataforma (fase 8B)', () => {
+  const T = CRANES.sk, d = towerDeck(T);
+  it('armario y barandilla quedan por fuera de todo lo que se pliega o se despliega', () => {
+    let zMax = 0;
+    for (let i = 0; i <= 20; i++) {
+      const P = towerParts(T, i / 20, 0, 3);
+      for (const s of [...P.chords, ...P.diags]) for (const p of [s.a, s.b]) zMax = Math.max(zMax, Math.abs(p[2]) + s.r);
+      for (const b of P.boxes) zMax = Math.max(zMax, Math.abs(b.c[2]) + b.size[2] / 2);
+      for (const q of P.plates) zMax = Math.max(zMax, Math.abs(q.c[2]) + q.size[2] / 2);
+    }
+    expect(zMax).toBeLessThan(d.rail.z - 0.1);
+    expect(d.cabinet.z0).toBeGreaterThanOrEqual(d.platform.z1);
+    // dentro del radio de la plataforma (3 m) y por encima de la cubierta del camión
+    expect(Math.hypot(d.cabinet.x1, d.cabinet.z1)).toBeLessThan(3.0);
+    expect(d.cabinet.y0).toBeGreaterThan(T.deckHi + 0.1);
+  });
+});
