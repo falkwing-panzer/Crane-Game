@@ -1,7 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { SLING, bodyHalf, isCrawler, type CraneSpec, type WheeledSpec } from '../crane/cranes';
-import { ballastPlates, cwDims, hookScale, layout, type Layout } from '../render/models/layout';
-import { crawlerLayout } from '../render/models/crawlerLayout';
+import { blockPieces, cwPieces, cwDims, hookScale, layout, type Box3, type Layout } from '../render/models/layout';
+import { crawlerLayout, cwBlock } from '../render/models/crawlerLayout';
 import { trayHitsTracks } from '../crane/superlift';
 import { carrierLift, headPos, jibOn, tipPos, type CraneState } from '../crane/kinematics';
 import { craneMasses, supportRect, type CraneConfig, type SupportMode } from '../crane/stability';
@@ -77,6 +77,8 @@ export class Physics {
   /** Torres de lastre (grúas de ruedas con lastre): colisionadores de la superestructura que crecen con el montaje */
   private wheeledL: Layout | null = null;
   private towerCols: RAPIER.Collider[] = [];
+  /** Placas de la torre derecha del contrapeso de las orugas (fijas; se calculan una vez) */
+  private crawlerCw: Box3[] | null = null;
   private towerAt = NaN;
   private cableJoint!: RAPIER.ImpulseJoint;
   private slingJoint: RAPIER.ImpulseJoint | null = null;
@@ -92,7 +94,8 @@ export class Physics {
   constructor(private T: CraneSpec, S: CraneState, pose: Pose) {
     this.slR = T.superlift?.r0 ?? 0;
     this.slew = S.slew;
-    if (!isCrawler(T) && T.ballast) this.wheeledL = layout(T as WheeledSpec);
+    // contrapeso en placas (fase 8B: también el fijo de las grúas sin lastre); la grúa torre lo lleva arriba
+    if (!isCrawler(T) && !T.tower) this.wheeledL = layout(T as WheeledSpec);
     const world = (this.world = new RAPIER.World({ x: 0, y: -G, z: 0 }));
     world.timestep = FIXED_DT;
     // Medido (fase 2): con 8 + 16 iteraciones internas el cable no se estira al izar ni con 200 t colgando
@@ -188,9 +191,10 @@ export class Physics {
    * medias medidas y centro de la torre derecha (+z); la izquierda es la simétrica. null si no hay torres.
    */
   towerBox(cwS: number): { hx: number; hy: number; hz: number; cx: number; cy: number; cz: number } | null {
-    const L = this.wheeledL;
-    if (!L) return null;
-    const ps = ballastPlates(this.T, L, cwS).plates.filter((p) => p.side > 0).map((p) => p.box);
+    const L = this.wheeledL, T = this.T;
+    // orugas (fase 8B): las dos torres del contrapeso de la superestructura
+    const ps = L ? cwPieces(T, L, cwS).plates.filter((p) => p.side > 0).map((p) => p.box)
+      : isCrawler(T) ? (this.crawlerCw ??= blockPieces(cwBlock(crawlerLayout(T))).plates.filter((p) => p.side > 0).map((p) => p.box)) : [];
     if (!ps.length) return null;
     const x0 = Math.min(...ps.map((b) => b.x0)), x1 = Math.max(...ps.map((b) => b.x1));
     const y0 = Math.min(...ps.map((b) => b.y0)), y1 = Math.max(...ps.map((b) => b.y1));

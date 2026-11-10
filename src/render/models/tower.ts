@@ -35,12 +35,18 @@ const add = (a: V2, b: V2, k = 1): V2 => [a[0] + b[0] * k, a[1] + b[1] * k];
 const ang2 = (a: number): V2 => [Math.cos(a), Math.sin(a)];
 
 /** Caja orientada: centro, eje x (unitario, en el plano x-y), medidas a lo largo de x, de la normal y lateral */
-export interface OBox { c: P3; ax: V2; size: P3; color: 'mast' | 'dark' | 'ballast' | 'trolley' | 'tie' }
+export interface OBox { c: P3; ax: V2; size: P3; color: 'mast' | 'dark' | 'trolley' | 'tie' }
+/**
+ * Media placa de lastre de la contrapluma (fase 8B): como OBox (eje x = a lo largo de la contrapluma, hacia su extremo),
+ * mitad side = +1 (+z) o −1, con la esquina exterior del extremo achaflanada (estilo de contrapeso-torres.png).
+ */
+export interface OPlate { c: P3; ax: V2; size: P3; side: 1 | -1; color: 'grey' | 'top' }
 
 export interface TowerParts {
   chords: Seg[];
   diags: Seg[];
   boxes: OBox[];
+  plates: OPlate[];
   /** Punta de la torre, dirección y largo de la pluma (para las pruebas) */
   top: V2;
   jd: V2;
@@ -81,7 +87,7 @@ export function towerParts(T: CraneSpec, er: number, ang: number, Lb: number): T
   const dir = ang2(tA), nd: V2 = [-dir[1], dir[0]]; // nd: arriba con la torre tumbada, atrás de pie
   const base: V2 = [0, towerBaseY(T, g.p1)];
   const top = add(base, dir, g.hgt);
-  const out: TowerParts = { chords: [], diags: [], boxes: [], top, jd: [0, 0], jl: 0 };
+  const out: TowerParts = { chords: [], diags: [], boxes: [], plates: [], top, jd: [0, 0], jl: 0 };
 
   // torre: tramo exterior (H0) e interior que sale al telescopar (aprox. visual: con H = 2·H0 no puede solaparse;
   // montada, el interior empieza justo encima del exterior)
@@ -106,7 +112,12 @@ export function towerParts(T: CraneSpec, er: number, ang: number, Lb: number): T
   const cd = ang2(psi), nc: V2 = [cd[1], -cd[0]];
   const hinge = add(top, nd, 2 * MAST_HALF + CJIB_GAP);
   lattice(out, hinge, cd, nc, CJIB_HH, CJIB_HH, JIB_HW, 0, COUNTER_JIB, 1.2, 0.07, 0.035);
-  for (let i = 0; i < 3; i++) box(out, add(add(hinge, cd, 7.2 + i * 0.6), nc, 0.6), cd, [0.55, 1.2, 1.6], 'ballast');
+  // lastre: 3 placas de 0,55 × 1,2 × 1,6 m (referencia: 3 bloques), cada una en dos mitades achaflanadas; la del extremo
+  // en el color de la grúa
+  for (let i = 0; i < 3; i++) {
+    const c = add(add(hinge, cd, 7.2 + i * 0.6), nc, 0.6);
+    for (const side of [1, -1] as const) out.plates.push({ c: v3(c, side * 0.4), ax: cd, size: [0.55, 1.2, 0.8], side, color: i === 2 ? 'top' : 'grey' });
+  }
 
   // cúspide (sale al desplegar la pluma) y tirantes a la pluma y a la contrapluma
   if (g.p3 > 0.01) {

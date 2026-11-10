@@ -1,5 +1,5 @@
 import type { CrawlerSpec } from '../../crane/cranes';
-import { cwDims, type Box3, type CwDims } from './layout';
+import { blockPieces, cwDims, towerGap, towerOutline, type Box3, type BlockSpec, type CwDims } from './layout';
 
 // Medidas del modelo 3D de una grúa sobre orugas, sin three.js (las usan el generador y las pruebas).
 // Fórmulas de la rama T.crawler de craneModel() en la referencia. Donde la referencia hace que dos piezas se
@@ -120,7 +120,8 @@ export function crawlerLayout(T: CrawlerSpec): CrawlerLayout {
     top: [-2.4, yd + 7.5] as [number, number],
     feet: [[-2.2, plateTop, -0.9], [-2.2, plateTop, 0.9]] as [number, number, number][],
   };
-  const corners: [number, number][] = [[cd.x - cd.len / 2, cd.w], [front, wide], [opCab.x0, -opCab.z0], [opCab.x1, -opCab.z0]];
+  const cwCorners = towerOutline(blockPieces(cwBlock({ cw: { ...cd, y0: plateTop } })).plan);
+  const corners: [number, number][] = [...cwCorners, [front, wide], [opCab.x0, -opCab.z0], [opCab.x1, -opCab.z0]];
   const tailR = Math.max(...corners.map(([x, z]) => Math.hypot(x, z)));
   const eye = { x: opCab.x1 - 0.45, y: opCab.y1 - 0.55, z: (opCab.z0 + opCab.z1) / 2 };
 
@@ -149,7 +150,8 @@ export function crawlerLayout(T: CrawlerSpec): CrawlerLayout {
   if (sl) {
     // Amarres: la referencia ata los tirantes en las 4 esquinas. Con el radio corto (15 m) los de delante
     // atravesarían el contrapeso, así que van en la mitad trasera de la bandeja (aproximación visual).
-    const xr = -sl.d / 2 + 0.6, xm = -sl.d / 2 + 1.6, zz = sl.w / 2 - 0.6;
+    // (fase 8B) los amarres quedan dentro de las pilas de placas, fuera del chaflán de su esquina trasera
+    const xr = -sl.d / 2 + 0.6, xm = -sl.d / 2 + 1.6, zz = sl.w / 2 - 2.0;
     tray = { d: sl.d, w: sl.w, h: sl.h, base: 0.5, plates: 6, hangers: [[xr, -zz], [xr, zz], [xm, -zz], [xm, zz]] };
   }
 
@@ -179,4 +181,20 @@ export function loopPoint(l: CrawlerLayout['loop'], s: number): { x: number; y: 
   u -= L;
   const t = u / l.R;
   return { x: l.xa - l.R * Math.sin(t), y: l.yc - l.R * Math.cos(t), a: Math.PI - t };
+}
+
+/**
+ * Contrapeso de la superestructura de las orugas (fase 8B): dos torres de placas achaflanadas (LR 300: 6 placas;
+ * LR 3000: 14) con hueco central y bastidor de todo el alto (ahí se atan los tirantes del caballete y del derrick),
+ * barandilla y argollas, dentro de la planta de cwDims de la referencia.
+ */
+export function cwBlock(L: { cw: CwDims & { y0: number } }): BlockSpec {
+  const cw = L.cw;
+  return { xr: cw.x - cw.len / 2, xf: cw.x + cw.len / 2, zi: towerGap(cw.w), zo: cw.w, y0: cw.y0, hgt: cw.hgt,
+    frame: 'full', rail: true, lugs: true };
+}
+
+/** Placas de la bandeja del superlift (fase 8B): dos pilas con hueco central a lo largo, chaflán atrás (−x). */
+export function trayBlock(t: TrayLayout): BlockSpec {
+  return { xr: -t.d / 2 + 0.3, xf: t.d / 2 - 0.3, zi: 0.6, zo: t.w / 2 - 0.3, y0: t.base, hgt: t.h - t.base, n: t.plates, frame: 'none' };
 }

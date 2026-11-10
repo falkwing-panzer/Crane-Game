@@ -97,6 +97,11 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   desplegar pluma; al revés para plegar) con las condiciones de la referencia, carro con Q/E, pluma de 0 a 30° con W/S,
   curva de la torre de `structCap`, choques de torre/pluma/contrapluma, torre plegada en los choques al conducir, vuelco.
   Pruebas en `tower.test.ts` (geometría contra la referencia, montaje, LMI, física) y `models/tower.test.ts`.
+- **Fase 8B, parte 1** (contrapesos): el estilo de contrapeso-torres.png en las 11 grúas (tabla aprobada por Jesús):
+  City 25, AT 60 y RT 90 un bloque de placas achaflanadas; AT 220 dos torres con bastidor; contrapeso base de AT 300-6 y
+  AT 500-8 en placas rectas; LR 300 y LR 3000 dos torres con bastidor de todo el alto y barandilla; bandeja del superlift en
+  dos pilas; SK 60 placas achaflanadas en la contrapluma. Choques del contrapeso al girar en todas (salvo la SK). Pruebas en
+  `models/counterweight.test.ts`. **Falta la parte 2** (remodelado de chasis, cabinas y detalles: pasos 4–5 de FASES).
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -146,6 +151,10 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   `layout.ts` (placas de lastre) y `yguy.ts` (`yGuyGeom` sin three.js, `YGuyView` instanciado en el grupo de la pluma). Lastre (fase 7):
   `towerPlan`/`towerOutline`/`ballastPlates` → `{ plates, frame, boxes }`. Plumín: `models/jib.ts` (`jibLattice`, `jibGeom` sin
   three.js, `JibView` en el grupo de la superestructura).
+- Contrapesos (fase 8B): `blockPieces(BlockSpec)` en `layout.ts` (genérico: dos mitades de placas achaflanadas, hueco, bastidor,
+  barandilla, argollas), `fixedBlock(L)` (contrapeso fijo de ruedas), `cwPieces(T, L, cwS)` = fijo + `ballastPlates` (lo dibuja
+  `CraneModel` y lo usa `towerBox`); `cwBlock(L)` y `trayBlock(t)` en `crawlerLayout.ts`; `models/plates.ts` (`plateGeo`,
+  `PlateMeshes`: 2 InstancedMesh, placas y cajas, `plateColors`). Placas de la SK: `TowerParts.plates` (`OPlate`).
 - Grúa torre: `models/tower.ts` (`towerParts` sin three.js: celosías, cajas, `towerDeck`, `foldedTowerBox`) y
   `models/towerView.ts` (3 InstancedMesh recolocados solo si cambian `er`, `ang` o el carro); `CraneModel` usa `TowerView`
   en vez de la superestructura telescópica cuando `T.tower`. `TRUCK_IDS` = `WHEELED_IDS` + `sk` (menú). En `world.ts`:
@@ -316,6 +325,17 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - **Vuelco de la SK 60**: CDG de la torre a media altura, contrapeso y pluma arriba (alturas de `towerGeom`); el cuerpo lleva
   cajas de torre y pluma. Con 2 t a 60 m la estabilidad queda en ~53 %: manda el límite estructural (como la referencia).
 
+- **Contrapesos en placas (fase 8B)**: solo dibujo dentro de la planta de `cwDims` (masa y estabilidad sin cambios). Placas de
+  ~0,42 m (`round(alto / 0,42)`), las 2 de arriba del color de la grúa. Dos torres solo si el contrapeso mide ≥ 2,5 m de largo
+  (AT 220); las cortas son un bloque de dos mitades que se tocan (`zi` = 0), con el chaflán en las dos esquinas traseras. El
+  base de las grúas con lastre de placas va en placas **rectas** (las torres de lastre lo tapan por detrás). Orugas: bastidor
+  de todo el alto en el hueco porque ahí se atan los tirantes del caballete y del derrick. Bandeja: amarres de los tirantes
+  movidos hacia dentro (`w/2 − 2`) para quedar fuera del chaflán. SK 60: 3 placas en dos mitades, chaflán en el extremo de la
+  contrapluma, la del extremo del color de la grúa. Todo instanciado (`PlateMeshes`): no añade draw calls a la AT 650-8.
+  `tailR` usa el contorno achaflanado (ruedas sin lastre y orugas).
+- **Choque del contrapeso al girar en todas las grúas** (fase 8B; antes solo con lastre): `towerBox` sale de `cwPieces` (ruedas)
+  o de `cwBlock` (orugas, calculado una vez); `slewBlocked` en todas salvo la SK 60 (su contrapeso va arriba).
+
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
   grúas grandes (fases 4–6): cabeza cinemática, izado a velocidad plena, estiramiento máximo del cable.
@@ -351,7 +371,11 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   0,18 ms por paso. AT 450-8 con lastre: 118. **En la laptop de Jesús: 60 fps.**
 
 - Fase 8 (SK 60 montada con 2,3 t en el gancho, vista general, sombras incluidas): **92 draw calls** y ~28.400 triángulos;
-  render ~2,4 ms con `gl.finish` en el panel de la app. **Pendiente medir en la laptop.**
+  render ~2,4 ms con `gl.finish` en el panel de la app. **En la laptop de Jesús: 60 fps.**
+
+- Fase 8B parte 1 (vista inicial o de cerca, sombras incluidas): City 25 120 draw calls (~10.300 triángulos), AT 220 119,
+  AT 500-8 con lastre 129, LR 300 74, LR 3000 86 (~22.200 triángulos, igual que antes), SK 60 montada 64 de cerca. La AT 650-8
+  no cambia de camino de dibujo (146). **En la laptop de Jesús: 60 fps** (City 25, LR 3000, SK 60).
 
 ### Pendientes
 - SK 60: el lastre es el de la referencia (3 bloques en la contrapluma); su forma va en la fase 8B. Se puede plegar con el

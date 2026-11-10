@@ -5,7 +5,8 @@ import { suspensionPose, type Pose } from '../crane/pose';
 import { axleSteer } from '../crane/drive';
 import { Parts } from './models/builder';
 import { palette } from './models/materials';
-import { ballastPlates, CHAMFER_X, CHAMFER_Z, layout, type Layout } from './models/layout';
+import { cwPieces, layout, type Layout } from './models/layout';
+import { PlateMeshes, plateColors } from './models/plates';
 import { buildYGuyBase, YGuyView } from './models/yguy';
 import { JibView } from './models/jib';
 import { TowerView } from './models/towerView';
@@ -27,26 +28,7 @@ const _qw = new THREE.Quaternion();
 const _qspin = new THREE.Quaternion();
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
-const X_AXIS = new THREE.Vector3(1, 0, 0);
 
-/**
- * Placa de lastre de 1 × 1 × 1 centrada, con la esquina (−x, +z) achaflanada en planta (CHAMFER_X/Z del largo y
- * del ancho), como las de contrapeso-torres.png. Se escala por instancia.
- */
-const plateGeo = (() => {
-  const s = new THREE.Shape();
-  // contorno en (x, z): rotateX(90°) lleva (x, y, z) a (x, −z, y), así la y del contorno pasa a ser la z
-  s.moveTo(-0.5, -0.5);
-  s.lineTo(0.5, -0.5);
-  s.lineTo(0.5, 0.5);
-  s.lineTo(-0.5 + CHAMFER_X, 0.5);
-  s.lineTo(-0.5, 0.5 - CHAMFER_Z);
-  s.closePath();
-  const g = new THREE.ExtrudeGeometry(s, { depth: 1, bevelEnabled: false });
-  g.rotateX(Math.PI / 2); // la extrusión (de 0 a 1 en z) pasa a ser el alto (de 0 a −1 en y)
-  g.translate(0, 0.5, 0);
-  return g;
-})();
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -57,7 +39,6 @@ const _p = new THREE.Vector3();
 const _s = new THREE.Vector3();
 const _o = new THREE.Vector3();
 const _q0 = new THREE.Quaternion();
-const _col = new THREE.Color();
 
 /** Ojo para la vista de cabina, en el marco del chasis: posición y dirección de la mirada. */
 export interface Eye { x: number; y: number; z: number; fx: number; fz: number }
@@ -84,10 +65,8 @@ export class CraneModel {
   private tires: THREE.InstancedMesh;
   private rims: THREE.InstancedMesh;
   private hubs: THREE.InstancedMesh;
-  // Lastre (tecla B): placas que aparecen con el montaje (detrás del contrapeso o en torre, según la grúa)
-  private ballastMesh: THREE.InstancedMesh | null = null;
-  private frameMesh: THREE.InstancedMesh | null = null;
-  private ballastColors: Record<string, string> = {};
+  // Contrapeso fijo y lastre (tecla B): placas que aparecen con el montaje (fase 7; contrapeso fijo en la fase 8B)
+  private cwMeshes: PlateMeshes | null = null;
   private ballastKey = -1;
   private yguy: YGuyView | null = null;
   private jib: JibView | null = null;
@@ -143,18 +122,9 @@ export class CraneModel {
     // en la RT se conduce desde la cabina de la superestructura: es la que se oculta
     this.cab.push(...(L.noCab ? supMeshes.filter((m) => m.material === pal.cabin || m.material === pal.glass) : cabMeshes));
 
-    // lastre en dos torres (placas con chaflán) y bastidor central con barandilla y argollas: 2 draw calls
-    if (L.ballast) {
-      const full = ballastPlates(T, L, 1);
-      this.ballastMesh = new THREE.InstancedMesh(plateGeo, new THREE.MeshLambertMaterial({ color: '#ffffff' }), full.plates.length);
-      this.frameMesh = new THREE.InstancedMesh(box, new THREE.MeshLambertMaterial({ color: '#ffffff' }), full.frame.length);
-      for (const m of [this.ballastMesh, this.frameMesh]) {
-        m.castShadow = m.receiveShadow = true;
-        m.frustumCulled = false;
-        this.sup.add(m);
-      }
-      this.ballastColors = { base: '#3a3f45', grey: '#a3a8ad', top: T.color, frame: '#4a5057', rail: '#c9ced3', lug: '#1d2125' };
-    }
+    // contrapeso fijo y lastre en dos torres (placas con chaflán), bastidor central con barandilla y argollas: 2 draw calls
+    const full = cwPieces(T, L, 1);
+    this.cwMeshes = new PlateMeshes(this.sup, full.plates.length, full.frame.length, plateColors(T));
 
     // cilindro de elevación y cable de elevación (se orientan en cada cuadro)
     this.luffBarrel = new THREE.Mesh(cyl, pal.greyDeep);
@@ -242,34 +212,12 @@ export class CraneModel {
     this.root.updateMatrixWorld();
   }
 
-  /** Lastre al avance cw (solo se recoloca cuando cambia el avance). */
+  /** Contrapeso y lastre al avance cw (solo se recoloca cuando cambia el avance). */
   private updateBallast(cw: number) {
-    const m = this.ballastMesh, f = this.frameMesh;
-    if (!m || !f || cw === this.ballastKey) return;
+    if (!this.cwMeshes || cw === this.ballastKey) return;
     this.ballastKey = cw;
-    const { plates, frame } = ballastPlates(this.T, this.L, cw);
-    plates.forEach((pl, i) => {
-      const b = pl.box;
-      // la geometría tiene el chaflán en la esquina (−x, +z); la torre izquierda se gira 180° alrededor de x
-      // (no se refleja: una escala negativa daría la vuelta a las caras)
-      _q0.setFromAxisAngle(X_AXIS, pl.side > 0 ? 0 : Math.PI);
-      _m4.compose(_p.set((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, (b.z0 + b.z1) / 2), _q0, _s.set(b.x1 - b.x0, b.y1 - b.y0, b.z1 - b.z0));
-      m.setMatrixAt(i, _m4);
-      m.setColorAt(i, _col.set(this.ballastColors[pl.color]));
-    });
-    _q0.identity();
-    frame.forEach((fp, i) => {
-      const b = fp.box;
-      _m4.compose(_p.set((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, (b.z0 + b.z1) / 2), _q0, _s.set(b.x1 - b.x0, b.y1 - b.y0, b.z1 - b.z0));
-      f.setMatrixAt(i, _m4);
-      f.setColorAt(i, _col.set(this.ballastColors[fp.color]));
-    });
-    m.count = plates.length;
-    f.count = frame.length;
-    for (const x of [m, f]) {
-      x.instanceMatrix.needsUpdate = true;
-      if (x.instanceColor) x.instanceColor.needsUpdate = true;
-    }
+    const { plates, frame } = cwPieces(this.T, this.L, cw);
+    this.cwMeshes.set(plates, frame);
   }
 
   /** Eje lateral de la superestructura en el mundo (para repartir los ramales del gancho). */

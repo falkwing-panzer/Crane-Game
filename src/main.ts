@@ -153,7 +153,8 @@ async function start() {
         teleMax,
         // la bandeja del superlift no atraviesa obstáculos al girar (boomHit de la referencia)
         // y las torres de lastre tampoco (no está en la referencia)
-        slewBlocked: T.superlift || T.ballast ? (s) => {
+        // (fase 8B: el contrapeso de todas las grúas, salvo la torre, que lo lleva arriba)
+        slewBlocked: !T.tower ? (s) => {
           const why = phys.trayBlocked(s.x, s.z, s.h, s.slew, C.slR) ?? phys.tailBlocked(s, s.slew, s.cw);
           if (why) hud.sayOnce(why);
           return !!why;

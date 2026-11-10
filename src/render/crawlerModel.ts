@@ -4,7 +4,9 @@ import type { CraneState } from '../crane/kinematics';
 import type { Pose } from '../crane/pose';
 import { Parts } from './models/builder';
 import { palette } from './models/materials';
-import { crawlerLayout, loopLength, loopPoint, type CrawlerLayout } from './models/crawlerLayout';
+import { crawlerLayout, cwBlock, loopLength, loopPoint, trayBlock, type CrawlerLayout } from './models/crawlerLayout';
+import { blockPieces } from './models/layout';
+import { PlateMeshes, plateColors } from './models/plates';
 import { boomLattice, latticeSegs, type Seg } from './models/lattice';
 import type { Eye } from './craneModel';
 
@@ -82,6 +84,9 @@ export class CrawlerModel {
     const sp = new Parts();
     this.buildSuper(sp);
     const supMeshes = sp.build(this.sup, pal);
+    // contrapeso: dos torres de placas achaflanadas con bastidor (fase 8B); fijo, se coloca una vez
+    const cb = blockPieces(cwBlock(L));
+    new PlateMeshes(this.sup, cb.plates.length, cb.frame.length, plateColors(T)).set(cb.plates, cb.frame);
     this.cab.push(...supMeshes.filter((m) => m.material === pal.cabin || m.material === pal.glass));
 
     // cables: de elevación (tambor → pie → cabeza) y tirante del caballete a la cabeza
@@ -123,10 +128,9 @@ export class CrawlerModel {
     if (L.tray) {
       const t = L.tray, tp = new Parts();
       tp.box('dark', -t.d / 2, t.d / 2, 0, t.base, -t.w / 2, t.w / 2);
-      const ph = (t.h - t.base) / t.plates;
-      for (let i = 0; i < t.plates; i++) {
-        tp.box(i % 2 ? 'greyDark' : 'greyDeep', -t.d / 2 + 0.3, t.d / 2 - 0.3, t.base + i * ph, t.base + (i + 1) * ph - 0.06, -t.w / 2 + 0.3, t.w / 2 - 0.3);
-      }
+      // placas en dos pilas achaflanadas (fase 8B): se colocan una vez en el grupo de la bandeja
+      const tb = blockPieces(trayBlock(t));
+      new PlateMeshes(this.tray, tb.plates.length, tb.frame.length, plateColors(T)).set(tb.plates, tb.frame);
       for (const [x, z] of t.hangers) tp.box('dark', x - 0.2, x + 0.2, t.h, t.h + 0.3, z - 0.15, z + 0.15);
       tp.build(this.tray, pal);
       this.sup.add(this.tray);
@@ -183,11 +187,7 @@ export class CrawlerModel {
         P.box('black', x, x + 0.12, yd + 0.9, yd + 1.3, h.z1, h.z1 + 0.025);
       }
     }
-    // contrapeso en placas
-    const sh = cw.hgt / cw.n;
-    for (let i = 0; i < cw.n; i++) {
-      P.box(i % 2 ? 'greyDark' : 'greyDeep', cw.x - cw.len / 2, cw.x + cw.len / 2, cw.y0 + i * sh, cw.y0 + (i + 1) * sh - 0.07, -cw.w, cw.w);
-    }
+    // contrapeso: dos torres de placas instanciadas (fase 8B, ver el constructor)
     // cabrestante y sus soportes
     const d = L.drum;
     for (const s of [-1, 1]) {
