@@ -40,6 +40,8 @@ export interface Readout {
   superlift: { r: number; min: number; max: number } | null;
   /** Plumín: fase del montaje, avance 0…1, ángulo absoluto (°) y largo (m) (null si la grúa no lleva) */
   jib: { text: string; p: number; deg: number; len: number } | null;
+  /** Grúa torre: fase del montaje y avance 0…1 (null si no es grúa torre); con torre, Lb es la posición del carro */
+  tower?: { text: string; p: number } | null;
 }
 
 /** Indicadores de montaje: verde montado, amarillo montando, gris desmontado. */
@@ -50,6 +52,7 @@ function assemblyLine(r: Readout) {
     const b = r.ballast, moving = b.p !== b.target;
     out.push(`<span class="lamp ${cls(b.p)}">Lastre ${Math.round(b.t)} / ${b.of} t${moving ? (b.target ? ' · montando' : ' · desmontando') : ''}</span>`);
   }
+  if (r.tower) out.push(`<span class="lamp ${cls(r.tower.p)}">Torre ${r.tower.text}</span>`);
   if (r.yguy) out.push(`<span class="lamp ${cls(r.yguy.p)}">Arriostr. Y ${r.yguy.text}</span>`);
   if (r.jib) {
     const j = r.jib;
@@ -80,7 +83,8 @@ export class Hud {
   private renderAcc = 0;
 
   constructor(root: HTMLElement, private title: string, current: string, cranes: { id: string; name: string }[],
-    has = { ballast: false, yguy: false, outriggers: true, tele: true, superlift: false, jib: false }) {
+    has: { ballast: boolean; yguy: boolean; outriggers: boolean; tele: boolean; superlift: boolean; jib: boolean; tower?: boolean } =
+    { ballast: false, yguy: false, outriggers: true, tele: true, superlift: false, jib: false }) {
     const opts = cranes.map((c) => `<option value="${c.id}"${c.id === current ? ' selected' : ''}>${c.name}</option>`).join('');
     root.innerHTML = `
       <div class="panel perf" id="perf">— fps</div>
@@ -88,8 +92,8 @@ export class Hud {
       <div class="panel data" id="data"></div>
       <div class="msg" id="msg"></div>
       <div class="panel keys">
-        <b>Flechas</b> conducir · <b>A/D</b> giro · <b>W/S</b> pluma · ${has.tele ? '<b>Q/E</b> telescopio · ' : ''}<b>R/F</b> gancho ·
-        ${has.outriggers ? '<b>O</b> estabilizadores · ' : ''}${has.ballast ? '<b>B</b> lastre · ' : ''}${has.yguy ? '<b>Y</b> arriostramiento · ' : ''}${has.superlift ? '<b>K/L</b> radio superlift · ' : ''}${has.jib ? '<b>M</b> montar plumín · <b>T/G</b> plumín · ' : ''}<b>Espacio</b> enganchar/soltar · <b>X</b> reponer carga · <b>P</b> puentear LMI · <b>Shift</b> fino · <b>V</b> cámara
+        <b>Flechas</b> conducir · <b>A/D</b> giro · <b>W/S</b> pluma · ${has.tower ? '<b>Q/E</b> carro · ' : has.tele ? '<b>Q/E</b> telescopio · ' : ''}<b>R/F</b> gancho ·
+        ${has.outriggers ? '<b>O</b> estabilizadores · ' : ''}${has.ballast ? '<b>B</b> lastre · ' : ''}${has.yguy ? '<b>Y</b> arriostramiento · ' : ''}${has.superlift ? '<b>K/L</b> radio superlift · ' : ''}${has.jib ? '<b>M</b> montar plumín · <b>T/G</b> plumín · ' : ''}${has.tower ? '<b>M</b> montar torre · ' : ''}<b>Espacio</b> enganchar/soltar · <b>X</b> reponer carga · <b>P</b> puentear LMI · <b>Shift</b> fino · <b>V</b> cámara
       </div>
       <div class="card" id="card" hidden>
         <h2>Grúa volcada</h2>
@@ -152,7 +156,7 @@ export class Hud {
     const lmiCls = r.lmi >= 1 ? 'bad' : r.lmi >= 0.9 ? 'warn' : 'ok';
     this.data.innerHTML =
       `<div class="title">${this.title}${r.fine ? ' · <span class="warn">fino</span>' : ''}</div>` +
-      `Pluma <b>${f(r.Lb)} m</b> · <b>${f(r.angDeg)}°</b><br>` +
+      (r.tower ? `Carro <b>${f(r.Lb)} m</b> · pluma <b>${f(r.angDeg)}°</b><br>` : `Pluma <b>${f(r.Lb)} m</b> · <b>${f(r.angDeg)}°</b><br>`) +
       `Radio <b>${f(r.radius)} m</b> · punta <b>${f(r.headH)} m</b><br>` +
       `Cable <b>${f(r.cable)} m</b><br>` +
       `Gancho: <b>${r.load}</b><br>` +

@@ -1,4 +1,5 @@
 import type { CraneSpec } from './cranes';
+import { towerHead, towerTip } from './tower';
 
 export interface CraneState {
   /** Giro de la superestructura (rad). Positivo = antihorario visto desde arriba. */
@@ -46,6 +47,9 @@ export interface CraneState {
   jgT: 0 | 1;
   /** Ángulo del plumín respecto de la pluma (rad, + hacia abajo): ángulo absoluto = ang − jibRel (referencia) */
   jibRel: number;
+  /** Grúa torre (SK 60): avance del montaje 0 (plegada) … 1 (montada) y objetivo (er / erT de la referencia) */
+  er: number;
+  erT: 0 | 1;
 }
 
 export interface CraneInput {
@@ -75,7 +79,7 @@ export interface StepLimits {
   /** ¿El giro deja la superestructura (bandeja del superlift) tocando algo? Si es así, se deshace */
   slewBlocked?: (S: CraneState) => boolean;
   /**
-   * Choque del plumín (boomHit de la referencia, más el suelo): cuánto toca (0 = libre). Si al final del paso toca
+   * Choque del plumín o de la torre y su pluma (boomHit de la referencia, más el suelo): cuánto toca (0 = libre). Si al final del paso toca
    * y toca más que al principio, se deshace todo el paso (como Object.assign(S, prev) de la referencia); así un
    * movimiento que lo aleja sigue permitido.
    */
@@ -87,14 +91,14 @@ export interface StepLimits {
 export const CABLE_MIN = 1.2;
 export const CABLE_MAX = 70;
 /** Largo máximo de cable: 70 m, o hasta 3 m bajo el suelo si la punta está más alta (la referencia: punta + 3) */
-export const cableMax = (T: CraneSpec, S: Pick<CraneState, 'ang' | 'Lb' | 'slew' | 'jg' | 'jibRel'>) => Math.max(CABLE_MAX, tipPos(T, S).y + 3);
+export const cableMax = (T: CraneSpec, S: TipState) => Math.max(CABLE_MAX, tipPos(T, S).y + 3);
 const RAMP = 0.4; // s para llegar a velocidad plena
 const FINE = 0.3; // factor de mando fino (igual que la referencia)
 /** Lo que se levanta el chasis con los estabilizadores apoyados (lift() de la referencia) */
 export const OUT_LIFT = 0.3;
 
 export function initialState(T: CraneSpec): CraneState {
-  return {
+  const S: CraneState = {
     // la referencia empieza las orugas con la pluma a 70°
     // orugas: gancho a 4 m del suelo como la referencia (S.L = punta − 4); las de ruedas conservan los 4 m
     // de cable de la fase 0
@@ -104,7 +108,16 @@ export function initialState(T: CraneSpec): CraneState {
     x: 0, z: 0, h: 0, vd: 0, steer: 0, spin: 0, trackL: 0, trackR: 0, turnKey: false, sus: { pitch: 0, bank: 0, vp: 0, vb: 0 },
     cw: 0, cwT: 0, yg: 0, ygT: 0,
     jg: 0, jgT: 0, jibRel: 20 * Math.PI / 180, // la referencia empieza con jibRel = 20°
+    er: 0, erT: 0,
   };
+  // grúa torre: pluma horizontal, carro adentro y cable colgando de la punta de la torre plegada (S.L = punta − 4,
+  // al menos 1,5 m, como la referencia)
+  if (T.tower) {
+    S.ang = 0;
+    S.Lb = T.boom.min;
+    S.cable = Math.max(1.5, tipPos(T, S).y - 4);
+  }
+  return S;
 }
 
 function ramp(vel: number, cmd: number, vmax: number, dt: number) {
@@ -122,7 +135,7 @@ export function stepCrane(T: CraneSpec, S: CraneState, inp: CraneInput, dt: numb
   const k = inp.fine ? FINE : 1;
   let cut = false;
   const prev = { slew: S.slew, ang: S.ang, Lb: S.Lb, jibRel: S.jibRel };
-  const hit0 = lim?.jibHit && jibOn(T, S) ? lim.jibHit(S) : 0;
+  const hit0 = lim?.jibHit && hitChecked(T, S) ? lim.jibHit(S) : 0;
   const guard = (apply: () => void, undo: () => void) => {
     apply();
     if (!lim) return true;
@@ -169,7 +182,7 @@ export function stepCrane(T: CraneSpec, S: CraneState, inp: CraneInput, dt: numb
     }
   } else S.v.jib = 0;
   // choque del plumín con el entorno o el suelo: se deshace el paso
-  if (lim?.jibHit && jibOn(T, S)) {
+  if (lim?.jibHit && hitChecked(T, S)) {
     const h = lim.jibHit(S);
     if (h > 0 && h > hit0 + 1e-9) {
       Object.assign(S, prev);
@@ -208,7 +221,8 @@ export function headReach(T: CraneSpec, S: Pick<CraneState, 'ang' | 'Lb'>) {
  * Posición de la cabeza de pluma en el marco del chasis apoyado en el suelo (y arriba; chasis a lo largo de +x).
  * La elevación por estabilizadores y la inclinación se aplican después con carrierPose().
  */
-export function headPos(T: CraneSpec, S: Pick<CraneState, 'slew' | 'ang' | 'Lb'>) {
+export function headPos(T: CraneSpec, S: Pick<CraneState, 'slew' | 'ang' | 'Lb'> & { er?: number }) {
+  if (T.tower) return towerHead(T, { ...S, er: S.er ?? 0 });
   const r = headReach(T, S);
   return {
     x: T.piv + r * Math.cos(S.slew),
@@ -217,6 +231,12 @@ export function headPos(T: CraneSpec, S: Pick<CraneState, 'slew' | 'ang' | 'Lb'>
   };
 }
 
+/** Se miran los choques de la pluma con el entorno: plumín montado o grúa torre montada (boomHit de la referencia). */
+export const hitChecked = (T: CraneSpec, S: Pick<CraneState, 'jg' | 'er'>) => jibOn(T, S) || (!!T.tower && S.er >= 1);
+
+/** Lo que hace falta del estado para la punta del cable (er solo en la grúa torre) */
+export type TipState = Pick<CraneState, 'slew' | 'ang' | 'Lb' | 'jg' | 'jibRel'> & { er?: number };
+
 /** Plumín montado y tensado (la referencia pone T.jib al llegar jg a 1). */
 export const jibOn = (T: CraneSpec, S: Pick<CraneState, 'jg'>) => !!T.jibDef && S.jg >= 1;
 
@@ -224,7 +244,8 @@ export const jibOn = (T: CraneSpec, S: Pick<CraneState, 'jg'>) => !!T.jibDef && 
  * Punta donde cuelga el cable (tipPos de la referencia), en el mismo marco que headPos: la cabeza o, con el plumín
  * montado, el extremo del plumín (largo jibDef.len desde la cabeza, ángulo absoluto ang − jibRel).
  */
-export function tipPos(T: CraneSpec, S: Pick<CraneState, 'slew' | 'ang' | 'Lb' | 'jg' | 'jibRel'>) {
+export function tipPos(T: CraneSpec, S: TipState) {
+  if (T.tower) return towerTip(T, { ...S, er: S.er ?? 0 });
   const hd = headPos(T, S);
   if (!jibOn(T, S)) return hd;
   const J = T.jibDef!.len, ja = S.ang - S.jibRel, r = J * Math.cos(ja);

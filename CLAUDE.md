@@ -93,6 +93,10 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   bastidor con barandilla y argollas en las 4 grúas con lastre; choque de las torres al girar y al montar el lastre.
   AT 650-8 en el menú (generador de ruedas, torre de lastre, Y-guy). Plumín: montaje con M (32 s, por fases), T/G con el
   guard del LMI, cable y gancho en la punta, choques con obstáculos, cargas sueltas y suelo. Pruebas en `jib.test.ts`.
+- **Fase 8** (SK 60): grúa torre autodesplegable sobre el camión de 6 ejes. Montaje con M (45 s: levantar, telescopar,
+  desplegar pluma; al revés para plegar) con las condiciones de la referencia, carro con Q/E, pluma de 0 a 30° con W/S,
+  curva de la torre de `structCap`, choques de torre/pluma/contrapluma, torre plegada en los choques al conducir, vuelco.
+  Pruebas en `tower.test.ts` (geometría contra la referencia, montaje, LMI, física) y `models/tower.test.ts`.
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -115,6 +119,11 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - `src/crane/kinematics.ts` (fase 7): `S.jg`/`jgT`/`jibRel`/`v.jib`, `jibOn(T, S)`, `tipPos` (punta del cable: cabeza o punta
   del plumín; la usan la física, `cableMax` y el vuelco). `StepLimits.jibHit`/`onHit`: si el plumín toca más que al empezar el
   paso, se deshace el paso entero (como `Object.assign(S, prev)` de la referencia).
+- `src/crane/tower.ts` (fase 8): `towerGeom(T, S)` (port; además `jlVis`), `towerPivot`/`towerHead`/`towerTip`; `headPos`/`tipPos`
+  de `kinematics.ts` las usan con `T.tower` (el carro es `S.Lb`). Estado `S.er`/`erT`. `hitChecked(T, S)`: plumín o torre
+  montada (activa `StepLimits.jibHit`). En `assembly.ts`: rama de torre de `toggleMount`, `stepAssembly(…, towerHit)`
+  (el montaje se detiene si tocaría algo), `assembling(S, T)`/`blockWhileAssembling(S, inp, T)` (plegada tampoco se mueve
+  nada, como la referencia), `towerPhase`. `reference.ts`: `loadTowerReference(T, S)` ejecuta `towerGeom`…`tipPos` del HTML.
 - `src/crane/ops.ts`: `supportMode(S, T)` (`out` solo con `out = 1`; `move` con |vd| > 0,05; orugas `crawlMove` en marcha o
   con la dirección pulsada, si no `crawler`), `toggleOutriggers` (condiciones de la referencia),
   `dynamicStability` (tensión en `gp`), `stepTilt` (phi de la referencia), `TIP_PHI` = 0,06.
@@ -137,6 +146,10 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   `layout.ts` (placas de lastre) y `yguy.ts` (`yGuyGeom` sin three.js, `YGuyView` instanciado en el grupo de la pluma). Lastre (fase 7):
   `towerPlan`/`towerOutline`/`ballastPlates` → `{ plates, frame, boxes }`. Plumín: `models/jib.ts` (`jibLattice`, `jibGeom` sin
   three.js, `JibView` en el grupo de la superestructura).
+- Grúa torre: `models/tower.ts` (`towerParts` sin three.js: celosías, cajas, `towerDeck`, `foldedTowerBox`) y
+  `models/towerView.ts` (3 InstancedMesh recolocados solo si cambian `er`, `ang` o el carro); `CraneModel` usa `TowerView`
+  en vez de la superestructura telescópica cuando `T.tower`. `TRUCK_IDS` = `WHEELED_IDS` + `sk` (menú). En `world.ts`:
+  `towerHits(S, pose)`, caja de la torre plegada en `carrierBlocked`, `supBox` = plataforma, vuelco con torre y pluma.
 - Orugas: `models/crawlerLayout.ts` (cotas sin three.js: orugas, contorno de las tejas `loopPoint`, superestructura, pie de
   pluma, `derrick` y `tray` de la LR 3000), `models/lattice.ts` (`latticeSegs` genérica, `boomLattice`), `render/crawlerModel.ts` (`CrawlerModel`, misma
   interfaz que `CraneModel`: `update`, `eye`, `lateral`, `cab`).
@@ -287,6 +300,22 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   la cabeza con 4 m. El plumín empieza en la cabeza (la referencia lo dibuja 0,3 m más adelante) para que dibujo y física
   coincidan. Sin colisionador en Rapier (la carga lo atraviesa, como la pluma).
 
+- **Grúa torre (fase 8)**: geometría, montaje, mandos y capacidad como la referencia (`towerGeom`, `toggleMount`, `guard`,
+  `structCap`). El cable cuelga de la punta de la torre (+1 m) mientras no está montada y del carro después; arranca con
+  1,5 m de cable y al terminar el montaje queda en ≤ 4 m. **Ajustes de dibujo** (aproximación visual, la física usa
+  `towerGeom` tal cual): torre articulada en su cordón inferior (la celosía queda arriba tumbada, detrás de pie); pluma
+  plegada del otro lado del eje (debajo de la torre tumbada), así no cruza la torre al desplegarse; con la torre tumbada
+  todo se dibuja 0,85 m más alto (se anula al levantarla) y la cabina del conductor baja a `dHi + 0,6`; **contrapluma
+  plegada sobre la torre** (en la referencia salía 9 m hacia delante) y articulada 2 m detrás de la punta; tramo interior
+  de la torre justo encima del exterior al montarla (con H = 2·H0 no pueden solaparse); la cúspide sale con la pluma.
+- **Largo de la pluma al desplegarse (`jlVis`)**: con el de la referencia la punta bajaba a 1 m del suelo y atravesaba la
+  cubierta del camión; se alarga cuadrático desde el 25 % del despliegue (punta siempre a más de 4 m). Solo dibujo y choques.
+- **Choques de la torre** (`towerHits`): torre desde 3 m, pluma y contrapluma (esta no está en la referencia) contra obstáculos y
+  cargas sueltas; montada se deshace el paso (como el plumín), montando se detiene el avance. Plegada sobresale 6 m por delante
+  del camión: cuenta en `carrierBlocked` ("La torre plegada toca un obstáculo"; no está en la referencia).
+- **Vuelco de la SK 60**: CDG de la torre a media altura, contrapeso y pluma arriba (alturas de `towerGeom`); el cuerpo lleva
+  cajas de torre y pluma. Con 2 t a 60 m la estabilidad queda en ~53 %: manda el límite estructural (como la referencia).
+
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
   grúas grandes (fases 4–6): cabeza cinemática, izado a velocidad plena, estiramiento máximo del cable.
@@ -321,7 +350,15 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   (sombras incluidas), al límite de la meta de 150; render CPU ~3,4 ms con `gl.finish` en el panel de la app; física
   0,18 ms por paso. AT 450-8 con lastre: 118. **En la laptop de Jesús: 60 fps.**
 
+- Fase 8 (SK 60 montada con 2,3 t en el gancho, vista general, sombras incluidas): **92 draw calls** y ~28.400 triángulos;
+  render ~2,4 ms con `gl.finish` en el panel de la app. **Pendiente medir en la laptop.**
+
 ### Pendientes
+- SK 60: el lastre es el de la referencia (3 bloques en la contrapluma); su forma va en la fase 8B. Se puede plegar con el
+  cable largo (referencia): el gancho queda en el suelo y se arrastra al conducir. La pluma y la torre no tienen colisionador
+  (la carga las atraviesa, como la pluma de las otras grúas).
+- Pruebas en el navegador con el panel oculto: no dibuja; para ver capturas se envió el canvas (`toDataURL`) a un servidor
+  temporal en el scratchpad (no está en el proyecto).
 - Al volcar la LR 3000, la bandeja del superlift se dibuja girando con la grúa (en física desaparece); debería quedarse en el suelo.
 - El superlift no cambia el ángulo del derrick (referencia); la bandeja no se puede desmontar (la LR 3000 "ya está montada").
 - `dampRope` y el filtro de 0,3 s afectan a todas las grúas: si un tirón se nota menos que antes, revisar `ROPE_DAMP`/`TENSION_TAU`.

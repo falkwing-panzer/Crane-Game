@@ -8,6 +8,7 @@ import { palette } from './models/materials';
 import { ballastPlates, CHAMFER_X, CHAMFER_Z, layout, type Layout } from './models/layout';
 import { buildYGuyBase, YGuyView } from './models/yguy';
 import { JibView } from './models/jib';
+import { TowerView } from './models/towerView';
 import { buildCarrier } from './models/carrier';
 import { buildBoomBase, buildHead, buildSection, buildSuper, sectionTip, sheaves, TELE_N } from './models/superstructure';
 
@@ -68,10 +69,10 @@ export class CraneModel {
   private boom = new THREE.Group();
   private sections: THREE.Group[] = [];
   private head = new THREE.Group();
-  private luffBarrel: THREE.Mesh;
-  private luffRod: THREE.Mesh;
-  private ropeA: THREE.Mesh;
-  private ropeB: THREE.Mesh;
+  private luffBarrel!: THREE.Mesh;
+  private luffRod!: THREE.Mesh;
+  private ropeA!: THREE.Mesh;
+  private ropeB!: THREE.Mesh;
   // Estabilizadores (4 esquinas): viga, cilindro del gato, vástago y zapata
   private outBeam: THREE.InstancedMesh;
   private outJack: THREE.InstancedMesh;
@@ -91,7 +92,9 @@ export class CraneModel {
   private yguy: YGuyView | null = null;
   private jib: JibView | null = null;
   /** Cable de elevación de la cabeza a la punta del plumín */
-  private ropeC: THREE.Mesh;
+  private ropeC!: THREE.Mesh;
+  /** Grúa torre (SK 60): torre, pluma con carro y contrapluma en lugar de la superestructura telescópica */
+  private tower: TowerView | null = null;
   /** Piezas que se ocultan en la vista de cabina (la cabina desde la que se mira) */
   readonly cab: THREE.Object3D[] = [];
 
@@ -129,6 +132,11 @@ export class CraneModel {
     // --- Superestructura (gira en x = piv) ---
     this.sup.position.set(T.piv, 0, 0);
     this.root.add(this.sup);
+    if (T.tower) {
+      this.tower = new TowerView(this.sup, T, pal);
+      this.cab.push(...cabMeshes);
+      return;
+    }
     const supP = new Parts();
     buildSuper(T, L, supP);
     const supMeshes = supP.build(this.sup, pal);
@@ -196,6 +204,11 @@ export class CraneModel {
     this.updateOutriggers(S);
     this.updateWheels(S);
     this.sup.rotation.y = S.slew;
+    if (this.tower) {
+      this.tower.update(S.er, S.ang, S.Lb);
+      this.root.updateMatrixWorld();
+      return;
+    }
     this.boom.rotation.z = S.ang;
     for (let k = 1; k <= TELE_N; k++) this.sections[k - 1].position.x = sectionTip(T, k, S.Lb);
     this.head.position.x = S.Lb;
