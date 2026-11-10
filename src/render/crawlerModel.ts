@@ -3,6 +3,7 @@ import type { CrawlerSpec } from '../crane/cranes';
 import type { CraneState } from '../crane/kinematics';
 import type { Pose } from '../crane/pose';
 import { Parts } from './models/builder';
+import { ladder, operatorCab, railing } from './models/details';
 import { palette } from './models/materials';
 import { crawlerLayout, cwBlock, loopLength, loopPoint, trayBlock, type CrawlerLayout } from './models/crawlerLayout';
 import { blockPieces } from './models/layout';
@@ -178,6 +179,12 @@ export class CrawlerModel {
     for (const s of [-1, 1]) P.box('dark', s0, s1, yd + 0.3, L.plateTop, s * zs, s * wide);
     const b = L.rearBody;
     P.box('yellow', b.x0, b.x1, b.y0, b.y1, b.z0, b.z1);
+    // rejillas a los costados del cuerpo trasero (motor)
+    for (const sg of [-1, 1]) for (let i = 0; i < 5; i++) {
+      const x = b.x0 + 0.3 + i * 0.28;
+      if (x + 0.12 > b.x1 - 0.2) break;
+      P.box('black', x, x + 0.12, b.y0 + 0.15, b.y1 - 0.15, sg * b.z1, sg * (b.z1 + 0.025));
+    }
     if (L.housing) {
       const h = L.housing;
       P.box('yellow', h.x0, h.x1, h.y0, h.y1, h.z0, h.z1);
@@ -186,6 +193,10 @@ export class CrawlerModel {
         if (x + 0.12 > h.x1 - 0.2) break;
         P.box('black', x, x + 0.12, yd + 0.9, yd + 1.3, h.z1, h.z1 + 0.025);
       }
+      // barandilla sobre el capó y escalerilla desde la plataforma (fase 8B, aproximación visual)
+      const zr = h.z1 - 0.06;
+      railing(P, 'greyDeep', [[h.x0 + 0.1, h.z0 + 0.1], [h.x0 + 0.1, zr], [h.x1 - 0.2, zr]], h.y1, 0.8);
+      ladder(P, 'greyDeep', [h.x0 + 0.35, h.z1 + 0.05], [h.x0 + 0.75, h.z1 + 0.05], yd + 0.3, h.y1);
     }
     // contrapeso: dos torres de placas instanciadas (fase 8B, ver el constructor)
     // cabrestante y sus soportes
@@ -204,11 +215,7 @@ export class CrawlerModel {
     // cabina del operador (izquierda) con ménsula, cristales, techo y rotativo
     const c = L.opCab;
     P.box('dark', c.x0 + 0.2, c.x1 - 0.2, yd + 0.3, c.y0, c.z1 - 0.05, -wide + 0.05);
-    P.box('cabin', c.x0, c.x1, c.y0, c.y1, c.z0, c.z1);
-    P.box('glass', c.x1, c.x1 + 0.04, c.y0 + 0.65, c.y1 - 0.15, c.z0 + 0.1, c.z1 - 0.1);
-    P.box('glass', c.x0 + 0.35, c.x1 - 0.2, c.y0 + 0.75, c.y1 - 0.2, c.z0 - 0.04, c.z0);
-    P.box('dark', c.x0 - 0.05, c.x1 + 0.05, c.y1, c.y1 + 0.08, c.z0, c.z1);
-    P.cyl('beacon', [(c.x0 + c.x1) / 2, c.y1 + 0.08, (c.z0 + c.z1) / 2], [(c.x0 + c.x1) / 2, c.y1 + 0.25, (c.z0 + c.z1) / 2], 0.1, 8);
+    operatorCab(P, c, -1);
     // soportes y bulón del pie del derrick
     if (L.derrick) {
       const dk = L.derrick;

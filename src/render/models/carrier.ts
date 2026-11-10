@@ -1,6 +1,7 @@
 import type { WheeledSpec } from '../../crane/cranes';
 import type { Parts } from './builder';
 import type { Layout } from './layout';
+import { ladder, slab } from './details';
 
 // Chasis de una grúa de ruedas de estilo europeo (port de craneModel() de la referencia, rama de ruedas):
 // bastidor, ejes y suspensión, guardabarros curvos, cubierta con canto, cofres laterales con puertas, motor
@@ -38,10 +39,11 @@ export function buildCarrier(T: WheeledSpec, L: Layout, P: Parts, cabP: Parts) {
     P.ext('dark', prof, Math.min(l0, l1), Math.max(l0, l1));
   }
 
-  // cubierta: plataforma amarilla, chapa superior y filete lateral
-  P.box('yellow', L0 + 0.1, cabX0, dHi - 0.3, dHi, -hf, hf);
+  // cubierta: plataforma gris (como las imágenes: el chasis es gris y solo la cabina y el capó son del color de la
+  // grúa), chapa superior y filete lateral claro
+  P.box('greyDark', L0 + 0.1, cabX0, dHi - 0.3, dHi, -hf, hf);
   P.box('greyDeep', L0 + 0.3, cabX0 - 0.1, dHi, dHi + 0.04, -hf + 0.12, hf - 0.12);
-  for (const s of [-1, 1]) P.box('black', L0 + 0.1, cabX0, dHi - 0.12, dHi - 0.08, s * hf, s * (hf + 0.02));
+  for (const s of [-1, 1]) P.box('chrome', L0 + 0.1, cabX0, dHi - 0.12, dHi - 0.08, s * hf, s * (hf + 0.02));
 
   // depósito de combustible (izquierda) en el hueco libre más largo que no sea el del motor
   const byLen = [...L.freeGaps].sort((p, q) => (q[1] - q[0]) - (p[1] - p[0]));
@@ -56,11 +58,11 @@ export function buildCarrier(T: WheeledSpec, L: Layout, P: Parts, cabP: Parts) {
   for (const s of [-1, 1]) for (const [x0, x1] of L.freeGaps) {
     if (x1 - x0 < 0.7 || (L.engGap && x0 === L.engGap[0]) || (s < 0 && tank && x0 === tank[0])) continue;
     const lo = dLo + 0.25, hi = dHi - 0.3, zin = Math.max(hf - 0.7, fh + 0.02);
-    P.box('yellowDark', x0, x1, lo, hi, s * zin, s * (hf - 0.04));
+    P.box('greyDeep', x0, x1, lo, hi, s * zin, s * (hf - 0.04));
     const nd = Math.max(1, Math.round((x1 - x0) / 1.1)), dw = (x1 - x0) / nd;
     for (let i = 0; i < nd; i++) {
       const a0 = x0 + i * dw + 0.05, a1 = x0 + (i + 1) * dw - 0.05, m = (a0 + a1) / 2;
-      P.box('yellow', a0, a1, lo + 0.06, hi - 0.06, s * (hf - 0.04), s * (hf - 0.01));
+      P.box('grey', a0, a1, lo + 0.06, hi - 0.06, s * (hf - 0.04), s * (hf - 0.01));
       P.box('dark', m - 0.1, m + 0.1, hi - 0.32, hi - 0.25, s * (hf - 0.01), s * (hf + 0.03));
     }
   }
@@ -75,20 +77,20 @@ export function buildCarrier(T: WheeledSpec, L: Layout, P: Parts, cabP: Parts) {
         const x = e0 + 0.2 + (i * (e1 - e0 - 0.4)) / nl;
         P.box('black', x, x + 0.1, eh0 + 0.25, eh1 - 0.15, s * (hf - 0.05), s * (hf - 0.02));
       }
-      P.box('yellow', e0 + 0.05, e1 - 0.05, eh1 - 0.12, eh1 - 0.05, s * (hf - 0.05), s * (hf - 0.03));
+      P.box('grey', e0 + 0.05, e1 - 0.05, eh1 - 0.12, eh1 - 0.05, s * (hf - 0.05), s * (hf - 0.03));
     }
     P.cyl('steel', [e0 + 0.2, eh0 - 0.15, hf - 0.45], [e1 - 0.2, eh0 - 0.15, hf - 0.45], 0.26, 14);
     P.cyl('dark', [e1 - 0.35, eh0 - 0.15, hf - 0.45], [e1 - 0.35, eh0 - 0.15, hf + 0.15], 0.08, 8);
   }
 
-  // cajones de estabilizadores con franjas de advertencia
+  // cajones de estabilizadores con franjas de advertencia rojas y blancas (como las imágenes)
   L.outBox.forEach(([x0, x1]) => {
     P.box('greyDark', x0, x1, dLo + 0.05, dLo + 1.1, -hf - 0.04, hf + 0.04);
     P.box('greyDeep', x0 - 0.03, x1 + 0.03, dLo + 1.1, dLo + 1.2, -hf - 0.06, hf + 0.06);
     const n = 6, w = (x1 - x0 - 0.1) / n;
     for (const s of [-1, 1]) for (let i = 0; i < n; i++) {
       const a = x0 + 0.05 + i * w;
-      P.box(i % 2 ? 'black' : 'warn', a, a + w, dLo + 0.2, dLo + 0.95, s * (hf + 0.04), s * (hf + 0.06));
+      P.box(i % 2 ? 'chrome' : 'red', a, a + w, dLo + 0.2, dLo + 0.95, s * (hf + 0.04), s * (hf + 0.06));
     }
   });
 
@@ -111,18 +113,26 @@ export function buildCarrier(T: WheeledSpec, L: Layout, P: Parts, cabP: Parts) {
 
   // trasera: voladizo achaflanado, panel de franjas, pilotos rojos y escape (horizontal, bajo la cubierta)
   P.ext('grey', [[L0, dLo + 0.2], [L0 + 0.45, dLo - 0.15], [L0 + 0.9, dLo - 0.15], [L0 + 0.9, dHi - 0.3], [L0, dHi - 0.3]], -hf, hf);
-  for (let i = 0; i < 8; i++) P.box(i % 2 ? 'black' : 'warn', L0 - 0.03, L0, dLo + 0.3, dLo + 0.75, -hf + (i * hf) / 4, -hf + ((i + 1) * hf) / 4);
+  for (let i = 0; i < 8; i++) P.box(i % 2 ? 'chrome' : 'red', L0 - 0.03, L0, dLo + 0.3, dLo + 0.75, -hf + (i * hf) / 4, -hf + ((i + 1) * hf) / 4);
   for (const s of [-1, 1]) {
     const za = s * (hf - 0.45), zb = s * (hf - 0.1);
     P.box('red', L0 - 0.05, L0, dLo + 0.85, dLo + 1.1, Math.min(za, zb), Math.max(za, zb));
   }
   P.cyl('dark', [L0 + 0.9, dLo + 0.05, -hf + 0.35], [L0 - 0.08, dLo + 0.05, -hf + 0.35], 0.09, 8);
+  // escalerilla trasera a la derecha, para subir a la cubierta (fase 8B)
+  const lz = hf - 0.75;
+  ladder(P, 'greyDeep', [L0 - 0.1, lz], [L0 - 0.1, lz + 0.4], dLo - 0.2, dHi + 0.02);
 
   // equipo sobre la cubierta delantera (caja de herramientas y depósito hidráulico), bajo la pluma tumbada
   const dk = L.deck;
   if (dk.x1 - dk.x0 > 1.4 && dk.top - dHi > 0.08) {
     const tx = dk.x0 + 0.9;
-    P.box('yellowDark', tx - 0.7, tx + 0.7, dHi, dk.top, 0.1, hf - 0.25);
+    // capó del motor (como el bloque amarillo detrás de la cabina en las imágenes) con rejillas
+    P.box('yellow', tx - 0.7, tx + 0.7, dHi, dk.top, 0.1, hf - 0.25);
+    for (let i = 0; i < 4; i++) {
+      const x = tx - 0.5 + i * 0.28;
+      if (dk.top - dHi > 0.35) P.box('black', x, x + 0.12, dHi + 0.12, dk.top - 0.1, hf - 0.25, hf - 0.23);
+    }
     P.cyl('chrome', [tx, dHi, -0.75], [tx, dk.top, -0.75], 0.32, 16);
     if (dk.x1 - dk.x0 > 2.4) P.box('black', tx + 0.6, tx + 1.3, dHi, dk.top, -hf + 0.3, -0.3);
   }
@@ -139,18 +149,27 @@ export function buildCarrier(T: WheeledSpec, L: Layout, P: Parts, cabP: Parts) {
 function buildCab(T: WheeledSpec, L: Layout, P: Parts) {
   const L1 = T.len[1], hf = L.hf, dHi = T.deckHi;
   const { x0: cabX0, y0: cabLow, y1: cabTop, z0: cw0, z1: cw1 } = L.cab;
-  P.ext('yellow', [[cabX0, cabLow], [L1, cabLow], [L1, cabTop - 0.16], [L1 - 0.14, cabTop], [cabX0, cabTop]], cw0, cw1);
-  P.box('glass', L1, L1 + 0.03, cabTop - 1.0, cabTop - 0.2, cw0 + 0.1, cw1 - 0.08);
-  P.box('black', L1, L1 + 0.035, cabTop - 1.06, cabTop - 1.0, cw0 + 0.06, cw1 - 0.04);
-  // ventanas laterales (las dos en la cabina ancha), puerta, manilla y estribo
+  // frente: vertical hasta el parabrisas, que se inclina hacia atrás, y techo redondeado (fase 8B; antes recto)
+  const wa: [number, number] = [L1, cabTop - 1.06], wb: [number, number] = [L1 - 0.22, cabTop - 0.14];
+  P.ext('yellow', [[cabX0, cabLow], [L1, cabLow], wa, wb, [L1 - 0.3, cabTop - 0.03], [L1 - 0.4, cabTop], [cabX0, cabTop]], cw0, cw1);
+  const wt = (u: number): [number, number] => [wa[0] + (wb[0] - wa[0]) * u, wa[1] + (wb[1] - wa[1]) * u];
+  // parabrisas en dos piezas (montante central) y franja oscura debajo
+  const zm = (cw0 + cw1) / 2;
+  slab(P, 'glass', wt(0.07), wt(0.95), cw0 + 0.1, zm - 0.04);
+  slab(P, 'glass', wt(0.07), wt(0.95), zm + 0.04, cw1 - 0.08);
+  slab(P, 'dark', wt(0), wt(0.07), cw0 + 0.06, cw1 - 0.04, 0.035);
+  // ventanas laterales que siguen el parabrisas (las dos en la cabina ancha)
   const sides: [number, number][] = [[cw0 - 0.03, cw0]];
   if (L.fullCab) sides.push([cw1, cw1 + 0.03]);
-  for (const [a, b] of sides) P.box('glass', cabX0 + 0.25, L1 - 0.12, cabTop - 0.92, cabTop - 0.18, a, b);
+  const wy0 = cabTop - 0.92, wy1 = cabTop - 0.2, wf = (y: number) => L1 - 0.12 - (0.22 * (y - wa[1])) / (wb[1] - wa[1]);
+  for (const [a, b] of sides) P.ext('glass', [[cabX0 + 0.25, wy0], [wf(wy0), wy0], [wf(wy1), wy1], [cabX0 + 0.25, wy1]], a, b);
   const dX = cabX0 + 0.12;
   P.box('yellowShade', dX, dX + 0.03, cabLow + 0.1, cabTop - 0.1, cw0 - 0.04, cw0);
   P.box('dark', dX + 0.25, dX + 0.5, cabTop - 1.1, cabTop - 1.02, cw0 - 0.05, cw0);
   if (cabLow - 0.3 > 0.12) P.box('dark', dX + 0.1, dX + 0.75, cabLow - 0.3, cabLow - 0.23, cw0 - 0.25, cw0 + 0.05);
-  P.box('yellowDark', cabX0 + 0.05, L1 - 0.2, cabTop, cabTop + 0.06, cw0 + 0.05, cw1 - 0.05);
+  P.box('yellowDark', cabX0 + 0.05, L1 - 0.45, cabTop, cabTop + 0.06, cw0 + 0.05, cw1 - 0.05);
+  // asidero junto a la puerta
+  P.cyl('black', [dX - 0.06, cabLow + 0.35, cw0 - 0.07], [dX - 0.06, cabTop - 0.45, cw0 - 0.07], 0.022, 5);
   // retrovisores tipo autobús delante de la cabina
   const mirrors = L.fullCab ? [-1, 1] : [-1];
   for (const s of mirrors) {

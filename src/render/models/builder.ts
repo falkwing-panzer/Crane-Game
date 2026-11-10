@@ -83,6 +83,16 @@ export class Parts {
     this.add(k, g);
   }
 
+  /**
+   * Extrusión de una sección (z, y) a lo largo de x, de x0 a x1 (para la pluma: sección con cantos achaflanados).
+   * Se hace con ext() en el plano (−z, y) y un giro de 90° alrededor de y (x' = z, z' = −x), sin reflejar.
+   */
+  extX(k: MatKey, sec: [number, number][], x0: number, x1: number) {
+    const n = this.geos.get(k)?.length ?? 0;
+    this.ext(k, sec.map(([z, y]) => [-z, y] as [number, number]), x0, x1);
+    this.geos.get(k)![n].rotateY(Math.PI / 2);
+  }
+
   /** Fusiona por material y cuelga las mallas de `parent`. */
   build(parent: THREE.Object3D, pal: Palette, shadow = true): THREE.Mesh[] {
     const out: THREE.Mesh[] = [];

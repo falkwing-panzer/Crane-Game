@@ -122,6 +122,8 @@ export function crawlerLayout(T: CrawlerSpec): CrawlerLayout {
   };
   const cwCorners = towerOutline(blockPieces(cwBlock({ cw: { ...cd, y0: plateTop } })).plan);
   const corners: [number, number][] = [...cwCorners, [front, wide], [opCab.x0, -opCab.z0], [opCab.x1, -opCab.z0]];
+  // escalerilla del capó (fase 8B)
+  if (housing) corners.push([housing.x0 + 0.35, housing.z1 + 0.08], [housing.x0 + 0.75, housing.z1 + 0.08]);
   const tailR = Math.max(...corners.map(([x, z]) => Math.hypot(x, z)));
   const eye = { x: opCab.x1 - 0.45, y: opCab.y1 - 0.55, z: (opCab.z0 + opCab.z1) / 2 };
 
