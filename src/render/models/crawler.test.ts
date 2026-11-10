@@ -166,3 +166,14 @@ describe('LR 3000: modelo', () => {
     expect(t.h + 0.3).toBeLessThan(L3.yd + 0.3); // fondo de la plataforma
   });
 });
+
+describe('remodelado de las orugas (fase 8B)', () => {
+  for (const id of ['crawler', 'lr'] as const) {
+    it(`${CRANES[id].name}: la escalerilla del capó queda dentro del radio de cola`, () => {
+      const L = crawlerLayout(CRANES[id] as CrawlerSpec);
+      if (L.housing) expect(Math.hypot(L.housing.x0 + 0.75, L.housing.z1 + 0.08)).toBeLessThanOrEqual(L.tailR + 1e-9);
+      // cabina del operador por fuera de la plataforma (no la atraviesa al girar)
+      expect(L.opCab.z1).toBeLessThan(-L.wide);
+    });
+  }
+});

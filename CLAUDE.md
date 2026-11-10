@@ -101,7 +101,11 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   City 25, AT 60 y RT 90 un bloque de placas achaflanadas; AT 220 dos torres con bastidor; contrapeso base de AT 300-6 y
   AT 500-8 en placas rectas; LR 300 y LR 3000 dos torres con bastidor de todo el alto y barandilla; bandeja del superlift en
   dos pilas; SK 60 placas achaflanadas en la contrapluma. Choques del contrapeso al girar en todas (salvo la SK). Pruebas en
-  `models/counterweight.test.ts`. **Falta la parte 2** (remodelado de chasis, cabinas y detalles: pasos 4–5 de FASES).
+  `models/counterweight.test.ts`.
+- **Fase 8B, parte 2** (remodelado, con orugas y SK incluidas): chasis gris con franjas rojas y blancas, cabina del conductor
+  con parabrisas inclinado en dos piezas, cabina del operador con frente inclinado (`details.ts`, la usan las 11 grúas),
+  pluma con cantos de abajo achaflanados, cabeza con chapas redondeadas, barandilla y escalerillas. Pruebas en
+  `models.test.ts` y `models/crawler.test.ts`. **Pendiente que Jesús lo mire en la laptop.**
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -151,6 +155,8 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   `layout.ts` (placas de lastre) y `yguy.ts` (`yGuyGeom` sin three.js, `YGuyView` instanciado en el grupo de la pluma). Lastre (fase 7):
   `towerPlan`/`towerOutline`/`ballastPlates` → `{ plates, frame, boxes }`. Plumín: `models/jib.ts` (`jibLattice`, `jibGeom` sin
   three.js, `JibView` en el grupo de la superestructura).
+- Remodelado (fase 8B parte 2): `models/details.ts` (`operatorCab`, `ladder`, `railing`, `slab` = cristal inclinado),
+  `Parts.extX` (extrusión de una sección z-y a lo largo de x), `boomSection(w, h)` en `superstructure.ts`.
 - Contrapesos (fase 8B): `blockPieces(BlockSpec)` en `layout.ts` (genérico: dos mitades de placas achaflanadas, hueco, bastidor,
   barandilla, argollas), `fixedBlock(L)` (contrapeso fijo de ruedas), `cwPieces(T, L, cwS)` = fijo + `ballastPlates` (lo dibuja
   `CraneModel` y lo usa `towerBox`); `cwBlock(L)` y `trayBlock(t)` en `crawlerLayout.ts`; `models/plates.ts` (`plateGeo`,
@@ -336,6 +342,15 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - **Choque del contrapeso al girar en todas las grúas** (fase 8B; antes solo con lastre): `towerBox` sale de `cwPieces` (ruedas)
   o de `cwBlock` (orugas, calculado una vez); `slewBlocked` en todas salvo la SK 60 (su contrapeso va arriba).
 
+- **Remodelado (fase 8B parte 2)**, aproximación visual guiada por `referencia/imagenes/`: el chasis va gris (como las fotos;
+  solo cabina, capó y superestructura en el color de la grúa); llantas grises salvo la RT (la AT 500-8 y las de 6 y 8 ejes
+  las tenían amarillas en la referencia). La cabina del operador usa `cabin` = color de la grúa al 94 % (antes naranja fijo;
+  la RT y las orugas ocultan su cabina buscando ese material). La sección achaflanada cabe en la caja de la pluma (las
+  pruebas de choques siguen con la caja). Las chapas de la cabeza no bajan del fondo de la pluma. La escalerilla del capó
+  cuenta en `tailR`. **Sin materiales nuevos por grupo** (franjas blancas en `chrome`, barandillas en `dark`): la AT 650-8
+  queda en 145 draw calls. **No se hizo**: motón amarrado al parachoques (cambia el estado inicial de la física; se haría
+  aparte como "posición de transporte").
+
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
   grúas grandes (fases 4–6): cabeza cinemática, izado a velocidad plena, estiramiento máximo del cable.
@@ -376,6 +391,10 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - Fase 8B parte 1 (vista inicial o de cerca, sombras incluidas): City 25 120 draw calls (~10.300 triángulos), AT 220 119,
   AT 500-8 con lastre 129, LR 300 74, LR 3000 86 (~22.200 triángulos, igual que antes), SK 60 montada 64 de cerca. La AT 650-8
   no cambia de camino de dibujo (146). **En la laptop de Jesús: 60 fps** (City 25, LR 3000, SK 60).
+
+- Fase 8B parte 2 (vistas de prueba en el panel de la app, sombras incluidas): AT 650-8 montada 145 draw calls y ~31.900
+  triángulos (antes 146 / 30.600); AT 500-8 con la pluma tumbada 134 / ~20.000 (antes 136 / 18.700); AT 60 128; RT 90 117;
+  LR 300 75; LR 3000 86 / ~23.200; SK 60 plegada 95. **Pendiente medir en la laptop.**
 
 ### Pendientes
 - SK 60: el lastre es el de la referencia (3 bloques en la contrapluma); su forma va en la fase 8B. Se puede plegar con el

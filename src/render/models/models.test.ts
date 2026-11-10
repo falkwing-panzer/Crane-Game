@@ -6,7 +6,18 @@ import { carrierPose } from '../../crane/pose';
 import { CraneModel } from '../craneModel';
 import { ballastPlates, boomCorners, cwPieces, cwDims, layout, towerOutline, towerPlan, WHEELED_IDS, type Box3 } from './layout';
 import { yGuyGeom } from './yguy';
-import { sheaves } from './superstructure';
+import { boomSection, buildHead, sheaves } from './superstructure';
+import { Parts } from './builder';
+import { operatorCab } from './details';
+import { palette } from './materials';
+
+/** Caja envolvente de lo acumulado en unas Parts (se fusiona en un grupo de prueba). */
+function partsBox(T: WheeledSpec, fill: (P: Parts) => void) {
+  const P = new Parts(), g = new THREE.Group();
+  fill(P);
+  P.build(g, palette(T), false);
+  return new THREE.Box3().setFromObject(g);
+}
 
 // Modelos 3D de las grúas de ruedas (fase 4): se construyen sin errores y las piezas no se atraviesan
 // (en todo el recorrido de la pluma y al girar la superestructura sobre el chasis).
@@ -162,6 +173,25 @@ for (const id of WHEELED_IDS) {
         }
       }
       if (!L.noCab) expect(L.cab.x0).toBeGreaterThanOrEqual(Math.max(...T.axles) + T.wheelR + 0.12 - 1e-9);
+    });
+
+    it('remodelado (fase 8B): pluma achaflanada, cabeza, cabina del operador y escalerillas en su sitio', () => {
+      // la sección achaflanada cabe en el rectángulo de la caja (las pruebas de choques usan la caja)
+      for (const [x, y] of boomSection(T.boom.w, L.hu)) {
+        expect(Math.abs(x)).toBeLessThanOrEqual(T.boom.w / 2 + 1e-9);
+        expect(Math.abs(y)).toBeLessThanOrEqual(L.hu / 2 + 1e-9);
+      }
+      // las chapas redondeadas de la cabeza no bajan del fondo de la pluma (pasa sobre la cabina del conductor)
+      const hb = partsBox(T, (P) => buildHead(T, L, P));
+      expect(hb.min.y).toBeGreaterThanOrEqual(-L.hu / 2 - 0.031);
+      // cabina del operador: no pasa del lado de la pluma ni del frente de su caja (cristales: 3–4 cm)
+      const c = L.opCab, cb = partsBox(T, (P) => operatorCab(P, c, -1));
+      expect(cb.max.z).toBeLessThanOrEqual(c.z1 + 1e-6);
+      expect(cb.max.x).toBeLessThanOrEqual(c.x1 + 0.04);
+      expect(cb.min.z).toBeGreaterThanOrEqual(c.z0 - 0.031);
+      expect(cb.max.y).toBeLessThanOrEqual(c.y1 + 0.23);
+      // escalerilla del capó dentro del radio de cola
+      if (L.housing) expect(Math.hypot(L.housing.x0 + 0.75, L.housing.z1 + 0.08)).toBeLessThanOrEqual(L.tailR + 1e-9);
     });
   });
 }

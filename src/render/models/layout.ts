@@ -200,6 +200,8 @@ export function layout(T: WheeledSpec): Layout {
     ...cwCorners, [cwRear + 0.2, wide], [front, wide],
     [opCab.x0, -opCab.z0], [opCab.x1, -opCab.z0], [drum.x - dr, hl + 0.15],
   ];
+  // escalerilla en el costado del capó (fase 8B)
+  if (housing) corners.push([housing.x0 + 0.35, housing.z1 + 0.08], [housing.x0 + 0.75, housing.z1 + 0.08]);
   // radio de cola con el lastre completo: las dos torres con su chaflán
   const tp = ballast && towerPlan(T, cw, ballast, 1);
   if (tp) corners.push(...towerOutline(tp));

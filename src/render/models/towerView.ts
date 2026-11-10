@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { CraneSpec } from '../../crane/cranes';
 import { Parts } from './builder';
+import { operatorCab } from './details';
 import type { Palette } from './materials';
 import { towerDeck, towerParts, type OBox } from './tower';
 import { plateColors, plateGeo } from './plates';
@@ -48,10 +49,7 @@ export class TowerView {
     for (const s of [-1, 1]) p.box('greyDeep', -0.35, 0.35, pl.y1, pl.y1 + 0.5, s * 0.97, s * 1.15);
     p.build(parent, pal);
     const c = d.cab, cp = new Parts();
-    cp.box('cabin', c.x0, c.x1, c.y0, c.y1, c.z0, c.z1);
-    cp.box('glass', c.x1, c.x1 + 0.04, c.y0 + 0.6, c.y1 - 0.15, c.z0 + 0.1, c.z1 - 0.1);
-    cp.box('glass', c.x0 + 0.3, c.x1 - 0.2, c.y0 + 0.7, c.y1 - 0.2, c.z0 - 0.04, c.z0);
-    cp.box('greyDark', c.x0 - 0.05, c.x1 + 0.05, c.y1, c.y1 + 0.08, c.z0, c.z1);
+    operatorCab(cp, c, -1, false); // cabina con frente inclinado (fase 8B), sin rotativo: la torre tumbada pasa encima
     this.cab.push(...cp.build(parent, pal));
 
     this.chords = new THREE.InstancedMesh(cyl, pal.yellow, MAX_SEGS);

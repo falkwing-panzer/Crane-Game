@@ -51,7 +51,11 @@ export function colorOf(T: CraneSpec, k: MatKey): string {
     case 'yellow': return T.color;
     case 'yellowDark': return shade(T.color, 0.88);
     case 'yellowShade': return shade(T.color, 0.8);
-    case 'rim': return T.rim ?? '#b9bfc5';
+    // cabina del operador: casi el amarillo de la grúa (fase 8B; antes naranja fijo). Material propio porque la RT
+    // oculta su cabina en la vista de cabina buscando este material.
+    case 'cabin': return shade(T.color, 0.94);
+    // llantas grises como en las imágenes (fase 8B); la RT conserva las oscuras de la referencia
+    case 'rim': return T.rt ? T.rim! : T.rim && T.rim !== '#f0be22' ? T.rim : '#b9bfc5';
     default: return FIXED[k] ?? EMISSIVE[k]![0];
   }
 }
