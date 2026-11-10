@@ -1,5 +1,5 @@
 import type { CraneSpec } from './cranes';
-import { towerHead, towerTip } from './tower';
+import { towerHead, towerPivot, towerTip } from './tower';
 
 export interface CraneState {
   /** Giro de la superestructura (rad). Positivo = antihorario visto desde arriba. */
@@ -250,4 +250,13 @@ export function tipPos(T: CraneSpec, S: TipState) {
   if (!jibOn(T, S)) return hd;
   const J = T.jibDef!.len, ja = S.ang - S.jibRel, r = J * Math.cos(ja);
   return { x: hd.x + r * Math.cos(S.slew), y: hd.y + J * Math.sin(ja), z: hd.z - r * Math.sin(S.slew) };
+}
+
+/**
+ * Pie de la pluma (pivotPos de la referencia) en el marco del chasis apoyado: el bulón a `foot` del centro de giro y a
+ * `pivH`; en la grúa torre, la punta de la torre. Lo usan las líneas eléctricas (pie → cabeza → punta → gancho).
+ */
+export function boomFoot(T: CraneSpec, S: Pick<CraneState, 'slew' | 'ang'> & { er?: number }) {
+  if (T.tower) return towerPivot(T, { ...S, er: S.er ?? 0 });
+  return { x: T.piv + T.foot * Math.cos(S.slew), y: T.pivH, z: -T.foot * Math.sin(S.slew) };
 }

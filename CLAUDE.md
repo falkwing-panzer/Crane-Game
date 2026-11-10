@@ -115,9 +115,11 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - **Fase 9, parte A** (niveles jugables): los 13 `LEVELS` copiados tal cual, menú de niveles, ficha con la elección de grúa
   (`showBrief`), turno en pausa hasta "Empezar turno", reloj, victoria (`checkWin`), fallos por vuelco y por tiempo,
   estrellas y récords en `localStorage`. Pruebas en `levels/levels.test.ts` (datos contra el HTML) y
-  `levels/levels.world.test.ts` (cada nivel con cada grúa permitida se arma sin choques; victoria). **Falta la parte B**:
-  viento, líneas eléctricas (distancia, alarma, fallo), aterrizajes duros, cargas frágiles y golpes (las estrellas ya los
-  cuentan, pero hoy valen siempre 0).
+  `levels/levels.world.test.ts` (cada nivel con cada grúa permitida se arma sin choques; victoria).
+- **Fase 9, parte B** (reglas finas): viento con ráfagas sobre la carga o el gancho, líneas eléctricas (franja de seguridad,
+  distancia en el HUD, alarma a 2 m, fallo por contacto), aterrizajes (apoyo, duro > 1,4 m/s, vidrio roto > 0,5 m/s),
+  golpes (carga de costado, chasis > 1,2 m/s, plumín o torre) y estrellas con todo eso. Pruebas en `levels/rules.test.ts`
+  (`windAt` y `segSeg` contra el HTML, márgenes a las líneas) y `levels/rules.world.test.ts` (viento, apoyos y golpes en Rapier).
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -186,7 +188,9 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   (`levelBoxes` = cajas + postes de las líneas, `crateBases` = `surface()` de la referencia, `placeCrane`, `populate(phys, L)`,
   `inZone`/`allPlaced`, `LEVEL_BOUNDS`), `render/levelSite.ts` (`buildLevelSite`), `ui/levelUi.ts` (`LevelUi`: menú, ficha,
   carteles, reloj; `stars`, `saveRecord`, `levelUrl`). En `world.ts`: `Physics(T, S, pose, { testLoad, bounds })`,
-  `outside(x, z, m)` (límites de la obra), `placed(load)` (envolvente, fondo e inclinación de una carga suelta y quieta).
+  `outside(x, z, m)` (límites de la obra), `placed(load)` (envolvente, fondo e inclinación de una carga suelta y quieta),
+  `wind` (fuerza) y `events` (`land`/`strike`). `levels/rules.ts` sin three.js ni Rapier: `windAt`, `windArea`, `windForce`,
+  `segSeg`, `lineMargin`, umbrales. `boomFoot(T, S)` en `kinematics.ts`. Reglas por paso en `levelRules()` de `main.ts`.
   URL: `?nivel=1…13[&grua=id]` nivel; `?grua=id` o `?libre=1` prueba libre; sin parámetros, menú.
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
   cut…) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
@@ -387,6 +391,16 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - **Victoria**: cada 0,25 s, sin nada enganchado, cada carga suelta y quieta (< 5 cm/s) con su envolvente en planta dentro de
   una zona (± 1 cm), su fondo a la altura de la zona (± 0,1 m; la referencia, 6 cm con alturas exactas) e inclinada < 5°. Una
   zona admite varias cargas (palés, contenedores), como la referencia.
+- **Reglas de la parte B**: viento `WINDK·v²·área` (t·m/s²) como fuerza de Rapier sobre la carga enganchada (área = lado mayor ×
+  alto × 0,75) o, sin carga, sobre el gancho (0,4 m²). `Physics.events` registra cuándo la carga enganchada **empieza** a tocar
+  algo (`land`, con la velocidad de bajada del paso anterior; < 0,15 m/s no cuenta) o a tocar algo de costado (`strike`,
+  normal de contacto casi horizontal, cuenta si iba a > 0,25 m/s); `main` lo vacía cada paso. Golpes con espera de 1 s como
+  la referencia. Líneas: pie de pluma (`boomFoot`) → cabeza → punta → gancho, y la carga como segmento vertical con su
+  radio en planta. La franja roja es un cilindro translúcido de radio `clear`.
+- **Plumín sin límite de obra** (fase 9): `jibGroundBlocked` ya no mira el borde de la obra, solo obstáculos. El consejo del
+  nivel 11 lo arma "al oeste", y desde x = 14 eso queda fuera de la parcela de 84 m (la referencia no comprobaba sitio).
+- **Textos 2D**: tres frases de las fichas hablaban de la planta y la vista lateral; `TEXT_3D` en `levelUi.ts` las muestra
+  adaptadas (una prueba comprueba que siguen existiendo en `LEVELS`).
 - **Plumín** solo en el nivel 11 (`jib: true`, `jibAvail` de la referencia) y en la prueba libre. **X** y **P** solo en la prueba
   libre. Récords: mejores estrellas y mejor tiempo por nivel (clave `gruas-records`).
 
@@ -441,6 +455,8 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - Fase 9 parte A (vista inicial de cada nivel con la grúa recomendada, sombras incluidas, panel de la app): el escenario suma
   unos 6 draw calls (cajas y depósitos instanciados, zonas, borde, cables). Máximo: nivel 11 con la AT 650-8, **138** (~22.200
   triángulos, sin montar); AT 500-8 en 9 y 10, 134–135; LR 3000 en 13, 96 (~28.800). **Pendiente medir en la laptop.**
+- Fase 9 parte B: la franja de las líneas suma 1 draw call (AT 220 en el nivel 3: 129). Nivel 11 con la AT 650-8 con lastre,
+  Y-guy y plumín montados: **144** draw calls y ~33.200 triángulos. **Pendiente medir en la laptop.**
 
 ### Pendientes
 - SK 60: el lastre es el de la referencia (3 bloques en la contrapluma); su forma va en la fase 8B. Se puede plegar con el
@@ -453,9 +469,9 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - `dampRope` y el filtro de 0,3 s afectan a todas las grúas: si un tirón se nota menos que antes, revisar `ROPE_DAMP`/`TENSION_TAU`.
 - Colisión de la carga con la pluma y el plumín (no existe todavía). La pluma principal no choca con obstáculos (el plumín sí).
 - AT 650-8: sin lastre, al subir el plumín apoyado con la pluma el LMI llega a ~90 % (modelo de la referencia).
-- Fase 9 parte B: viento (`windAt`), líneas eléctricas (`segSeg`, alarma a 2 m, fallo), aterrizajes duros (> 1,4 m/s),
-  vidrio (> 0,5 m/s falla), golpes. Los textos de las fichas son los de la referencia (algunos hablan de "la planta" y "la
-  vista lateral" del juego 2D). La AT 650-8 montada en el nivel 11 rondará 145–150 draw calls: medir.
+- Vidrio (nivel 6): bajar con Shift a fondo da ~0,47–0,62 m/s, casi en el límite de 0,5 (en la referencia, 0,3 × 2,1 = 0,63):
+  hay que soltar F antes de tocar. Es la dificultad prevista por la referencia; si molesta, preguntar antes de cambiarla.
+- Nadie jugó todavía los 13 niveles de principio a fin (se probaron por partes desde la consola).
 - Prueba libre: límite ±150 m con el terreno blando de prueba.
 - `CLEARANCE` y la suspensión siguen siendo los de la AT 60; el colisionador de la superestructura (`supBox`) no cubre la
   cabina del operador. Revisar si molesta con otras grúas.

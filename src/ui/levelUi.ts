@@ -31,6 +31,18 @@ export function stars(L: Level, r: { t: number; hard: number; bumps: number; pro
 /** mm:ss (fmt de la referencia) */
 export const fmt = (t: number) => `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 
+/**
+ * Textos de la referencia que hablan de sus dos vistas 2D (planta y lateral): en la ficha se muestran adaptados a las
+ * cámaras 3D. Los datos de LEVELS no se tocan (la prueba los compara con el HTML).
+ */
+export const TEXT_3D: Record<string, string> = {
+  'Mueve los dos contenedores a la zona de descarga. Aprende a usar las dos vistas: la planta para posicionar y la lateral para controlar la altura.':
+    'Mueve los dos contenedores a la zona de descarga. Aprende a usar la cámara: desde arriba para posicionar y de lado para controlar la altura (ratón en la vista orbital, V para cambiar de cámara).',
+  'En planta, la sombra de la carga se separa más cuanto más alta va.': 'Mirando desde arriba, la carga parece más cerca de su sombra cuanto más baja va: úsala para calcular la altura.',
+  'Usa la vista lateral desde el sur o el este para alinear.': 'Gira la cámara orbital para mirar desde el sur o el este al alinear.',
+};
+const text3d = (s: string) => TEXT_3D[s] ?? s;
+
 const starText = (n: number) => `${'★'.repeat(n)}<span class="off">${'★'.repeat(3 - n)}</span>`;
 
 /** URL de un nivel (1…13) con una grúa, o de la prueba libre (nivel 0) */
@@ -88,7 +100,7 @@ export class LevelUi {
     const L = LEVELS[i], r = loadRecords()[i];
     const list = Object.values(CRANES).sort((a, b) => a.structMax - b.structMax);
     this.show(`<div class="eyebrow"><span class="tag">${L.type}</span>Nivel ${i + 1} de ${LEVELS.length} · viento ${L.wind[0]} m/s · par ${fmt(L.par)}${L.time ? ` · límite ${fmt(L.time)}` : ''}${r ? ` · récord ${fmt(r.time)} ${starText(r.stars)}` : ''}</div>
-      <h2>${L.name}</h2><p>${L.brief}</p><ul>${L.tips.map((t) => `<li>${t}</li>`).join('')}</ul>
+      <h2>${L.name}</h2><p>${text3d(L.brief)}</p><ul>${L.tips.map((t) => `<li>${text3d(t)}</li>`).join('')}</ul>
       <div class="eyebrow">Elige la grúa</div>
       <div class="cranes">${list.map((c) => {
         const ok = L.cranes.includes(c.id as CraneId);
@@ -127,12 +139,24 @@ export class LevelUi {
     this.card.querySelector<HTMLElement>('#l-retry')?.focus({ preventScroll: true });
   }
 
-  /** Reloj: tiempo transcurrido, o el que queda en el contrarreloj */
-  setClock(L: Level | null, t: number, n = 0) {
+  /**
+   * Reloj (tiempo transcurrido, o el que queda en el contrarreloj), viento con una flecha hacia donde sopla vista desde
+   * la cámara (arrow = ángulo en pantalla, 0 = hacia arriba, horario) y distancia libre a la línea eléctrica más cercana.
+   */
+  setClock(L: Level | null, t: number, n = 0, info?: { wind: number; arrow: number; lineD: number }) {
     this.clock.hidden = !L;
     if (!L) return;
     const left = L.time ? Math.max(0, L.time - t) : 0;
+    const f = (v: number) => v.toFixed(1).replace('.', ',');
+    let extra = '';
+    if (info && (L.wind[0] || L.wind[1])) {
+      extra += `<span class="${info.wind > 7 ? 'warn' : ''}">Viento <b>${f(info.wind)} m/s</b> ` +
+        `<i class="arrow" style="transform:rotate(${info.arrow.toFixed(0)}deg)">↑</i></span>`;
+    }
+    if (info && L.lines?.length && Number.isFinite(info.lineD)) {
+      extra += `${extra ? ' · ' : ''}<span class="${info.lineD < 0 ? 'bad' : info.lineD < 2 ? 'bad blink' : ''}">Línea a <b>${f(Math.max(0, info.lineD))} m</b> del mínimo</span>`;
+    }
     this.clock.innerHTML = `<small>Nivel ${n} · ${L.name}</small><br><b class="${L.time && left < 30 ? 'bad' : ''}">${L.time ? `${fmt(left)} restantes` : fmt(t)}</b>` +
-      `<small> · par ${fmt(L.par)}</small>`;
+      `<small> · par ${fmt(L.par)}</small>${extra ? `<br>${extra}` : ''}`;
   }
 }

@@ -99,6 +99,15 @@ export class Physics {
   private cablePrev = 0;
   private trLoad = newTrack();
 
+  /** Fuerza del viento (t·m/s² en x y z del mundo), que se aplica en cada paso */
+  wind = { x: 0, z: 0 };
+  /**
+   * Lo que le pasó a la carga enganchada en los pasos desde la última vez que se vació: 'land' = empezó a tocar
+   * algo (v = velocidad de bajada antes del contacto); 'strike' = empezó a tocar algo de costado (v = velocidad
+   * horizontal). Lo vacía quien lo lee (main).
+   */
+  readonly events: { kind: 'land' | 'strike'; load: Load; v: number }[] = [];
+
   /** Límites de la obra (prueba libre: ±SITE_HALF; niveles: 0…84 × 0…56 de la referencia) */
   readonly bounds: Bounds;
 
@@ -295,15 +304,14 @@ export class Physics {
 
   /**
    * ¿Se puede armar el plumín en el suelo? (no está en la referencia) Los tramos van delante de la cabeza, de 1,5 m a
-   * 1,5 m + largo, apoyados (1,5 m de alto y de ancho). Obstáculos, cargas sueltas y límite de la obra.
+   * 1,5 m + largo, apoyados (1,5 m de alto y de ancho). Obstáculos y cargas sueltas. El límite de la obra no cuenta
+   * (fase 9): en el nivel "Sobre la nave" la referencia lo arma hacia el oeste, por fuera de la parcela de 84 × 56 m.
    */
   jibGroundBlocked(S: CraneState, pose: Pose): string | null {
     const T = this.T, jd = T.jibDef;
     if (!jd) return null;
     const h = apply(pose, headPos(T, S)), th = S.h + S.slew;
     const fx = Math.cos(th), fz = -Math.sin(th);
-    const end = { x: h.x + fx * (1.5 + jd.len), z: h.z + fz * (1.5 + jd.len) };
-    if (this.outside(end.x, end.z)) return 'No hay sitio en la obra para armar el plumín';
     const d = 1.5 + jd.len / 2;
     const pos = { x: h.x + fx * d, y: 0.85, z: h.z + fz * d };
     return this.hitsSomething(pos, axisAngle(0, 1, 0, th), new RAPIER.Cuboid(jd.len / 2, 0.75, 0.9))
@@ -494,7 +502,19 @@ export class Physics {
     }
     this.dampSling();
     this.dampRope(S);
+    // viento (fase 9): sobre la carga enganchada o, sin carga, sobre el gancho (el péndulo de la referencia)
+    this.hookBody.resetForces(false);
+    for (const l of this.loads) l.body.resetForces(false);
+    const L = this.attached;
+    if (this.wind.x || this.wind.z) (L ? L.body : this.hookBody).addForce({ x: this.wind.x, y: 0, z: this.wind.z }, true);
+    // aterrizajes y golpes de la carga enganchada: velocidad y contactos antes del paso
+    const pre = L && !this.tipped ? { v: L.body.linvel(), touch: this.touching(L), side: this.sideContact(L) } : null;
     this.world.step();
+    if (L && pre && this.attached === L) {
+      if (!pre.touch && -pre.v.y > 0 && this.touching(L)) this.events.push({ kind: 'land', load: L, v: -pre.v.y });
+      const vh = Math.hypot(pre.v.x, pre.v.z);
+      if (!pre.side && this.sideContact(L)) this.events.push({ kind: 'strike', load: L, v: vh });
+    }
     if (this.tipped) this.head = this.bodyPoint(this.tipped, this.headLocal.x, this.headLocal.y, this.headLocal.z);
     this.measureTension(S);
   }
@@ -699,7 +719,21 @@ export class Physics {
     return touching;
   }
 
-  /** ¿La carga está apoyada en algo que no sea el gancho? */
+  /**
+   * ¿La carga toca de costado algo que no sea el suelo ni el gancho? (normal de contacto casi horizontal: un golpe
+   * contra un obstáculo, otra carga o la grúa, no un apoyo encima).
+   */
+  private sideContact(load: Load) {
+    let side = false;
+    this.world.contactPairsWith(load.collider, (other) => {
+      if (side || other.handle === this.hookCollider.handle || other.handle === this.groundCol.handle) return;
+      this.world.contactPair(load.collider, other, (manifold) => {
+        if (manifold.numContacts() > 0 && Math.abs(manifold.normal().y) < 0.5) side = true;
+      });
+    });
+    return side;
+  }
+
   /**
    * Dónde quedó una carga suelta y quieta (para checkWin): envolvente en planta, altura del fondo e inclinación.
    * null si está enganchada o se mueve más de 5 cm/s.
@@ -715,6 +749,7 @@ export class Physics {
     return { x: t.x, z: t.z, hx: ext('x'), hz: ext('z'), bottom: t.y - ext('y'), tilt: Math.acos(Math.min(1, Math.abs(ay.y))) };
   }
 
+  /** ¿La carga está apoyada en algo que no sea el gancho? */
   isResting(load: Load) {
     const v = load.body.linvel();
     if (Math.hypot(v.x, v.y, v.z) > 0.3) return false;

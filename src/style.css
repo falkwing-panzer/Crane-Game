@@ -76,3 +76,6 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #cfdde9; }
 .btn:hover { filter: brightness(1.12); }
 .menu-btn { top: 86px; left: 10px; pointer-events: auto; color: #f2f4f6; text-decoration: none; font-weight: 700; }
 .menu-btn:hover { color: #f0bb27; }
+.clock .arrow { display: inline-block; font-style: normal; font-weight: 700; color: #f0bb27; }
+.blink { animation: blink 0.6s steps(2, start) infinite; }
+@keyframes blink { to { visibility: hidden; } }

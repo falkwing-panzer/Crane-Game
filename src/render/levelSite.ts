@@ -54,7 +54,7 @@ export function buildLevelSite(scene: THREE.Scene, L: Level) {
   zl.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
   scene.add(new THREE.LineSegments(zl, new THREE.LineBasicMaterial({ color: ZONE_COLOR })));
 
-  // cables de las líneas eléctricas (las reglas de distancia llegan en la parte B)
+  // cables de las líneas eléctricas
   if (L.lines?.length) {
     const wp: number[] = [];
     for (const l of L.lines) for (const off of [-0.5, 0, 0.5]) {
@@ -65,6 +65,19 @@ export function buildLevelSite(scene: THREE.Scene, L: Level) {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(wp, 3));
     scene.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: '#1d1f22' })));
+    // franja de seguridad: cilindro translúcido con el radio de la distancia mínima (`clear`) a lo largo del conductor
+    const band = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 16, 1, true),
+      new THREE.MeshBasicMaterial({ color: '#e8573f', transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide }), L.lines.length);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), d = new THREE.Vector3();
+    L.lines.forEach((l, i) => {
+      d.set(l.b[0] - l.a[0], 0, l.b[1] - l.a[1]);
+      const len = d.length();
+      q.setFromUnitVectors(up, d.normalize());
+      m.compose(new THREE.Vector3((l.a[0] + l.b[0]) / 2, l.y, (l.a[1] + l.b[1]) / 2), q, new THREE.Vector3(l.clear, len, l.clear));
+      band.setMatrixAt(i, m);
+    });
+    band.renderOrder = 1;
+    scene.add(band);
   }
 }
 

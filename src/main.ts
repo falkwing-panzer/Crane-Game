@@ -23,6 +23,8 @@ import { LEVELS } from './levels/levels';
 import { LEVEL_BOUNDS, allPlaced, placeCrane, populate } from './levels/setup';
 import { buildLevelSite } from './render/levelSite';
 import { LevelUi, levelUrl, saveRecord, stars } from './ui/levelUi';
+import { HARD_LANDING, LANDING_MIN, LINE_WARN, lineMargin, windArea, windForce } from './levels/rules';
+import { boomFoot, headPos } from './crane/kinematics';
 
 /** Grúas del menú: las de ruedas (fase 4), la grúa torre sobre camión (fase 8) y las de orugas (fase 6) */
 const MENU_IDS: CraneId[] = [...TRUCK_IDS, 'crawler', 'lr'];
@@ -30,6 +32,7 @@ const MENU_IDS: CraneId[] = [...TRUCK_IDS, 'crawler', 'lr'];
 const MODE_TEXT = { out: 'estabilizadores', tire: 'neumáticos', move: 'en marcha', crawler: 'orugas', crawlMove: 'orugas en marcha' };
 
 const _lat = new THREE.Vector3();
+const _wd = new THREE.Vector3();
 
 async function start() {
   await RAPIER.init();
@@ -90,7 +93,9 @@ async function start() {
   if (L) hudRoot.querySelector<HTMLElement>('.pick')!.hidden = true;
   let running = !L && !showMenu;
   /** Nivel: tiempo de turno, terminado (ganado o fallido), LMI máximo con la carga colgada */
-  const run = { t: 0, done: false, hard: 0, bumps: 0, prox: 0, maxLmi: 0 };
+  // (parte B) bumpCd: espera entre golpes; lineD: margen a la línea eléctrica más cercana; inProx: dentro de la alarma;
+  // wind: viento actual (m/s)
+  const run = { t: 0, done: false, hard: 0, bumps: 0, prox: 0, maxLmi: 0, bumpCd: 0, lineD: Infinity, inProx: false, wind: 0 };
   let winCheck = 0;
   if (showMenu) lui.menu();
   else if (L) lui.brief(li, id, (k) => { location.href = levelUrl(nivel, k); }, () => { running = true; });
@@ -101,6 +106,13 @@ async function start() {
     if (fail) { lui.failed(li, T.name, fail.title, fail.text); return; }
     const n = stars(L, run);
     lui.won(li, T.name, run, saveRecord(li, n, run.t));
+  };
+  /** Golpe (strike de la referencia): cuenta para las estrellas, uno por segundo como mucho */
+  const bump = (msg: string) => {
+    if (!L || run.bumpCd > 0) return;
+    run.bumps++;
+    run.bumpCd = 1;
+    hud.say(msg, 2);
   };
 
   let dyn: Dyn = { u: 0, edge: 0, lmi: 0 };
@@ -152,6 +164,43 @@ async function start() {
     : T.crawler ? `${T.name} · flechas para conducir (← → gira en el sitio) · puede llevar la carga colgada · V cambia la cámara`
     : `${T.name} · flechas para conducir · O despliega los estabilizadores · V cambia la cámara`, 4);
 
+  /**
+   * Reglas del nivel después de cada paso de física (impact, strike y líneas de la referencia): aterrizajes, vidrio
+   * roto, golpes de la carga y distancia a las líneas eléctricas. Devuelve true si el nivel terminó.
+   */
+  function levelRules(): boolean {
+    for (const e of phys.events.splice(0)) {
+      if (e.kind === 'land') {
+        if (e.v < LANDING_MIN) continue;
+        if (e.load.fragile && e.v > e.load.fragile) {
+          finish({ title: 'Vidrio roto', text: `La caja tocó a ${e.v.toFixed(2).replace('.', ',')} m/s. El vidrio necesita menos de ${String(e.load.fragile).replace('.', ',')} m/s: usa velocidad fina (Shift) antes de apoyar.` });
+          return true;
+        }
+        if (e.v > HARD_LANDING) { run.hard++; hud.say(`Aterrizaje duro · ${e.v.toFixed(1).replace('.', ',')} m/s`, 2); }
+        else hud.say(`Apoyada · ${e.v.toFixed(2).replace('.', ',')} m/s`, 1.4);
+      } else if (e.v > 0.25) bump('La carga chocó con un obstáculo');
+    }
+    if (!L!.lines?.length || tipped()) return false;
+    const hk = phys.hookBody.translation(), a = phys.attached;
+    let load;
+    if (a) {
+      const c = a.body.translation();
+      load = { bottom: { x: c.x, y: c.y - a.half.y, z: c.z }, top: { x: c.x, y: c.y + a.half.y, z: c.z }, r: Math.hypot(a.half.x, a.half.z) };
+    }
+    run.lineD = lineMargin(L!.lines, {
+      foot: apply(pose, boomFoot(T, S)), head: apply(pose, headPos(T, S)), tip: phys.headWorld(),
+      hook: { x: hk.x, y: hk.y, z: hk.z }, load,
+    });
+    if (run.lineD < LINE_WARN) {
+      if (!run.inProx) { run.prox++; run.inProx = true; hud.say('¡Alarma de proximidad a línea eléctrica!', 2.5); }
+    } else run.inProx = false;
+    if (run.lineD < 0) {
+      finish({ title: 'Contacto eléctrico', text: 'El equipo invadió la distancia mínima de seguridad del conductor energizado. Mantén la pluma, el cable y la carga lejos de los cables.' });
+      return true;
+    }
+    return false;
+  }
+
   /** Un paso fijo de la lógica de la grúa y de la física. */
   function tick(dt: number) {
     if (!running) return; // ficha, menú o cartel abiertos: todo quieto
@@ -166,6 +215,12 @@ async function start() {
         winCheck = 0;
         if (!phys.attached && allPlaced(phys.loads.map((l) => phys.placed(l)), L.zones)) { finish(null); return; }
       }
+      run.bumpCd = Math.max(0, run.bumpCd - dt);
+      // viento sobre la carga enganchada o el gancho (step de la referencia)
+      const a = phys.attached;
+      const w = windForce(L, run.t, windArea(a ? { w: 2 * a.half.x, d: 2 * a.half.z, h: 2 * a.half.y } : null));
+      run.wind = w.v;
+      phys.wind = { x: w.x, z: w.z };
     }
     const inp = input.state();
     if (!tipped()) {
@@ -180,7 +235,10 @@ async function start() {
         bypass,
         blocked: (x, z, h) => phys.carrierBlocked(x, z, h),
       });
-      if (dr.msg) hud.sayOnce(dr.msg);
+      if (dr.msg) {
+        // choque del chasis a más de 1,2 m/s: golpe (referencia)
+        if (dr.hit && L) bump(dr.msg); else hud.sayOnce(dr.msg);
+      }
       stepSuspension(T, S, (S.vd - v0) / dt, dt);
       // Montajes (lastre, Y-guy): avanzan y, mientras tanto, la grúa no se mueve
       // (grúa torre: el montaje se detiene si la torre o su pluma tocarían algo)
@@ -218,7 +276,8 @@ async function start() {
           if (r.n) hitMsg = r.what;
           return r.n;
         } : undefined,
-        onHit: () => hud.sayOnce(hitMsg),
+        // el plumín o la torre tocarían algo: en un nivel cuenta como golpe (strike de la referencia)
+        onHit: () => { if (L) bump(hitMsg); else hud.sayOnce(hitMsg); },
       });
       C.jibRel = S.jibRel;
       // radio del superlift (K/L), con el guard del LMI y sin chocar
@@ -239,6 +298,7 @@ async function start() {
       pose = carrierPose(T, S, supportMode(S, T));
     }
     phys.step(S, pose, C.slR);
+    if (L) { if (levelRules()) return; } else phys.events.length = 0;
     if (tipped()) {
       pose = phys.tippedPose()!;
       if (tipClock >= 0 && (tipClock += dt) >= CARD_DELAY) {
@@ -302,7 +362,14 @@ async function start() {
     const att = phys.attached;
     const hp = phys.headWorld();
     hud.frame(dt, physMs, t2 - t1, ctx.renderer.info);
-    lui.setClock(L, run.t, nivel);
+    if (L) {
+      // flecha del viento en pantalla: dirección del nivel respecto de hacia dónde mira la cámara
+      ctx.camera.getWorldDirection(_wd);
+      const fl = Math.hypot(_wd.x, _wd.z) || 1, fx = _wd.x / fl, fz = _wd.z / fl;
+      const a = (L.wind[2] * Math.PI) / 180, dx = Math.cos(a), dz = Math.sin(a);
+      const arrow = (Math.atan2(dx * -fz + dz * fx, dx * fx + dz * fz) * 180) / Math.PI;
+      lui.setClock(L, run.t, nivel, { wind: run.wind, arrow, lineD: run.lineD });
+    } else lui.setClock(null, 0);
     hud.readout({
       Lb: S.Lb,
       angDeg: (S.ang * 180) / Math.PI,

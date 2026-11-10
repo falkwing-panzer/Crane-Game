@@ -57,3 +57,15 @@ export function loadLevelsReference(): Any[] {
   if (a < 0 || l < a || b < l) throw new Error('No se encontraron los niveles en la referencia');
   return new Function(`${html.slice(a, b)}\nreturn LEVELS;`)();
 }
+
+/** windAt (con el nivel L) y segSeg de la referencia, para comparar con src/levels/rules.ts. */
+export function loadRulesReference(L: Any): { windAt(t: number): number; segSeg(p1: number[], q1: number[], p2: number[], q2: number[]): number } {
+  const html = raw.replace(/\r\n/g, '\n');
+  const cut = (from: string, to: string) => {
+    const a = html.indexOf(from), b = html.indexOf(to, a);
+    if (a < 0 || b < a) throw new Error(`No se encontró ${from} en la referencia`);
+    return html.slice(a, b);
+  };
+  const code = cut('function windAt(', '// ---------- geometría') + cut('function segSeg(', '// ---------- física');
+  return new Function('L', `const clamp = (v, a, b) => Math.max(a, Math.min(b, v));\n${code}\nreturn { windAt, segSeg };`)(L);
+}
