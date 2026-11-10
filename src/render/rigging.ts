@@ -72,10 +72,12 @@ export class Rigging {
     scene.add(this.falls);
 
     // un material por masa (la etiqueta de la textura dice las toneladas); las piezas pesadas, en acero
-    const mats = new Map<number, THREE.MeshLambertMaterial>();
+    // cargas de los niveles: su color y su etiqueta (CT de la referencia)
+    const mats = new Map<string, THREE.MeshLambertMaterial>();
     for (const l of phys.loads) {
-      let mt = mats.get(l.mass);
-      if (!mt) mats.set(l.mass, (mt = new THREE.MeshLambertMaterial({ map: crateTexture(l.mass) })));
+      const key = l.color ? `${l.color}|${l.label}` : String(l.mass);
+      let mt = mats.get(key);
+      if (!mt) mats.set(key, (mt = new THREE.MeshLambertMaterial({ map: l.color ? labelTexture(l.label, l.mass, l.color) : crateTexture(l.mass) })));
       const m = new THREE.Mesh(box, mt);
       m.scale.set(l.half.x * 2, l.half.y * 2, l.half.z * 2);
       m.castShadow = m.receiveShadow = true;
@@ -135,6 +137,27 @@ export class Rigging {
       (this.sling.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
     }
   }
+}
+
+/** Carga de un nivel: su color, con la etiqueta y las toneladas */
+function labelTexture(label: string, mass: number, color: string) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d')!;
+  g.fillStyle = color;
+  g.fillRect(0, 0, 128, 128);
+  g.strokeStyle = 'rgba(0,0,0,0.35)';
+  g.lineWidth = 6;
+  g.strokeRect(3, 3, 122, 122);
+  g.fillStyle = '#f4f1e8';
+  g.textAlign = 'center';
+  g.font = 'bold 22px sans-serif';
+  g.fillText(label, 64, 56, 116);
+  g.font = 'bold 20px sans-serif';
+  g.fillText(`${mass.toLocaleString('es')} t`, 64, 86);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
 
 function crateTexture(mass: number) {

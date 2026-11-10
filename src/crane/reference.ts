@@ -47,3 +47,13 @@ export function loadTowerReference(T: Any, S: Any): TowerReference {
   const code = html.slice(a, b);
   return new Function('S', 'T', `const clamp = (v, a, b) => Math.max(a, Math.min(b, v));\n${code}\nreturn { towerGeom, pivotPos, headPos, tipPos };`)(S, T);
 }
+
+/** Niveles de la referencia (de `const B = ` al final de `LEVELS`), para compararlos con src/levels. */
+export function loadLevelsReference(): Any[] {
+  const html = raw.replace(/\r\n/g, '\n');
+  const a = html.indexOf('const B = (x, z');
+  const l = html.indexOf('const LEVELS = [');
+  const b = html.indexOf('\n];\n', l) + 3;
+  if (a < 0 || l < a || b < l) throw new Error('No se encontraron los niveles en la referencia');
+  return new Function(`${html.slice(a, b)}\nreturn LEVELS;`)();
+}
