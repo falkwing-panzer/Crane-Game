@@ -410,8 +410,7 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   LR 300 75; LR 3000 86 / ~23.200; SK 60 plegada 95. **En la laptop de Jesús: 60 fps.**
   LR 3000 con equipos y remolque: 96 draw calls y ~28.600 triángulos (vista inicial); LR 300 con equipos: 75 y ~15.200.
   Con los detalles del resto (sin materiales nuevos por grupo): AT 650-8 montada sigue en 145 (~33.200 triángulos), AT 500-8
-  134 (~21.500), SK 60 plegada 91 de cerca (~24.100).
-  **Pendiente medir en la laptop.**
+  134 (~21.500), SK 60 plegada 91 de cerca (~24.100). **En la laptop de Jesús: 60 fps** con todos los detalles.
 
 ### Pendientes
 - SK 60: el lastre es el de la referencia (3 bloques en la contrapluma); su forma va en la fase 8B. Se puede plegar con el
