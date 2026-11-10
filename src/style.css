@@ -37,3 +37,45 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #cfdde9; }
 .lamp.off { color: #aab3bc; }
 .lamp.warn { background: rgba(245, 197, 66, 0.22); border-color: #f5c542; }
 .lamp.ok { background: rgba(76, 195, 138, 0.22); border-color: #4cc38a; color: #b6f0d2; }
+
+/* fase 9: niveles (menú, ficha, carteles y reloj) */
+.clock { top: 10px; left: 50%; transform: translateX(-50%); text-align: center; font-variant-numeric: tabular-nums; }
+.clock b { font-size: 18px; }
+.clock small { color: #aab3bc; }
+.overlay { position: absolute; inset: 0; background: rgba(12, 15, 19, 0.55); overflow-y: auto; pointer-events: auto;
+  display: flex; align-items: flex-start; justify-content: center; padding: 24px 16px; box-sizing: border-box; }
+.overlay[hidden] { display: none; }
+.lcard { width: min(860px, 100%); background: rgba(22, 26, 31, 0.95); border-radius: 10px; padding: 20px 24px; box-sizing: border-box; margin: auto 0; }
+.lcard h2 { margin: 4px 0 8px; font-size: 24px; color: #f0bb27; }
+.lcard h2.okh { color: #7ee0ad; }
+.lcard.fail h2 { color: #ff6b5a; }
+.lcard p { color: #d5dbe1; margin: 0 0 10px; }
+.lcard ul { margin: 0 0 12px; padding-left: 20px; color: #c3cad1; }
+.eyebrow { color: #aab3bc; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; margin: 6px 0; }
+.tag { background: #f0bb27; color: #1b1d20; border-radius: 3px; padding: 1px 6px; margin-right: 8px; font-weight: 700; }
+.stars { color: #f0bb27; letter-spacing: 2px; }
+.stars .off, .eyebrow .off { color: rgba(255, 255, 255, 0.2); }
+.stars.big { font-size: 34px; margin: 4px 0 8px; }
+.rec { color: #7ee0ad !important; font-weight: 700; }
+.levels, .cranes { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; margin: 8px 0 14px; }
+.lvl, .copt { display: flex; flex-direction: column; gap: 2px; text-align: left; text-decoration: none; color: #f2f4f6; font: inherit;
+  background: #262c33; border: 1px solid #3c444e; border-radius: 7px; padding: 9px 11px; cursor: pointer; }
+.lvl:hover, .copt:not([disabled]):hover { border-color: #f0bb27; }
+.lvl small, .copt small { color: #aab3bc; }
+.lvl.free { border-style: dashed; }
+.copt[aria-pressed="true"] { border-color: #f0bb27; background: #3a3423; }
+.copt[disabled] { opacity: 0.45; cursor: default; }
+.copt em { font-style: normal; font-size: 12px; color: #c3cad1; }
+.copt em.why { color: #ff9c8f; }
+.stats { display: grid; grid-template-columns: 1fr auto; gap: 3px 16px; max-width: 360px; margin: 6px 0 14px; }
+.stats span { color: #aab3bc; }
+.row { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.btn { font: inherit; font-weight: 700; padding: 8px 18px; border: 1px solid #4a525c; border-radius: 5px; background: #2a3038;
+  color: #f2f4f6; cursor: pointer; text-decoration: none; }
+.btn.primary { background: #f0bb27; border-color: #f0bb27; color: #1b1d20; }
+.btn:hover { filter: brightness(1.12); }
+.menu-btn { top: 86px; left: 10px; pointer-events: auto; color: #f2f4f6; text-decoration: none; font-weight: 700; }
+.menu-btn:hover { color: #f0bb27; }
+.clock .arrow { display: inline-block; font-style: normal; font-weight: 700; color: #f0bb27; }
+.blink { animation: blink 0.6s steps(2, start) infinite; }
+@keyframes blink { to { visibility: hidden; } }

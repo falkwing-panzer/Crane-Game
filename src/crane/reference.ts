@@ -47,3 +47,25 @@ export function loadTowerReference(T: Any, S: Any): TowerReference {
   const code = html.slice(a, b);
   return new Function('S', 'T', `const clamp = (v, a, b) => Math.max(a, Math.min(b, v));\n${code}\nreturn { towerGeom, pivotPos, headPos, tipPos };`)(S, T);
 }
+
+/** Niveles de la referencia (de `const B = ` al final de `LEVELS`), para compararlos con src/levels. */
+export function loadLevelsReference(): Any[] {
+  const html = raw.replace(/\r\n/g, '\n');
+  const a = html.indexOf('const B = (x, z');
+  const l = html.indexOf('const LEVELS = [');
+  const b = html.indexOf('\n];\n', l) + 3;
+  if (a < 0 || l < a || b < l) throw new Error('No se encontraron los niveles en la referencia');
+  return new Function(`${html.slice(a, b)}\nreturn LEVELS;`)();
+}
+
+/** windAt (con el nivel L) y segSeg de la referencia, para comparar con src/levels/rules.ts. */
+export function loadRulesReference(L: Any): { windAt(t: number): number; segSeg(p1: number[], q1: number[], p2: number[], q2: number[]): number } {
+  const html = raw.replace(/\r\n/g, '\n');
+  const cut = (from: string, to: string) => {
+    const a = html.indexOf(from), b = html.indexOf(to, a);
+    if (a < 0 || b < a) throw new Error(`No se encontró ${from} en la referencia`);
+    return html.slice(a, b);
+  };
+  const code = cut('function windAt(', '// ---------- geometría') + cut('function segSeg(', '// ---------- física');
+  return new Function('L', `const clamp = (v, a, b) => Math.max(a, Math.min(b, v));\n${code}\nreturn { windAt, segSeg };`)(L);
+}

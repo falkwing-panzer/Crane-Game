@@ -19,6 +19,12 @@ import { Physics, FIXED_DT } from './physics/world';
 import { Input } from './ui/input';
 import { Hud } from './ui/hud';
 import { stepSuperlift } from './crane/superlift';
+import { LEVELS } from './levels/levels';
+import { LEVEL_BOUNDS, allPlaced, placeCrane, populate } from './levels/setup';
+import { buildLevelSite } from './render/levelSite';
+import { LevelUi, levelUrl, saveRecord, stars } from './ui/levelUi';
+import { HARD_LANDING, LANDING_MIN, LINE_WARN, lineMargin, windArea, windForce } from './levels/rules';
+import { boomFoot, headPos } from './crane/kinematics';
 
 /** Grúas del menú: las de ruedas (fase 4), la grúa torre sobre camión (fase 8) y las de orugas (fase 6) */
 const MENU_IDS: CraneId[] = [...TRUCK_IDS, 'crawler', 'lr'];
@@ -26,27 +32,42 @@ const MENU_IDS: CraneId[] = [...TRUCK_IDS, 'crawler', 'lr'];
 const MODE_TEXT = { out: 'estabilizadores', tire: 'neumáticos', move: 'en marcha', crawler: 'orugas', crawlMove: 'orugas en marcha' };
 
 const _lat = new THREE.Vector3();
+const _wd = new THREE.Vector3();
 
 async function start() {
   await RAPIER.init();
 
   const ctx = createScene(document.getElementById('c') as HTMLCanvasElement);
-  // Grúa elegida en el menú (?grua=id); por defecto la AT 60
-  const q = new URLSearchParams(location.search).get('grua') as CraneId | null;
-  const id: CraneId = q && MENU_IDS.includes(q) ? q : 'medium';
+  // ?nivel=1…13: un nivel (con ?grua= una de las permitidas; si no, la recomendada).
+  // ?grua=id o ?libre=1: prueba libre con los obstáculos de prueba. Sin parámetros: menú de niveles.
+  const params = new URLSearchParams(location.search);
+  const nivel = Number(params.get('nivel')) || 0;
+  const li = nivel >= 1 && nivel <= LEVELS.length ? nivel - 1 : -1;
+  const L = li >= 0 ? LEVELS[li] : null;
+  const showMenu = !L && !params.has('grua') && !params.has('libre');
+  const q = params.get('grua') as CraneId | null;
+  const id: CraneId = L ? (q && L.cranes.includes(q) ? q : L.rec) : q && MENU_IDS.includes(q) ? q : 'medium';
   const T = CRANES[id];
   const S: CraneState = initialState(T);
   const C = baseConfig(T);
+  if (L) placeCrane(T, S, L);
+  // el plumín abatible solo en el nivel "Sobre la nave" (referencia: jibAvail) y en la prueba libre
+  const jibOk = !!T.jibDef && (!L || !!L.jib);
 
   const crane = isCrawler(T) ? new CrawlerModel(T) : new CraneModel(T as WheeledSpec);
   ctx.scene.add(crane.root);
   let pose: Pose = carrierPose(T, S, supportMode(S, T));
-  const phys = new Physics(T, S, pose);
-  for (const o of TEST_OBSTACLES) phys.addObstacle(o);
-  // carga pesada de prueba para la LR 3000 (hasta que lleguen los niveles)
-  if (T.superlift) phys.addLoad(TEST_HEAVY.label, TEST_HEAVY.mass, TEST_HEAVY.half, TEST_HEAVY.pos);
-  phys.softs.push(...TEST_SOFT);
-  buildSite(ctx.scene, phys.obstacles, phys.softs);
+  const phys = new Physics(T, S, pose, L ? { testLoad: false, bounds: LEVEL_BOUNDS } : {});
+  if (L) {
+    populate(phys, L);
+    buildLevelSite(ctx.scene, L);
+  } else {
+    for (const o of TEST_OBSTACLES) phys.addObstacle(o);
+    // carga pesada de prueba para la LR 3000
+    if (T.superlift) phys.addLoad(TEST_HEAVY.label, TEST_HEAVY.mass, TEST_HEAVY.half, TEST_HEAVY.pos);
+    phys.softs.push(...TEST_SOFT);
+    buildSite(ctx.scene, phys.obstacles, phys.softs);
+  }
   const rig = new Rigging(ctx.scene, phys, T);
   // escala de la cámara con el largo del chasis; las orugas, con su pluma de celosía larga, más lejos
   // (la LR 3000, con 108 m de pluma, unas 3 veces la distancia de la AT 60)
@@ -62,11 +83,36 @@ async function start() {
   const cam = new CameraRig(ctx, crane.cab, (s) => crane.eye(s), camSize, shadowHalf);
   const input = new Input();
   const hud = new Hud(document.getElementById('hud')!, T.name, id, MENU_IDS.map((k) => ({ id: k, name: CRANES[k].name })),
-    { ballast: !!T.ballast, yguy: !!T.yguy, outriggers: !!T.out, tele: T.boom.max > T.boom.min, superlift: !!T.superlift, jib: !!T.jibDef, tower: !!T.tower });
-  hud.onCrane = (k) => {
-    const u = new URL(location.href);
-    u.searchParams.set('grua', k);
-    location.href = u.toString();
+    { ballast: !!T.ballast, yguy: !!T.yguy, outriggers: !!T.out, tele: T.boom.max > T.boom.min, superlift: !!T.superlift, jib: jibOk, tower: !!T.tower });
+  hud.onCrane = (k) => { location.href = levelUrl(0, k); };
+
+  // Niveles: menú, ficha, carteles y reloj. El turno empieza en pausa hasta "Empezar turno".
+  const hudRoot = document.getElementById('hud')!;
+  const lui = new LevelUi(hudRoot);
+  hudRoot.insertAdjacentHTML('beforeend', `<a class="panel menu-btn" href="${location.pathname}" style="top:${L ? 86 : 124}px">☰ Niveles</a>`);
+  if (L) hudRoot.querySelector<HTMLElement>('.pick')!.hidden = true;
+  let running = !L && !showMenu;
+  /** Nivel: tiempo de turno, terminado (ganado o fallido), LMI máximo con la carga colgada */
+  // (parte B) bumpCd: espera entre golpes; lineD: margen a la línea eléctrica más cercana; inProx: dentro de la alarma;
+  // wind: viento actual (m/s)
+  const run = { t: 0, done: false, hard: 0, bumps: 0, prox: 0, maxLmi: 0, bumpCd: 0, lineD: Infinity, inProx: false, wind: 0 };
+  let winCheck = 0;
+  if (showMenu) lui.menu();
+  else if (L) lui.brief(li, id, (k) => { location.href = levelUrl(nivel, k); }, () => { running = true; });
+  const finish = (fail: { title: string; text: string } | null) => {
+    if (!L || run.done) return;
+    run.done = true;
+    running = false;
+    if (fail) { lui.failed(li, T.name, fail.title, fail.text); return; }
+    const n = stars(L, run);
+    lui.won(li, T.name, run, saveRecord(li, n, run.t));
+  };
+  /** Golpe (strike de la referencia): cuenta para las estrellas, uno por segundo como mucho */
+  const bump = (msg: string) => {
+    if (!L || run.bumpCd > 0) return;
+    run.bumps++;
+    run.bumpCd = 1;
+    hud.say(msg, 2);
   };
 
   let dyn: Dyn = { u: 0, edge: 0, lmi: 0 };
@@ -79,20 +125,26 @@ async function start() {
   const tipped = () => phys.tipped !== null;
   const hanging = () => !!phys.attached && !phys.isResting(phys.attached);
 
-  input.onHook = () => { if (!tipped()) hud.say(phys.toggleHook()); };
-  input.onReset = () => { if (!tipped()) hud.say(phys.resetLoads()); };
+  /** Las teclas actúan solo con el turno en marcha (no con la ficha o un cartel abiertos) y la grúa de pie */
+  const live = () => running && !tipped();
+  input.onHook = () => { if (live()) hud.say(phys.toggleHook()); };
+  // X y P son ayudas de prueba: solo en la prueba libre
+  input.onReset = () => { if (live()) hud.say(L ? 'En los niveles no se puede reponer la carga (X): solo en la prueba libre' : phys.resetLoads()); };
   input.onOutriggers = () => {
-    if (!tipped()) hud.say(toggleOutriggers(T, C, S, { loadHanging: hanging(), padsBlocked: phys.padsBlocked(S), locked: outriggersLocked(S) }), 1.8);
+    if (live()) hud.say(toggleOutriggers(T, C, S, { loadHanging: hanging(), padsBlocked: phys.padsBlocked(S), locked: outriggersLocked(S) }), 1.8);
   };
   input.onBallast = () => {
-    if (!tipped()) hud.say(toggleBallast(T, S, { loadHanging: hanging(), tailBlocked: phys.tailBlocked(S, S.slew, 1) }), 1.8);
+    if (live()) hud.say(toggleBallast(T, S, { loadHanging: hanging(), tailBlocked: phys.tailBlocked(S, S.slew, 1) }), 1.8);
   };
-  input.onYGuy = () => { if (!tipped()) hud.say(toggleYGuy(T, S, { loadHanging: hanging() }), 2.2); };
+  input.onYGuy = () => { if (live()) hud.say(toggleYGuy(T, S, { loadHanging: hanging() }), 2.2); };
   input.onMount = () => {
-    if (!tipped()) hud.say(toggleMount(T, S, { loadAttached: !!phys.attached, groundBlocked: phys.jibGroundBlocked(S, pose) }), 2.4);
+    if (!live()) return;
+    if (T.jibDef && !jibOk) { hud.say('En este trabajo no hace falta el plumín', 2); return; }
+    hud.say(toggleMount(T, S, { loadAttached: !!phys.attached, groundBlocked: phys.jibGroundBlocked(S, pose) }), 2.4);
   };
   input.onView = () => hud.say(cam.cycle(S, pose), 1.5);
   input.onBypass = () => {
+    if (L) { hud.say('El puenteo del LMI (P) solo está en la prueba libre', 2); return; }
     bypass = !bypass;
     hud.say(bypass ? 'LMI PUENTEADO: sin cortes, la grúa puede volcar' : 'LMI activo de nuevo', 2.5);
   };
@@ -107,13 +159,69 @@ async function start() {
     hud.showTipped(null);
     hud.say('Grúa reiniciada', 1.5);
   };
-  hud.say(T.tower ? `${T.name} · O despliega los estabilizadores · M monta la grúa torre · Q/E mueven el carro · V cambia la cámara`
+  if (!L && !showMenu) hud.say(T.tower ? `${T.name} · O despliega los estabilizadores · M monta la grúa torre · Q/E mueven el carro · V cambia la cámara`
     : T.superlift ? `${T.name} · K/L acercan o alejan el lastre superlift · la bandeja barre un círculo detrás · V cambia la cámara`
     : T.crawler ? `${T.name} · flechas para conducir (← → gira en el sitio) · puede llevar la carga colgada · V cambia la cámara`
     : `${T.name} · flechas para conducir · O despliega los estabilizadores · V cambia la cámara`, 4);
 
+  /**
+   * Reglas del nivel después de cada paso de física (impact, strike y líneas de la referencia): aterrizajes, vidrio
+   * roto, golpes de la carga y distancia a las líneas eléctricas. Devuelve true si el nivel terminó.
+   */
+  function levelRules(): boolean {
+    for (const e of phys.events.splice(0)) {
+      if (e.kind === 'land') {
+        if (e.v < LANDING_MIN) continue;
+        if (e.load.fragile && e.v > e.load.fragile) {
+          finish({ title: 'Vidrio roto', text: `La caja tocó a ${e.v.toFixed(2).replace('.', ',')} m/s. El vidrio necesita menos de ${String(e.load.fragile).replace('.', ',')} m/s: usa velocidad fina (Shift) antes de apoyar.` });
+          return true;
+        }
+        if (e.v > HARD_LANDING) { run.hard++; hud.say(`Aterrizaje duro · ${e.v.toFixed(1).replace('.', ',')} m/s`, 2); }
+        else hud.say(`Apoyada · ${e.v.toFixed(2).replace('.', ',')} m/s`, 1.4);
+      } else if (e.v > 0.25) bump('La carga chocó con un obstáculo');
+    }
+    if (!L!.lines?.length || tipped()) return false;
+    const hk = phys.hookBody.translation(), a = phys.attached;
+    let load;
+    if (a) {
+      const c = a.body.translation();
+      load = { bottom: { x: c.x, y: c.y - a.half.y, z: c.z }, top: { x: c.x, y: c.y + a.half.y, z: c.z }, r: Math.hypot(a.half.x, a.half.z) };
+    }
+    run.lineD = lineMargin(L!.lines, {
+      foot: apply(pose, boomFoot(T, S)), head: apply(pose, headPos(T, S)), tip: phys.headWorld(),
+      hook: { x: hk.x, y: hk.y, z: hk.z }, load,
+    });
+    if (run.lineD < LINE_WARN) {
+      if (!run.inProx) { run.prox++; run.inProx = true; hud.say('¡Alarma de proximidad a línea eléctrica!', 2.5); }
+    } else run.inProx = false;
+    if (run.lineD < 0) {
+      finish({ title: 'Contacto eléctrico', text: 'El equipo invadió la distancia mínima de seguridad del conductor energizado. Mantén la pluma, el cable y la carga lejos de los cables.' });
+      return true;
+    }
+    return false;
+  }
+
   /** Un paso fijo de la lógica de la grúa y de la física. */
   function tick(dt: number) {
+    if (!running) return; // ficha, menú o cartel abiertos: todo quieto
+    if (L) {
+      run.t += dt;
+      if (L.time && run.t > L.time) {
+        finish({ title: 'Se acabó el tiempo', text: 'No terminaste la descarga a tiempo. Busca una posición desde la que alcances ambos camiones y la zona sin volver a moverte.' });
+        return;
+      }
+      // checkWin: cada 0,25 s, sin nada enganchado, todas las cargas sueltas y quietas en una zona
+      if ((winCheck += dt) >= 0.25 && !tipped()) {
+        winCheck = 0;
+        if (!phys.attached && allPlaced(phys.loads.map((l) => phys.placed(l)), L.zones)) { finish(null); return; }
+      }
+      run.bumpCd = Math.max(0, run.bumpCd - dt);
+      // viento sobre la carga enganchada o el gancho (step de la referencia)
+      const a = phys.attached;
+      const w = windForce(L, run.t, windArea(a ? { w: 2 * a.half.x, d: 2 * a.half.z, h: 2 * a.half.y } : null));
+      run.wind = w.v;
+      phys.wind = { x: w.x, z: w.z };
+    }
     const inp = input.state();
     if (!tipped()) {
       const att = phys.attached;
@@ -127,7 +235,10 @@ async function start() {
         bypass,
         blocked: (x, z, h) => phys.carrierBlocked(x, z, h),
       });
-      if (dr.msg) hud.sayOnce(dr.msg);
+      if (dr.msg) {
+        // choque del chasis a más de 1,2 m/s: golpe (referencia)
+        if (dr.hit && L) bump(dr.msg); else hud.sayOnce(dr.msg);
+      }
       stepSuspension(T, S, (S.vd - v0) / dt, dt);
       // Montajes (lastre, Y-guy): avanzan y, mientras tanto, la grúa no se mueve
       // (grúa torre: el montaje se detiene si la torre o su pluma tocarían algo)
@@ -165,7 +276,8 @@ async function start() {
           if (r.n) hitMsg = r.what;
           return r.n;
         } : undefined,
-        onHit: () => hud.sayOnce(hitMsg),
+        // el plumín o la torre tocarían algo: en un nivel cuenta como golpe (strike de la referencia)
+        onHit: () => { if (L) bump(hitMsg); else hud.sayOnce(hitMsg); },
       });
       C.jibRel = S.jibRel;
       // radio del superlift (K/L), con el guard del LMI y sin chocar
@@ -186,15 +298,21 @@ async function start() {
       pose = carrierPose(T, S, supportMode(S, T));
     }
     phys.step(S, pose, C.slR);
+    if (L) { if (levelRules()) return; } else phys.events.length = 0;
     if (tipped()) {
       pose = phys.tippedPose()!;
-      if (tipClock >= 0 && (tipClock += dt) >= CARD_DELAY) { hud.showTipped(tipText); tipClock = -1; }
+      if (tipClock >= 0 && (tipClock += dt) >= CARD_DELAY) {
+        // en un nivel, el cartel de nivel fallido (Repetir vuelve a la ficha); en la prueba libre, Reiniciar
+        if (L) finish({ title: 'La grúa volcó', text: tipText }); else hud.showTipped(tipText);
+        tipClock = -1;
+      }
       return;
     }
 
     // Estabilidad con la tensión real del cable: un balanceo o un tirón también cuentan.
     const md = supportMode(S, T);
     dyn = dynamicStability(T, C, S, md, phys.tension, worldToCarrier(S, phys.gp));
+    if (hanging()) run.maxLmi = Math.max(run.maxLmi, dyn.lmi); // LMI máximo con la carga colgada (maxLmi de la referencia)
     if (stepTilt(S, dyn, dt)) {
       const { p, axis } = edgeAxis(T, md, S.edge);
       const f = carrierFrame(S); // la arista viene en el marco del chasis
@@ -244,6 +362,14 @@ async function start() {
     const att = phys.attached;
     const hp = phys.headWorld();
     hud.frame(dt, physMs, t2 - t1, ctx.renderer.info);
+    if (L) {
+      // flecha del viento en pantalla: dirección del nivel respecto de hacia dónde mira la cámara
+      ctx.camera.getWorldDirection(_wd);
+      const fl = Math.hypot(_wd.x, _wd.z) || 1, fx = _wd.x / fl, fz = _wd.z / fl;
+      const a = (L.wind[2] * Math.PI) / 180, dx = Math.cos(a), dz = Math.sin(a);
+      const arrow = (Math.atan2(dx * -fz + dz * fx, dx * fx + dz * fz) * 180) / Math.PI;
+      lui.setClock(L, run.t, nivel, { wind: run.wind, arrow, lineD: run.lineD });
+    } else lui.setClock(null, 0);
     hud.readout({
       Lb: S.Lb,
       angDeg: (S.ang * 180) / Math.PI,
@@ -277,7 +403,10 @@ async function start() {
   if (import.meta.env.DEV) {
     Object.assign(window, {
       __gruas: {
-        S, C, T, phys, ctx, input, hud, cam, crane,
+        S, C, T, phys, ctx, input, hud, cam, crane, L, lui, run,
+        /** empieza el turno sin pulsar el botón de la ficha */
+        start() { lui.close(); running = true; },
+        get running() { return running; },
         get dyn() { return dyn; }, get pose() { return pose; }, get cut() { return cut; },
         advance(s: number) {
           for (let i = 0; i < Math.round(s / FIXED_DT); i++) tick(FIXED_DT);

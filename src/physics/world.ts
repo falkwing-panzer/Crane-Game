@@ -9,6 +9,7 @@ import { apply, axisAngle, mul, rotate, type Pose, type V3 } from '../crane/pose
 import { padsOnSoft, terrainBlocked, type SoftZone } from '../crane/terrain';
 import { COUNTER_JIB, towerGeom } from '../crane/tower';
 import { foldedTowerBox } from '../render/models/tower';
+import type { BoxKind } from '../levels/levels';
 
 // Unidades de masa: toneladas (igual que la referencia). Gravedad 9,81 m/s².
 // Mientras la grúa está de pie NO es un cuerpo dinámico: su cinemática viene del modelo analítico y aquí
@@ -29,12 +30,19 @@ export interface Load {
   collider: RAPIER.Collider;
   /** Posición inicial, para reponer la carga */
   home: { x: number; y: number; z: number };
+  /** Dibujo y reglas de los niveles: color, tipo (kind de la referencia) y velocidad de rotura (cargas frágiles) */
+  color?: string;
+  kind?: string;
+  fragile?: number;
 }
+
+/** Límites de la obra en planta (x0…x1, z0…z1) */
+export interface Bounds { x0: number; x1: number; z0: number; z1: number }
 
 /** Obstáculo fijo de la obra (caja), girado `rotY` alrededor del eje vertical. */
 export interface Obstacle {
   label: string;
-  kind: 'block' | 'container';
+  kind: 'block' | BoxKind;
   half: { x: number; y: number; z: number };
   pos: { x: number; y: number; z: number };
   rotY: number;
@@ -91,7 +99,21 @@ export class Physics {
   private cablePrev = 0;
   private trLoad = newTrack();
 
-  constructor(private T: CraneSpec, S: CraneState, pose: Pose) {
+  /** Fuerza del viento (t·m/s² en x y z del mundo), que se aplica en cada paso */
+  wind = { x: 0, z: 0 };
+  /**
+   * Lo que le pasó a la carga enganchada en los pasos desde la última vez que se vació: 'land' = empezó a tocar
+   * algo (v = velocidad de bajada antes del contacto); 'strike' = empezó a tocar algo de costado (v = velocidad
+   * horizontal). Lo vacía quien lo lee (main).
+   */
+  readonly events: { kind: 'land' | 'strike'; load: Load; v: number }[] = [];
+
+  /** Límites de la obra (prueba libre: ±SITE_HALF; niveles: 0…84 × 0…56 de la referencia) */
+  readonly bounds: Bounds;
+
+  /** testLoad: caja de 2 t de prueba (prueba libre); bounds: límites de la obra */
+  constructor(private T: CraneSpec, S: CraneState, pose: Pose, opts: { testLoad?: boolean; bounds?: Bounds } = {}) {
+    this.bounds = opts.bounds ?? { x0: -SITE_HALF, x1: SITE_HALF, z0: -SITE_HALF, z1: SITE_HALF };
     this.slR = T.superlift?.r0 ?? 0;
     this.slew = S.slew;
     // contrapeso en placas (fase 8B: también el fijo de las grúas sin lastre); la grúa torre lo lleva arriba
@@ -128,7 +150,13 @@ export class Physics {
     this.cableJoint = this.makeCable(this.headBody, { x: 0, y: 0, z: 0 }, S.cable);
 
     // Carga de prueba: caja de 2 t delante a la derecha de la grúa (fuera del chasis de la LR 3000)
-    this.addLoad('Caja', 2.0, { x: 1.0, y: 0.5, z: 0.7 }, { x: Math.max(9, T.len[1] + 3), y: 0.5, z: 6 });
+    if (opts.testLoad ?? true) this.addLoad('Caja', 2.0, { x: 1.0, y: 0.5, z: 0.7 }, { x: Math.max(9, T.len[1] + 3), y: 0.5, z: 6 });
+  }
+
+  /** ¿(x, z) queda fuera de la obra, o a menos de `m` de su borde? */
+  outside(x: number, z: number, m = 0) {
+    const b = this.bounds;
+    return x < b.x0 + m || x > b.x1 - m || z < b.z0 + m || z > b.z1 - m;
   }
 
   addObstacle(o: Obstacle) {
@@ -150,7 +178,7 @@ export class Physics {
     // esquinas en el mundo para el límite de la obra
     for (const lx of [L0, L1]) for (const lz of [-bodyHalf(T), bodyHalf(T)]) {
       const wx = x + c * lx + s * lz, wz = z - s * lx + c * lz;
-      if (Math.abs(wx) > SITE_HALF || Math.abs(wz) > SITE_HALF) return 'Límite de la obra';
+      if (this.outside(wx, wz, 0.3)) return 'Límite de la obra';
     }
     const soft = terrainBlocked(T, this.softs, x, z, h);
     if (soft) return soft;
@@ -181,7 +209,7 @@ export class Physics {
     // centro de la bandeja: en el marco del chasis (piv − slR·cos slew, slR·sin slew), luego al mundo
     const lx = T.piv - slR * Math.cos(slew), lz = slR * Math.sin(slew);
     const pos = { x: x + c * lx + s * lz, y: 0.2 + (sl.h - 0.2) / 2, z: z - s * lx + c * lz };
-    if (Math.max(Math.abs(pos.x), Math.abs(pos.z)) + Math.hypot(sl.d, sl.w) / 2 > SITE_HALF) return 'Límite de la obra';
+    if (this.outside(pos.x, pos.z, Math.hypot(sl.d, sl.w) / 2)) return 'Límite de la obra';
     const shape = new RAPIER.Cuboid(sl.d / 2 + 0.2, (sl.h - 0.2) / 2, sl.w / 2 + 0.2);
     return this.hitsSomething(pos, axisAngle(0, 1, 0, h + slew), shape) ? 'El lastre superlift golpearía un obstáculo' : null;
   }
@@ -230,7 +258,7 @@ export class Physics {
     const shape = new RAPIER.Cuboid(0.6, 0.5, 0.6);
     for (const lx of [o.xf, o.xr]) for (const lz of [-o.hw, o.hw]) {
       const wx = S.x + c * lx + s * lz, wz = S.z - s * lx + c * lz;
-      if (Math.abs(wx) > SITE_HALF || Math.abs(wz) > SITE_HALF) return 'No hay espacio para los estabilizadores';
+      if (this.outside(wx, wz)) return 'No hay espacio para los estabilizadores';
       if (this.hitsSomething({ x: wx, y: 0.55, z: wz }, q, shape)) return 'Un obstáculo impide abrir los estabilizadores';
     }
     return padsOnSoft(this.T, this.softs, S.x, S.z, S.h);
@@ -276,15 +304,14 @@ export class Physics {
 
   /**
    * ¿Se puede armar el plumín en el suelo? (no está en la referencia) Los tramos van delante de la cabeza, de 1,5 m a
-   * 1,5 m + largo, apoyados (1,5 m de alto y de ancho). Obstáculos, cargas sueltas y límite de la obra.
+   * 1,5 m + largo, apoyados (1,5 m de alto y de ancho). Obstáculos y cargas sueltas. El límite de la obra no cuenta
+   * (fase 9): en el nivel "Sobre la nave" la referencia lo arma hacia el oeste, por fuera de la parcela de 84 × 56 m.
    */
   jibGroundBlocked(S: CraneState, pose: Pose): string | null {
     const T = this.T, jd = T.jibDef;
     if (!jd) return null;
     const h = apply(pose, headPos(T, S)), th = S.h + S.slew;
     const fx = Math.cos(th), fz = -Math.sin(th);
-    const end = { x: h.x + fx * (1.5 + jd.len), z: h.z + fz * (1.5 + jd.len) };
-    if (Math.max(Math.abs(end.x), Math.abs(end.z)) > SITE_HALF) return 'No hay sitio en la obra para armar el plumín';
     const d = 1.5 + jd.len / 2;
     const pos = { x: h.x + fx * d, y: 0.85, z: h.z + fz * d };
     return this.hitsSomething(pos, axisAngle(0, 1, 0, th), new RAPIER.Cuboid(jd.len / 2, 0.75, 0.9))
@@ -385,15 +412,19 @@ export class Physics {
     );
   }
 
-  addLoad(label: string, mass: number, half: Load['half'], pos: { x: number; y: number; z: number }) {
+  addLoad(label: string, mass: number, half: Load['half'], pos: { x: number; y: number; z: number },
+    extra: { color?: string; kind?: string; fragile?: number } = {}) {
+    // Sin giro alrededor del eje vertical (fase 9): como en la referencia, la carga no gira sobre sí misma, como si
+    // la guiaran con cuerdas; colgada de un punto no se podría alinear (la viga de 22 m tiene < 1 m de margen).
     const body = this.world.createRigidBody(
-      RAPIER.RigidBodyDesc.dynamic().setTranslation(pos.x, pos.y, pos.z).setLinearDamping(0.02).setAngularDamping(0.4),
+      RAPIER.RigidBodyDesc.dynamic().setTranslation(pos.x, pos.y, pos.z).setLinearDamping(0.02).setAngularDamping(0.4)
+        .enabledRotations(true, false, true),
     );
     const collider = this.world.createCollider(
       RAPIER.ColliderDesc.cuboid(half.x, half.y, half.z).setMass(mass).setFriction(0.7),
       body,
     );
-    const load = { label, mass, half, body, collider, home: { ...pos } };
+    const load: Load = { label, mass, half, body, collider, home: { ...pos }, ...extra };
     this.loads.push(load);
     return load;
   }
@@ -471,7 +502,19 @@ export class Physics {
     }
     this.dampSling();
     this.dampRope(S);
+    // viento (fase 9): sobre la carga enganchada o, sin carga, sobre el gancho (el péndulo de la referencia)
+    this.hookBody.resetForces(false);
+    for (const l of this.loads) l.body.resetForces(false);
+    const L = this.attached;
+    if (this.wind.x || this.wind.z) (L ? L.body : this.hookBody).addForce({ x: this.wind.x, y: 0, z: this.wind.z }, true);
+    // aterrizajes y golpes de la carga enganchada: velocidad y contactos antes del paso
+    const pre = L && !this.tipped ? { v: L.body.linvel(), touch: this.touching(L), side: this.sideContact(L) } : null;
     this.world.step();
+    if (L && pre && this.attached === L) {
+      if (!pre.touch && -pre.v.y > 0 && this.touching(L)) this.events.push({ kind: 'land', load: L, v: -pre.v.y });
+      const vh = Math.hypot(pre.v.x, pre.v.z);
+      if (!pre.side && this.sideContact(L)) this.events.push({ kind: 'strike', load: L, v: vh });
+    }
     if (this.tipped) this.head = this.bodyPoint(this.tipped, this.headLocal.x, this.headLocal.y, this.headLocal.z);
     this.measureTension(S);
   }
@@ -674,6 +717,36 @@ export class Physics {
       });
     });
     return touching;
+  }
+
+  /**
+   * ¿La carga toca de costado algo que no sea el suelo ni el gancho? (normal de contacto casi horizontal: un golpe
+   * contra un obstáculo, otra carga o la grúa, no un apoyo encima).
+   */
+  private sideContact(load: Load) {
+    let side = false;
+    this.world.contactPairsWith(load.collider, (other) => {
+      if (side || other.handle === this.hookCollider.handle || other.handle === this.groundCol.handle) return;
+      this.world.contactPair(load.collider, other, (manifold) => {
+        if (manifold.numContacts() > 0 && Math.abs(manifold.normal().y) < 0.5) side = true;
+      });
+    });
+    return side;
+  }
+
+  /**
+   * Dónde quedó una carga suelta y quieta (para checkWin): envolvente en planta, altura del fondo e inclinación.
+   * null si está enganchada o se mueve más de 5 cm/s.
+   */
+  placed(load: Load): { x: number; z: number; hx: number; hz: number; bottom: number; tilt: number } | null {
+    if (load === this.attached) return null;
+    const v = load.body.linvel();
+    if (Math.hypot(v.x, v.y, v.z) > 0.05) return null;
+    const t = load.body.translation(), q = load.body.rotation(), h = load.half;
+    // columnas de la matriz de giro: ejes x, y, z del cuerpo en el mundo
+    const ax = rotate(q, { x: 1, y: 0, z: 0 }), ay = rotate(q, { x: 0, y: 1, z: 0 }), az = rotate(q, { x: 0, y: 0, z: 1 });
+    const ext = (k: 'x' | 'y' | 'z') => Math.abs(ax[k]) * h.x + Math.abs(ay[k]) * h.y + Math.abs(az[k]) * h.z;
+    return { x: t.x, z: t.z, hx: ext('x'), hz: ext('z'), bottom: t.y - ext('y'), tilt: Math.acos(Math.min(1, Math.abs(ay.y))) };
   }
 
   /** ¿La carga está apoyada en algo que no sea el gancho? */
