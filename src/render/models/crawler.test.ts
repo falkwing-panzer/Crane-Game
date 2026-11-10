@@ -177,3 +177,52 @@ describe('remodelado de las orugas (fase 8B)', () => {
     });
   }
 });
+
+describe('LR 3000: equipos de la plataforma y remolque del superlift (fase 8B)', () => {
+  const T = CRANES.lr as CrawlerSpec, L = crawlerLayout(T), g = L.gear!, dk = L.derrick!, t = L.tray!;
+  const boxes = [g.pack, g.tank, g.cooler, ...g.drums.map((d) => ({ x0: d.x - d.r - 0.25, x1: d.x + d.r + 0.25, y0: g.pack.y0, y1: d.y + d.r + 0.18, z0: -d.hl - 0.3, z1: d.hl + 0.3 }))];
+
+  it('los equipos van sobre el cuerpo trasero, bajo el contrapeso y dentro del radio de cola', () => {
+    for (const b of boxes) {
+      expect(b.x0).toBeGreaterThanOrEqual(L.rearBody.x0);
+      expect(b.x1).toBeLessThanOrEqual(L.rearBody.x1);
+      expect(Math.max(Math.abs(b.z0), Math.abs(b.z1))).toBeLessThanOrEqual(L.wide);
+      expect(b.y0).toBeCloseTo(L.rearBody.y1, 9);
+      expect(b.y1).toBeLessThan(L.cw.top); // dentro del colisionador de la superestructura
+      for (const [x, z] of [[b.x0, b.z0], [b.x0, b.z1], [b.x1, b.z0], [b.x1, b.z1]]) expect(Math.hypot(x, z)).toBeLessThanOrEqual(L.tailR);
+    }
+  });
+
+  it('no tocan el derrick ni sus soportes', () => {
+    // eje del derrick y su media sección (la mayor, la del pie) + 0,3 m
+    const ux = Math.cos(dk.dirAng), uy = Math.sin(dk.dirAng), half = dk.w0 / 2 + 0.3;
+    for (const b of boxes) {
+      // |z| más cercano al centro: si la caja queda toda a un lado del ancho del derrick, no lo toca
+      const minAbsZ = b.z0 > 0 ? b.z0 : b.z1 < 0 ? -b.z1 : 0;
+      if (minAbsZ >= half) continue;
+      for (const [x, y] of [[b.x0, b.y0], [b.x1, b.y0], [b.x0, b.y1], [b.x1, b.y1]]) {
+        const dx = x - dk.foot[0], dy = y - dk.foot[1];
+        const along = dx * ux + dy * uy, across = Math.abs(-dx * uy + dy * ux);
+        if (along > -0.5 && along < dk.len) expect(across).toBeGreaterThan(half);
+      }
+    }
+    for (const br of dk.brackets) for (const b of boxes) {
+      const sep = b.x1 <= br.x0 || b.x0 >= br.x1 || b.z1 <= br.z0 || b.z0 >= br.z1;
+      expect(sep).toBe(true);
+    }
+  });
+
+  it('el remolque cabe en la caja de choques de la bandeja: ruedas bajo el bastidor, patas en las esquinas', () => {
+    expect(t.frameY).toBeLessThan(t.base);
+    expect(t.base).toBeLessThan(t.h);
+    for (const [x, z] of t.wheel.at) {
+      expect(2 * t.wheel.r).toBeLessThan(t.frameY);
+      expect(Math.abs(x) + t.wheel.w / 2).toBeLessThanOrEqual(t.d / 2);
+      expect(Math.abs(z) + t.wheel.r).toBeLessThanOrEqual(t.w / 2);
+      for (const [lx, lz] of t.legs) expect(Math.abs(lz - z) > t.wheel.r + 0.35 || Math.abs(lx - x) > t.wheel.w / 2 + 0.35).toBe(true);
+    }
+    // ruedas gemelas sin solaparse
+    const xs = [...new Set(t.wheel.at.map(([x]) => x))].sort((a, b) => a - b);
+    for (let i = 1; i < xs.length; i++) expect(xs[i] - xs[i - 1]).toBeGreaterThanOrEqual(t.wheel.w);
+  });
+});

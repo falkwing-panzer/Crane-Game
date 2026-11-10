@@ -52,6 +52,19 @@ export interface CrawlerLayout {
   derrick: DerrickLayout | null;
   /** Bandeja del superlift (LR 3000), centrada en x = 0: se coloca en x = −slR */
   tray: TrayLayout | null;
+  /** Equipos sobre el cuerpo trasero de la LR 3000 (fase 8B): grupo de potencia, depósito hidráulico, radiador y
+   *  cabrestantes del derrick; null en la LR 300 (su cuerpo trasero es corto) */
+  gear: DeckGear | null;
+}
+
+export interface DeckGear {
+  pack: Box3;
+  tank: Box3;
+  cooler: Box3;
+  /** Cabrestantes (eje a lo largo de z): centro x, y, radio y media longitud */
+  drums: { x: number; y: number; r: number; hl: number }[];
+  /** Barandillas a lo largo de los bordes (x0 … x1 en |z| = z) */
+  rail: { x0: number; x1: number; z: number };
 }
 
 export interface DerrickLayout {
@@ -76,9 +89,16 @@ export interface TrayLayout {
   d: number;
   w: number;
   h: number;
-  /** Base de la bandeja (0 … base) y placas encima */
+  /** Base de la bandeja (0 … base) y placas encima. Fase 8B: la base es un remolque con ruedas (bastidor de
+   *  frameY a base, ruedas debajo) y patas en las esquinas, como la foto de Jesús; la caja de choques no cambia. */
   base: number;
   plates: number;
+  frameY: number;
+  /** Ruedas: radio, ancho y centros (x, z). El eje va a lo largo de x: ruedan en z, la dirección en la que
+   *  avanza la bandeja al girar la superestructura. */
+  wheel: { r: number; w: number; at: [number, number][] };
+  /** Patas de apoyo en las esquinas (x, z) */
+  legs: [number, number][];
   /** Amarres de los tirantes sobre las placas, relativos al centro de la bandeja (x, z) */
   hangers: [number, number][];
 }
@@ -154,10 +174,31 @@ export function crawlerLayout(T: CrawlerSpec): CrawlerLayout {
     // atravesarían el contrapeso, así que van en la mitad trasera de la bandeja (aproximación visual).
     // (fase 8B) los amarres quedan dentro de las pilas de placas, fuera del chaflán de su esquina trasera
     const xr = -sl.d / 2 + 0.6, xm = -sl.d / 2 + 1.6, zz = sl.w / 2 - 2.0;
-    tray = { d: sl.d, w: sl.w, h: sl.h, base: 0.5, plates: 6, hangers: [[xr, -zz], [xr, zz], [xm, -zz], [xm, zz]] };
+    // remolque (aproximación visual): dos boggies de 4 ruedas (gemelas) bajo cada lado, bastidor y patas en las esquinas
+    const wr = 0.6, ww = 0.42, at: [number, number][] = [];
+    for (const z of [-sl.w / 2 + 1.6, sl.w / 2 - 1.6]) for (const x of [-1.6, -1.1, 1.1, 1.6]) at.push([x, z]);
+    const legs: [number, number][] = [];
+    for (const x of [-sl.d / 2 + 0.35, sl.d / 2 - 0.35]) for (const z of [-sl.w / 2 + 0.35, sl.w / 2 - 0.35]) legs.push([x, z]);
+    tray = { d: sl.d, w: sl.w, h: sl.h, base: 1.55, plates: 4, frameY: 1.3, wheel: { r: wr, w: ww, at }, legs,
+      hangers: [[xr, -zz], [xr, zz], [xm, -zz], [xm, zz]] };
+  }
+
+  // Equipos sobre el cuerpo trasero de la LR 3000 (aproximación visual, como las grúas de orugas grandes): a los lados,
+  // fuera del ancho del derrick y de sus soportes; en el centro, cabrestantes detrás del pie del derrick.
+  let gear: DeckGear | null = null;
+  if (derrick) {
+    const y0 = rearBody.y1, xr = rearBody.x0 + 0.9, zi = 2.5, zo = wide - 0.25;
+    gear = {
+      pack: { x0: xr, x1: xr + 5.6, y0, y1: y0 + 2.4, z0: zi, z1: zo },
+      tank: { x0: xr, x1: xr + 3.0, y0, y1: y0 + 1.7, z0: -zo, z1: -zi },
+      cooler: { x0: xr + 3.4, x1: xr + 5.6, y0, y1: y0 + 2.0, z0: -zo, z1: -zi },
+      drums: [xr + 1.4, xr + 4.2].map((x) => ({ x, y: y0 + 1.0, r: 0.75, hl: 1.4 })),
+      rail: { x0: rearBody.x0 + 0.3, x1: rearBody.x1 - 0.6, z: wide - 0.1 },
+    };
   }
 
   return {
+    gear,
     kk, tracks, loop, rollers, carbody, crossbeams,
     yd, wide, front, ringR: T.ringR || 2.3, carRingR: T.ringR || 2.2, plateTop, slot, cw, rearBody, housing, drum, opCab, mast, tailR, eye,
     bw, foot, footHalf: fh, derrick, tray,

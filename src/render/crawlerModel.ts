@@ -27,6 +27,9 @@ const _s = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _m4 = new THREE.Matrix4();
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
+const X_AXIS = new THREE.Vector3(1, 0, 0);
+/** Lleva el eje y de un cilindro al eje x (ruedas del remolque del superlift) */
+const Y_TO_X = new THREE.Quaternion().setFromAxisAngle(Z_AXIS, -Math.PI / 2);
 
 /** Barras (segmentos) en un InstancedMesh de cilindros, en el marco de `parent`. */
 function bars(parent: THREE.Object3D, segs: Seg[], mat: THREE.Material) {
@@ -60,6 +63,9 @@ export class CrawlerModel {
   /** Bandeja del superlift (se coloca en x = −slR) y tirantes del derrick */
   private tray = new THREE.Group();
   private ties: THREE.InstancedMesh | null = null;
+  /** Ruedas del remolque del superlift (neumáticos, llantas, bujes) y ángulo de rodadura con el que se colocaron */
+  private trayWheels: THREE.InstancedMesh[] = [];
+  private trayRoll = NaN;
   private half: (d: number) => number;
   /** Piezas que se ocultan en la vista de cabina (la del operador: no hay cabina de conductor) */
   readonly cab: THREE.Object3D[] = [];
@@ -128,12 +134,18 @@ export class CrawlerModel {
     }
     if (L.tray) {
       const t = L.tray, tp = new Parts();
-      tp.box('dark', -t.d / 2, t.d / 2, 0, t.base, -t.w / 2, t.w / 2);
+      this.buildTrailer(tp);
       // placas en dos pilas achaflanadas (fase 8B): se colocan una vez en el grupo de la bandeja
       const tb = blockPieces(trayBlock(t));
       new PlateMeshes(this.tray, tb.plates.length, tb.frame.length, plateColors(T)).set(tb.plates, tb.frame);
       for (const [x, z] of t.hangers) tp.box('dark', x - 0.2, x + 0.2, t.h, t.h + 0.3, z - 0.15, z + 0.15);
       tp.build(this.tray, pal);
+      // ruedas del remolque (giran al girar la superestructura): neumático, llanta y buje instanciados
+      const n = t.wheel.at.length;
+      this.trayWheels = [new THREE.InstancedMesh(cyl, pal.tire, n), new THREE.InstancedMesh(cyl, pal.yellow, n), new THREE.InstancedMesh(bar, pal.greyDeep, n)];
+      for (const m of this.trayWheels) { m.frustumCulled = false; m.receiveShadow = true; this.tray.add(m); }
+      this.trayWheels[0].castShadow = true;
+      this.placeTrayWheels(0);
       this.sup.add(this.tray);
     }
     if (dk) {
@@ -216,6 +228,7 @@ export class CrawlerModel {
     const c = L.opCab;
     P.box('dark', c.x0 + 0.2, c.x1 - 0.2, yd + 0.3, c.y0, c.z1 - 0.05, -wide + 0.05);
     operatorCab(P, c, -1);
+    if (L.gear) this.buildGear(P);
     // soportes y bulón del pie del derrick
     if (L.derrick) {
       const dk = L.derrick;
@@ -228,6 +241,82 @@ export class CrawlerModel {
       for (const f of L.mast.feet) P.cyl('mast', f, [mx, my, 0], 0.18, 8);
       P.cyl('pendant', [mx, my, 0], [cw.x, yd + 2.8, 0], 0.03, 6);
     }
+  }
+
+  /** Equipos sobre el cuerpo trasero de la LR 3000 (fase 8B): grupo de potencia, depósito, radiador, cabrestantes, barandillas. */
+  private buildGear(P: Parts) {
+    const g = this.L.gear!, yd = this.L.yd;
+    // grupo de potencia (derecha): capó con rejillas en el costado, filete arriba y dos escapes
+    const k = g.pack;
+    P.box('yellow', k.x0, k.x1, k.y0, k.y1, k.z0, k.z1);
+    P.box('yellowShade', k.x0 - 0.05, k.x1 + 0.05, k.y1 - 0.12, k.y1, k.z0 - 0.05, k.z1 + 0.05);
+    for (let x = k.x0 + 0.4; x + 0.14 < k.x1 - 0.3; x += 0.32) P.box('black', x, x + 0.14, k.y0 + 0.5, k.y1 - 0.4, k.z1, k.z1 + 0.025);
+    for (let z = k.z0 + 0.3; z + 0.12 < k.z1 - 0.2; z += 0.3) P.box('black', k.x0 + 0.5, k.x0 + 2.2, k.y1, k.y1 + 0.02, z, z + 0.12);
+    for (const x of [k.x1 - 1.6, k.x1 - 0.9]) P.cyl('dark', [x, k.y1, (k.z0 + k.z1) / 2 + 0.3], [x, k.y1 + 1.1, (k.z0 + k.z1) / 2 + 0.3], 0.13, 8);
+    // depósito hidráulico (izquierda, atrás) con su tapa y radiador delante con dos ventiladores arriba
+    const t = g.tank;
+    P.box('yellowShade', t.x0, t.x1, t.y0, t.y1, t.z0, t.z1);
+    P.cyl('greyDeep', [(t.x0 + t.x1) / 2, t.y1, (t.z0 + t.z1) / 2], [(t.x0 + t.x1) / 2, t.y1 + 0.15, (t.z0 + t.z1) / 2], 0.25, 10);
+    const c = g.cooler;
+    P.box('dark', c.x0, c.x1, c.y0, c.y1, c.z0, c.z1);
+    const fz = (c.z0 + c.z1) / 2, fr = Math.min(0.75, (c.z1 - c.z0) / 2 - 0.1);
+    for (const x of [c.x0 + (c.x1 - c.x0) / 4, c.x1 - (c.x1 - c.x0) / 4]) P.cyl('black', [x, c.y1, fz], [x, c.y1 + 0.06, fz], Math.min(fr, (c.x1 - c.x0) / 4 - 0.05), 16);
+    for (let x = c.x0 + 0.15; x + 0.08 < c.x1 - 0.1; x += 0.2) P.box('black', x, x + 0.08, c.y0 + 0.3, c.y1 - 0.25, c.z0 - 0.025, c.z0);
+    // cabrestantes del derrick y del superlift: tambor con bridas entre dos placas
+    for (const d of g.drums) {
+      P.cyl('drum', [d.x, d.y, -d.hl], [d.x, d.y, d.hl], d.r, 16);
+      for (const s of [-1, 1]) {
+        P.cyl('greyDeep', [d.x, d.y, s * d.hl], [d.x, d.y, s * (d.hl + 0.08)], d.r + 0.18, 16);
+        const a = s * (d.hl + 0.1), b = s * (d.hl + 0.3);
+        P.box('dark', d.x - d.r - 0.25, d.x + d.r + 0.25, g.pack.y0, d.y + 0.35, Math.min(a, b), Math.max(a, b));
+      }
+    }
+    // barandillas a lo largo de los dos bordes y escalerillas para subir desde las orugas
+    const r = g.rail;
+    for (const s of [-1, 1]) {
+      railing(P, 'dark', [[r.x0, s * r.z], [r.x1, s * r.z]], g.pack.y0, 0.9);
+      ladder(P, 'dark', [r.x1 - 1.6, s * (this.L.wide + 0.05)], [r.x1 - 1.2, s * (this.L.wide + 0.05)], yd + 0.3, g.pack.y0);
+    }
+  }
+
+  /**
+   * Remolque bajo las placas del superlift (fase 8B, aproximación visual como la foto de Jesús): bastidor, ejes a lo largo
+   * de x con su soporte, patas con zapata en las esquinas. Todo dentro de la caja de la bandeja (d × w × h).
+   */
+  private buildTrailer(P: Parts) {
+    const t = this.L.tray!, r = t.wheel.r, hd = t.d / 2, hw = t.w / 2;
+    P.box('yellowShade', -hd + 0.15, hd - 0.15, t.frameY, t.base, -hw + 0.15, hw - 0.15);
+    for (const z of [-hw + 0.15, hw - 0.15]) P.box('yellow', -hd + 0.1, hd - 0.1, t.frameY - 0.1, t.base, z - 0.12, z + 0.12);
+    const zs = [...new Set(t.wheel.at.map(([, z]) => z))];
+    for (const z of zs) {
+      const xm = Math.max(...t.wheel.at.map(([x]) => Math.abs(x))) + t.wheel.w / 2 + 0.05;
+      P.cyl('greyDeep', [-xm, r, z], [xm, r, z], 0.12, 10);
+      const xi = Math.min(...t.wheel.at.map(([x]) => Math.abs(x))) - t.wheel.w / 2 - 0.05;
+      P.box('dark', -xi, xi, r - 0.2, t.frameY, z - 0.35, z + 0.35);
+    }
+    for (const [x, z] of t.legs) {
+      P.box('yellow', x - 0.15, x + 0.15, 0.25, t.frameY, z - 0.15, z + 0.15);
+      P.box('dark', x - 0.35, x + 0.35, 0, 0.25, z - 0.35, z + 0.35);
+    }
+    ladder(P, 'dark', [hd - 0.12, -0.9], [hd - 0.12, -0.5], 0.2, t.base);
+  }
+
+  /** Coloca las ruedas del remolque con el ángulo de rodadura `roll` (solo si cambió). */
+  private placeTrayWheels(roll: number) {
+    if (roll === this.trayRoll || !this.trayWheels.length) return;
+    this.trayRoll = roll;
+    const t = this.L.tray!, r = t.wheel.r, w = t.wheel.w;
+    _q.setFromAxisAngle(X_AXIS, roll).multiply(Y_TO_X);
+    t.wheel.at.forEach(([x, z], i) => {
+      const out = Math.sign(x);
+      _m4.compose(_p.set(x, r, z), _q, _s.set(r, w, r));
+      this.trayWheels[0].setMatrixAt(i, _m4);
+      _m4.compose(_p.set(x + out * (w / 2 - 0.01), r, z), _q, _s.set(r * 0.62, 0.06, r * 0.62));
+      this.trayWheels[1].setMatrixAt(i, _m4);
+      _m4.compose(_p.set(x + out * (w / 2 + 0.04), r, z), _q, _s.set(r * 0.25, 0.1, r * 0.25));
+      this.trayWheels[2].setMatrixAt(i, _m4);
+    });
+    for (const m of this.trayWheels) m.instanceMatrix.needsUpdate = true;
   }
 
   /** Pie macizo, cabeza y polea (marco de la pluma). */
@@ -281,6 +370,8 @@ export class CrawlerModel {
       this.tie(i++, _a.set(tx, ty - 0.5, 0), _b.set(L.cw.x, L.cw.top, 0), 0.06);
       if (L.tray) {
         this.tray.position.x = -slR;
+        // al girar, la bandeja avanza en +z del marco de la superestructura (slew·slR): las ruedas ruedan
+        this.placeTrayWheels((S.slew * slR) / L.tray.wheel.r);
         for (const [x, z] of L.tray.hangers) {
           this.tie(i++, _a.set(tx, ty, Math.sign(z) * dk.hangerZ), _b.set(x - slR, L.tray.h + 0.3, z), 0.05);
         }
