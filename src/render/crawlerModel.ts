@@ -251,16 +251,22 @@ export class CrawlerModel {
     P.box('yellow', k.x0, k.x1, k.y0, k.y1, k.z0, k.z1);
     P.box('yellowShade', k.x0 - 0.05, k.x1 + 0.05, k.y1 - 0.12, k.y1, k.z0 - 0.05, k.z1 + 0.05);
     for (let x = k.x0 + 0.4; x + 0.14 < k.x1 - 0.3; x += 0.32) P.box('black', x, x + 0.14, k.y0 + 0.5, k.y1 - 0.4, k.z1, k.z1 + 0.025);
-    for (let z = k.z0 + 0.3; z + 0.12 < k.z1 - 0.2; z += 0.3) P.box('black', k.x0 + 0.5, k.x0 + 2.2, k.y1, k.y1 + 0.02, z, z + 0.12);
-    for (const x of [k.x1 - 1.6, k.x1 - 0.9]) P.cyl('dark', [x, k.y1, (k.z0 + k.z1) / 2 + 0.3], [x, k.y1 + 1.1, (k.z0 + k.z1) / 2 + 0.3], 0.13, 8);
+    const kl = k.x1 - k.x0, ez = (k.z0 + k.z1) / 2 + 0.15 * (k.z1 - k.z0), er = Math.min(0.13, 0.05 * kl + 0.03);
+    for (let z = k.z0 + 0.3; z + 0.12 < k.z1 - 0.2; z += 0.3) P.box('black', k.x0 + 0.1 * kl, k.x0 + 0.4 * kl, k.y1, k.y1 + 0.02, z, z + 0.12);
+    for (const x of [k.x1 - 0.29 * kl, k.x1 - 0.16 * kl]) P.cyl('dark', [x, k.y1, ez], [x, k.y1 + Math.min(1.1, 0.45 * kl), ez], er, 8);
     // depósito hidráulico (izquierda, atrás) con su tapa y radiador delante con dos ventiladores arriba
     const t = g.tank;
     P.box('yellowShade', t.x0, t.x1, t.y0, t.y1, t.z0, t.z1);
     P.cyl('greyDeep', [(t.x0 + t.x1) / 2, t.y1, (t.z0 + t.z1) / 2], [(t.x0 + t.x1) / 2, t.y1 + 0.15, (t.z0 + t.z1) / 2], 0.25, 10);
     const c = g.cooler;
     P.box('dark', c.x0, c.x1, c.y0, c.y1, c.z0, c.z1);
-    const fz = (c.z0 + c.z1) / 2, fr = Math.min(0.75, (c.z1 - c.z0) / 2 - 0.1);
-    for (const x of [c.x0 + (c.x1 - c.x0) / 4, c.x1 - (c.x1 - c.x0) / 4]) P.cyl('black', [x, c.y1, fz], [x, c.y1 + 0.06, fz], Math.min(fr, (c.x1 - c.x0) / 4 - 0.05), 16);
+    // ventiladores repartidos a lo largo del lado más largo del radiador
+    const cx = c.x1 - c.x0, cz = c.z1 - c.z0, alongX = cx >= cz, big = alongX ? cx : cz, small = alongX ? cz : cx;
+    const nf = Math.max(1, Math.min(2, Math.floor(big / small))), fr = Math.min(0.75, small / 2 - 0.08, big / (2 * nf) - 0.05);
+    for (let i = 0; i < nf; i++) {
+      const u = (i + 0.5) / nf, x = alongX ? c.x0 + u * cx : (c.x0 + c.x1) / 2, z = alongX ? (c.z0 + c.z1) / 2 : c.z0 + u * cz;
+      P.cyl('black', [x, c.y1, z], [x, c.y1 + 0.06, z], fr, 16);
+    }
     for (let x = c.x0 + 0.15; x + 0.08 < c.x1 - 0.1; x += 0.2) P.box('black', x, x + 0.08, c.y0 + 0.3, c.y1 - 0.25, c.z0 - 0.025, c.z0);
     // cabrestantes del derrick y del superlift: tambor con bridas entre dos placas
     for (const d of g.drums) {

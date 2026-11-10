@@ -52,8 +52,7 @@ export interface CrawlerLayout {
   derrick: DerrickLayout | null;
   /** Bandeja del superlift (LR 3000), centrada en x = 0: se coloca en x = −slR */
   tray: TrayLayout | null;
-  /** Equipos sobre el cuerpo trasero de la LR 3000 (fase 8B): grupo de potencia, depósito hidráulico, radiador y
-   *  cabrestantes del derrick; null en la LR 300 (su cuerpo trasero es corto) */
+  /** Equipos sobre el cuerpo trasero (fase 8B): grupo de potencia, depósito hidráulico, radiador y cabrestantes */
   gear: DeckGear | null;
 }
 
@@ -183,16 +182,29 @@ export function crawlerLayout(T: CrawlerSpec): CrawlerLayout {
       hangers: [[xr, -zz], [xr, zz], [xm, -zz], [xm, zz]] };
   }
 
-  // Equipos sobre el cuerpo trasero de la LR 3000 (aproximación visual, como las grúas de orugas grandes): a los lados,
-  // fuera del ancho del derrick y de sus soportes; en el centro, cabrestantes detrás del pie del derrick.
+  // Equipos sobre el cuerpo trasero (aproximación visual, como las grúas de orugas reales): grupo de potencia a la derecha,
+  // depósito hidráulico y radiador a la izquierda, cabrestantes y barandillas.
+  // LR 3000: a los lados, fuera del ancho del derrick y de sus soportes (|z| ≥ 2,5); cabrestantes en el centro detrás de
+  // su pie. LR 300: detrás de las patas del caballete, por debajo de su tirante al contrapeso; el cabrestante de la pluma
+  // va entre el caballete y el cabrestante principal.
   let gear: DeckGear | null = null;
+  const y0 = rearBody.y1;
   if (derrick) {
-    const y0 = rearBody.y1, xr = rearBody.x0 + 0.9, zi = 2.5, zo = wide - 0.25;
+    const xr = rearBody.x0 + 0.9, zi = 2.5, zo = wide - 0.25;
     gear = {
       pack: { x0: xr, x1: xr + 5.6, y0, y1: y0 + 2.4, z0: zi, z1: zo },
       tank: { x0: xr, x1: xr + 3.0, y0, y1: y0 + 1.7, z0: -zo, z1: -zi },
       cooler: { x0: xr + 3.4, x1: xr + 5.6, y0, y1: y0 + 2.0, z0: -zo, z1: -zi },
       drums: [xr + 1.4, xr + 4.2].map((x) => ({ x, y: y0 + 1.0, r: 0.75, hl: 1.4 })),
+      rail: { x0: rearBody.x0 + 0.3, x1: rearBody.x1 - 0.6, z: wide - 0.1 },
+    };
+  } else if (mast) {
+    const xr = rearBody.x0 + 0.2, xf = Math.min(...mast.feet.map((f) => f[0])) - 0.55, zi = 0.25, zo = wide - 0.25;
+    gear = {
+      pack: { x0: xr, x1: xf, y0, y1: y0 + 1.4, z0: zi, z1: zo },
+      tank: { x0: xr, x1: xr + 0.7, y0, y1: y0 + 1.1, z0: -zo, z1: -zi },
+      cooler: { x0: xr + 0.8, x1: xf, y0, y1: y0 + 1.2, z0: -zo, z1: -zi },
+      drums: [{ x: (xf + 0.55 + 0.3 + drum.x - drum.r - 0.25) / 2, y: y0 + 0.75, r: 0.5, hl: 0.7 }],
       rail: { x0: rearBody.x0 + 0.3, x1: rearBody.x1 - 0.6, z: wide - 0.1 },
     };
   }

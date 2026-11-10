@@ -226,3 +226,38 @@ describe('LR 3000: equipos de la plataforma y remolque del superlift (fase 8B)',
     for (let i = 1; i < xs.length; i++) expect(xs[i] - xs[i - 1]).toBeGreaterThanOrEqual(t.wheel.w);
   });
 });
+
+describe('LR 300: equipos de la plataforma (fase 8B)', () => {
+  const T = CRANES.crawler as CrawlerSpec, L = crawlerLayout(T), g = L.gear!, m = L.mast!;
+  const boxes = [g.pack, g.tank, g.cooler, ...g.drums.map((d) => ({ x0: d.x - d.r - 0.25, x1: d.x + d.r + 0.25, y0: g.pack.y0, y1: d.y + d.r + 0.18, z0: -d.hl - 0.3, z1: d.hl + 0.3 }))];
+  /** Distancia de un punto a un segmento en 3D */
+  const segDist = (p: number[], a: number[], b: number[]) => {
+    const ab = b.map((v, i) => v - a[i]), ap = p.map((v, i) => v - a[i]);
+    const t = Math.max(0, Math.min(1, ap.reduce((s, v, i) => s + v * ab[i], 0) / ab.reduce((s, v) => s + v * v, 0)));
+    return Math.hypot(...p.map((v, i) => v - (a[i] + t * ab[i])));
+  };
+
+  it('van sobre el cuerpo trasero, delante del contrapeso y dentro del colisionador', () => {
+    for (const b of boxes) {
+      expect(b.x0).toBeGreaterThanOrEqual(L.rearBody.x0);
+      expect(b.x1).toBeLessThanOrEqual(L.rearBody.x1);
+      expect(Math.max(Math.abs(b.z0), Math.abs(b.z1))).toBeLessThanOrEqual(L.wide);
+      expect(b.y1).toBeLessThan(L.cw.top);
+    }
+  });
+
+  it('no tocan las patas del caballete ni su tirante al contrapeso', () => {
+    const top = [m.top[0], m.top[1], 0];
+    const segs: [number[], number[], number][] = [...m.feet.map((f): [number[], number[], number] => [f, top, 0.18 + 0.15]),
+      [top, [L.cw.x, L.yd + 2.8, 0], 0.1]];
+    for (const b of boxes) for (let i = 0; i <= 6; i++) for (let j = 0; j <= 6; j++) for (const y of [b.y0, b.y1]) {
+      const p = [b.x0 + ((b.x1 - b.x0) * i) / 6, y, b.z0 + ((b.z1 - b.z0) * j) / 6];
+      for (const [a, c, r] of segs) expect(segDist(p, a, c)).toBeGreaterThan(r);
+    }
+  });
+
+  it('el cabrestante de la pluma no toca el principal', () => {
+    const d = g.drums[0];
+    expect(d.x + d.r + 0.25).toBeLessThanOrEqual(L.drum.x - 0.55);
+  });
+});
