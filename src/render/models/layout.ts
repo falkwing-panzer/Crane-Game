@@ -8,6 +8,8 @@ import { bodyHalf, type CraneSpec, type WheeledSpec } from '../../crane/cranes';
 
 /** Grúas de ruedas con modelo en esta fase (fase 4). */
 export const WHEELED_IDS = ['small', 'medium', 'rt', 'large', 'at300', 'at450', 'xl', 'at650'] as const;
+/** Grúas de ruedas con modelo, incluida la grúa torre sobre camión (fase 8) */
+export const TRUCK_IDS = [...WHEELED_IDS, 'sk'] as const;
 export type WheeledId = (typeof WHEELED_IDS)[number];
 
 export interface CwDims { x: number; len: number; w: number; hgt: number }
@@ -121,12 +123,14 @@ export function layout(T: WheeledSpec): Layout {
   if (noCab) { cabX0 = L1 - 0.4; cabTop = dHi; }
   else {
     cabX0 = Math.max(L1 - 2.05, tireFront, T.out.xf + 0.6 > tireFront && T.out.xf < L1 ? T.out.xf + 0.6 : -99);
-    cabTop = T.pivH - bw * 0.63 - 0.12;
+    // grúa torre (SK 60): la cabina queda bajo la torre plegada (referencia: dHi + 0,9; aproximación visual: la pluma
+    // plegada va de dHi + 0,65 hacia arriba, ver models/tower.ts)
+    cabTop = T.tower ? dHi + 0.6 : T.pivH - bw * 0.63 - 0.12;
   }
   const cabLow = dLo - 0.15;
   const cab: Box3 = { x0: cabX0, x1: L1, y0: cabLow, y1: cabTop, z0: -hf, z1: fullCab ? hf : 0.55 };
   const front0 = cabX0;
-  const restX = front0 - 0.35, restH = T.pivH - bw * 0.63 - 0.03;
+  const restX = front0 - 0.35, restH = T.tower ? dHi + 0.6 : T.pivH - bw * 0.63 - 0.03;
   const freeGaps = gaps(L0 + 0.2, front0 - 0.1, [...groupOcc, ...outOcc]);
   const big = [...freeGaps].sort((p, q) => (q[1] - q[0]) - (p[1] - p[0]))[0];
   const engGap = big && big[1] - big[0] > 1.2 ? big : null;
@@ -199,7 +203,8 @@ export function layout(T: WheeledSpec): Layout {
   const tailR = Math.max(...corners.map(([x, z]) => Math.hypot(x, z)));
 
   // equipo de la cubierta: entre el radio de cola y el apoyo de pluma, por debajo de la pluma tumbada
-  const deck = { x0: T.piv + tailR + 0.3, x1: restX - 0.35, top: restH - 0.05 };
+  // (grúa torre: la superestructura es la plataforma de 2,9 m; el contrapeso va arriba, en la contrapluma)
+  const deck = { x0: T.piv + (T.tower ? 3.0 : tailR) + 0.3, x1: restX - 0.35, top: restH - 0.05 };
 
   const eye = noCab
     ? { x: opCab.x1 - 0.45, y: opCab.y1 - 0.55, z: (opCab.z0 + opCab.z1) / 2 }

@@ -27,3 +27,23 @@ export function loadReference(): Reference {
   const code = html.slice(a, b);
   return new Function(`${code}\nreturn { CRANES, KF, yNoGuy, reach, structCap, supportRect, craneMasses, tipUtil, lmiStatic, ratedCap };`)();
 }
+
+export interface TowerReference {
+  towerGeom(slew?: number): Any;
+  pivotPos(slew?: number): { x: number; y: number; z: number };
+  headPos(ang?: number, Lb?: number, slew?: number): { x: number; y: number; z: number };
+  tipPos(ang?: number, Lb?: number, slew?: number): { x: number; y: number; z: number };
+}
+
+/**
+ * Geometría de la grúa torre de la referencia (de `const lift` a `function mode()`: towerGeom, pivotPos, headPos,
+ * tipPos), ejecutada con un estado `S` y una grúa `T` propios (en la referencia son variables globales).
+ */
+export function loadTowerReference(T: Any, S: Any): TowerReference {
+  const html = raw.replace(/\r\n/g, '\n');
+  const a = html.indexOf('const lift = ');
+  const b = html.indexOf('function mode()');
+  if (a < 0 || b < a) throw new Error('No se encontró la geometría de la torre en la referencia');
+  const code = html.slice(a, b);
+  return new Function('S', 'T', `const clamp = (v, a, b) => Math.max(a, Math.min(b, v));\n${code}\nreturn { towerGeom, pivotPos, headPos, tipPos };`)(S, T);
+}

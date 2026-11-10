@@ -2,13 +2,13 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import './style.css';
 import { CRANES, isCrawler, type CraneId, type WheeledSpec } from './crane/cranes';
-import { WHEELED_IDS } from './render/models/layout';
+import { TRUCK_IDS } from './render/models/layout';
 import { initialState, stepCrane, stepOutriggers, type CraneState } from './crane/kinematics';
 import { baseConfig, lmiStatic, ratedCap, reach } from './crane/stability';
 import { dynamicStability, stepTilt, supportMode, toggleOutriggers, TILTED_PHI, type Dyn } from './crane/ops';
 import { apply, carrierFrame, carrierPose, edgeAxis, rotate, worldToCarrier, type Pose } from './crane/pose';
 import { stepDrive, stepSuspension } from './crane/drive';
-import { blockWhileAssembling, jibPhase, outriggersLocked, stepAssembly, teleLimit, toggleBallast, toggleMount, toggleYGuy, yGuyPhase } from './crane/assembly';
+import { blockWhileAssembling, jibPhase, towerPhase, outriggersLocked, stepAssembly, teleLimit, toggleBallast, toggleMount, toggleYGuy, yGuyPhase } from './crane/assembly';
 import { CameraRig } from './render/camera';
 import { buildSite, TEST_HEAVY, TEST_OBSTACLES, TEST_SOFT } from './render/site';
 import { createScene } from './render/scene';
@@ -20,8 +20,8 @@ import { Input } from './ui/input';
 import { Hud } from './ui/hud';
 import { stepSuperlift } from './crane/superlift';
 
-/** Grúas del menú: las de ruedas (fase 4) y las de orugas (fase 6) */
-const MENU_IDS: CraneId[] = [...WHEELED_IDS, 'crawler', 'lr'];
+/** Grúas del menú: las de ruedas (fase 4), la grúa torre sobre camión (fase 8) y las de orugas (fase 6) */
+const MENU_IDS: CraneId[] = [...TRUCK_IDS, 'crawler', 'lr'];
 
 const MODE_TEXT = { out: 'estabilizadores', tire: 'neumáticos', move: 'en marcha', crawler: 'orugas', crawlMove: 'orugas en marcha' };
 
@@ -52,7 +52,9 @@ async function start() {
   // (la LR 3000, con 108 m de pluma, unas 3 veces la distancia de la AT 60)
   // con plumín (AT 650-8: 54 + 42 m), según el largo total
   const camSize = Math.max(isCrawler(T) ? Math.max(1.4, T.boom.max / 36) : 1, (T.len[1] - T.len[0]) / 12.3,
-    T.jibDef ? (T.boom.max + T.jibDef.len) / 55 : 0);
+    T.jibDef ? (T.boom.max + T.jibDef.len) / 55 : 0,
+    // grúa torre: 40 m de alto y 60 m de pluma (la referencia aleja la vista a J·1,2 + 16)
+    T.tower ? (T.tower.J * 1.2 + 16) / 40 : 0);
   // encuadre de sombras: lo que llega la pluma más tumbada (y la bandeja del superlift), al menos ±45 m
   const shadowHalf = Math.max(45, T.foot + T.boom.max * Math.cos(T.boom.angMin) + 6,
     T.jibDef ? T.foot + T.boom.min + T.jibDef.len + 8 : 0,
@@ -60,7 +62,7 @@ async function start() {
   const cam = new CameraRig(ctx, crane.cab, (s) => crane.eye(s), camSize, shadowHalf);
   const input = new Input();
   const hud = new Hud(document.getElementById('hud')!, T.name, id, MENU_IDS.map((k) => ({ id: k, name: CRANES[k].name })),
-    { ballast: !!T.ballast, yguy: !!T.yguy, outriggers: !!T.out, tele: T.boom.max > T.boom.min, superlift: !!T.superlift, jib: !!T.jibDef });
+    { ballast: !!T.ballast, yguy: !!T.yguy, outriggers: !!T.out, tele: T.boom.max > T.boom.min, superlift: !!T.superlift, jib: !!T.jibDef, tower: !!T.tower });
   hud.onCrane = (k) => {
     const u = new URL(location.href);
     u.searchParams.set('grua', k);
@@ -105,7 +107,8 @@ async function start() {
     hud.showTipped(null);
     hud.say('Grúa reiniciada', 1.5);
   };
-  hud.say(T.superlift ? `${T.name} · K/L acercan o alejan el lastre superlift · la bandeja barre un círculo detrás · V cambia la cámara`
+  hud.say(T.tower ? `${T.name} · O despliega los estabilizadores · M monta la grúa torre · Q/E mueven el carro · V cambia la cámara`
+    : T.superlift ? `${T.name} · K/L acercan o alejan el lastre superlift · la bandeja barre un círculo detrás · V cambia la cámara`
     : T.crawler ? `${T.name} · flechas para conducir (← → gira en el sitio) · puede llevar la carga colgada · V cambia la cámara`
     : `${T.name} · flechas para conducir · O despliega los estabilizadores · V cambia la cámara`, 4);
 
@@ -127,9 +130,10 @@ async function start() {
       if (dr.msg) hud.sayOnce(dr.msg);
       stepSuspension(T, S, (S.vd - v0) / dt, dt);
       // Montajes (lastre, Y-guy): avanzan y, mientras tanto, la grúa no se mueve
-      const am = stepAssembly(T, S, C, dt);
+      // (grúa torre: el montaje se detiene si la torre o su pluma tocarían algo)
+      const am = stepAssembly(T, S, C, dt, T.tower ? (s) => phys.towerHits(s, pose) : undefined);
       if (am) hud.say(am, 2);
-      const bm = blockWhileAssembling(S, inp);
+      const bm = blockWhileAssembling(S, inp, T);
       if (bm) hud.sayOnce(bm);
       const teleMax = teleLimit(T, S);
       if (inp.tele > 0 && S.Lb >= teleMax - 1e-6 && teleMax < T.boom.max) {
@@ -154,8 +158,12 @@ async function start() {
           if (why) hud.sayOnce(why);
           return !!why;
         } : undefined,
-        // el plumín no atraviesa obstáculos, cargas sueltas ni el suelo
-        jibHit: T.jibDef ? (s) => { const r = phys.jibHits(s, pose); if (r.n) hitMsg = r.what; return r.n; } : undefined,
+        // el plumín no atraviesa obstáculos, cargas sueltas ni el suelo; la torre y su pluma tampoco
+        jibHit: T.jibDef || T.tower ? (s) => {
+          const r = T.tower ? phys.towerHits(s, pose) : phys.jibHits(s, pose);
+          if (r.n) hitMsg = r.what;
+          return r.n;
+        } : undefined,
         onHit: () => hud.sayOnce(hitMsg),
       });
       C.jibRel = S.jibRel;
@@ -258,6 +266,7 @@ async function start() {
       yguy: T.yguy ? { text: yGuyPhase(S.yg), p: S.yg } : null,
       superlift: T.superlift ? { r: C.slR, min: T.superlift.rMin, max: T.superlift.rMax } : null,
       jib: T.jibDef ? { text: jibPhase(S.jg), p: S.jg, deg: ((S.ang - S.jibRel) * 180) / Math.PI, len: T.jibDef.len } : null,
+      tower: T.tower ? { text: towerPhase(S.er, S.erT), p: S.er } : null,
     });
   }
   requestAnimationFrame(frame);

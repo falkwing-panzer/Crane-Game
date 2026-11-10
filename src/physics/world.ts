@@ -7,6 +7,8 @@ import { carrierLift, headPos, jibOn, tipPos, type CraneState } from '../crane/k
 import { craneMasses, supportRect, type CraneConfig, type SupportMode } from '../crane/stability';
 import { apply, axisAngle, mul, rotate, type Pose, type V3 } from '../crane/pose';
 import { padsOnSoft, terrainBlocked, type SoftZone } from '../crane/terrain';
+import { COUNTER_JIB, towerGeom } from '../crane/tower';
+import { foldedTowerBox } from '../render/models/tower';
 
 // Unidades de masa: toneladas (igual que la referencia). Gravedad 9,81 m/s².
 // Mientras la grúa está de pie NO es un cuerpo dinámico: su cinemática viene del modelo analítico y aquí
@@ -153,6 +155,12 @@ export class Physics {
     const shape = new RAPIER.Cuboid((L1 - L0) / 2, hy, bodyHalf(T));
     const pos = { x: x + c * cx, y: CLEARANCE + hy, z: z - s * cx };
     if (this.hitsSomething(pos, axisAngle(0, 1, 0, h), shape)) return 'El chasis toca un obstáculo';
+    // grúa torre plegada: sobresale por delante del camión (no está en la referencia, que solo mira el chasis)
+    if (T.tower) {
+      const b = foldedTowerBox(T), bx = (b.x0 + b.x1) / 2;
+      const tp = { x: x + c * bx, y: (b.y0 + b.y1) / 2, z: z - s * bx };
+      if (this.hitsSomething(tp, axisAngle(0, 1, 0, h), new RAPIER.Cuboid((b.x1 - b.x0) / 2, (b.y1 - b.y0) / 2, b.hz))) return 'La torre plegada toca un obstáculo';
+    }
     // la bandeja del superlift se arrastra con la grúa (no está en la referencia, que solo mira el chasis)
     return T.superlift ? this.trayBlocked(x, z, h, this.slew, this.slR) : null;
   }
@@ -279,6 +287,36 @@ export class Physics {
       ? 'Un obstáculo impide armar el plumín en el suelo: gira la pluma hacia un sitio libre' : null;
   }
 
+  /**
+   * Choque de la grúa torre con el entorno (boomHit de la referencia: la torre desde 3 m sobre la bisagra y la pluma,
+   * contra obstáculos y cargas sueltas; aquí también la contrapluma). Geometría de towerGeom en la pose dada, en
+   * cualquier punto del montaje. Devuelve cuántos tramos tocan (0 = libre) y qué.
+   */
+  towerHits(S: CraneState, pose: Pose): { n: number; what: string } {
+    const T = this.T;
+    if (!T.tower) return { n: 0, what: '' };
+    const g = towerGeom(T, S);
+    const P = (v: [number, number, number]) => ({ x: v[0], y: v[1], z: v[2] });
+    const at = (o: [number, number, number], d: [number, number, number], k: number) => P([o[0] + d[0] * k, o[1] + d[1] * k, o[2] + d[2] * k]);
+    const pieces: [V3, V3, number, number, string][] = [
+      [at(g.base, g.dir, 3), P(g.top), 1.0, 5, 'La torre golpearía un obstáculo'],
+      [P(g.top), at(g.top, g.jd, g.jlVis), 0.6, 10, 'La pluma golpearía un obstáculo'],
+      [P(g.top), at(g.top, g.jd, -COUNTER_JIB), 0.6, 2, 'La contrapluma golpearía un obstáculo'],
+    ];
+    let n = 0, what = '';
+    for (const [a0, b0, half, N, msg] of pieces) {
+      const a = apply(pose, a0), b = apply(pose, b0);
+      const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z, len = Math.hypot(dx, dy, dz);
+      const rot = mul(axisAngle(0, 1, 0, Math.atan2(-dz, dx)), axisAngle(0, 0, 1, Math.atan2(dy, Math.hypot(dx, dz))));
+      const shape = new RAPIER.Cuboid(len / N / 2, half, half);
+      for (let i = 0; i < N; i++) {
+        const k = (i + 0.5) / N;
+        if (this.hitsSomething({ x: a.x + dx * k, y: a.y + dy * k, z: a.z + dz * k }, rot, shape)) { n++; what = msg; }
+      }
+    }
+    return { n, what };
+  }
+
   private hitsSomething(pos: V3, rot: { x: number; y: number; z: number; w: number }, shape: RAPIER.Shape) {
     let hit = false;
     const own = new Set([this.chassisBody?.handle, this.supBody?.handle, this.headBody?.handle]);
@@ -329,6 +367,8 @@ export class Physics {
       const L = crawlerLayout(T), x0 = L.cw.x - L.cw.len / 2, x1 = L.front, y0 = L.yd, y1 = Math.max(L.cw.top, L.rearBody.y1);
       return { hx: (x1 - x0) / 2, hy: (y1 - y0) / 2, hz: Math.max(L.wide, L.cw.w), cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 };
     }
+    // grúa torre: la plataforma giratoria (el contrapeso va arriba, en la contrapluma); ver models/tower.ts
+    if (T.tower) return { hx: 2.5, hy: 0.3, hz: 1.3, cx: 0.4, cy: T.deckHi + 0.3 };
     const px0 = T.xCw - T.cwLen / 2, px1 = 1.3;
     return { hx: (px1 - px0) / 2, hy: 0.85, hz: 1.15, cx: (px0 + px1) / 2, cy: T.deckHi + 1.05 };
   }
@@ -539,6 +579,9 @@ export class Physics {
     // Orden de craneMasses: portador, superestructura, contrapeso, pluma, [plumín], [derrick], [superlift].
     const cwH = isCrawler(T) ? crawlerLayout(T).cw.y0 + cwDims(T, 0).hgt / 2 : T.deckHi + 1.05;
     const hs = [(T.deckLo + T.deckHi) / 2, T.deckHi + 1.0, cwH, T.pivH + (S.Lb / 2) * Math.sin(S.ang)];
+    // grúa torre: la superestructura es sobre todo la torre (a media altura); contrapeso y pluma, arriba
+    const tg = T.tower ? towerGeom(T, S) : null;
+    if (tg) hs.splice(1, 3, (T.deckHi + tg.top[1]) / 2, tg.top[1], tg.top[1] + tg.jd[1] * T.tower!.J / 2);
     if (C.jib) hs.push(T.pivH + S.Lb * Math.sin(S.ang) + (C.jib.len / 2) * Math.sin(S.ang - S.jibRel));
     if (T.derrick) hs.push(T.deckHi + 2.2 + (T.derrick.len / 2) * Math.sin(T.derrick.ang));
     const pts = craneMasses(T, C, S.Lb, S.ang, S.slew)
@@ -582,8 +625,16 @@ export class Physics {
     const sp = at(b.cx, b.cy);
     cub(b.hx, b.hy, b.hz, sp.x, sp.y, sp.z, qs);
     const c = Math.cos(S.ang), s = Math.sin(S.ang);
-    const bp = at(T.foot + (S.Lb / 2) * c, T.pivH + (S.Lb / 2) * s);
-    cub(S.Lb / 2, T.boom.w * 0.6, T.boom.w / 2, bp.x, bp.y, bp.z, mul(qs, axisAngle(0, 0, 1, S.ang)));
+    if (tg) {
+      // torre y pluma (marco del chasis con el giro: towerGeom ya lo incluye)
+      const mx = (tg.base[0] + tg.top[0]) / 2, my = (tg.base[1] + tg.top[1]) / 2, mz = (tg.base[2] + tg.top[2]) / 2;
+      cub(0.95, tg.hgt / 2, 0.95, mx, my, mz, qs);
+      const J = tg.jlVis, jx = tg.top[0] + tg.jd[0] * J / 2, jy = tg.top[1] + tg.jd[1] * J / 2, jz = tg.top[2] + tg.jd[2] * J / 2;
+      cub(J / 2, 0.35, 0.7, jx, jy, jz, mul(qs, axisAngle(0, 0, 1, tg.phi)));
+    } else {
+      const bp = at(T.foot + (S.Lb / 2) * c, T.pivH + (S.Lb / 2) * s);
+      cub(S.Lb / 2, T.boom.w * 0.6, T.boom.w / 2, bp.x, bp.y, bp.z, mul(qs, axisAngle(0, 0, 1, S.ang)));
+    }
 
     // Velocidad inicial: giro phiV alrededor de la arista (v = ω × (CDG − arista))
     const w = { x: axis.x * S.phiV, y: axis.y * S.phiV, z: axis.z * S.phiV };
