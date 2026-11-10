@@ -371,11 +371,11 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   0,18 ms por paso. AT 450-8 con lastre: 118. **En la laptop de Jesús: 60 fps.**
 
 - Fase 8 (SK 60 montada con 2,3 t en el gancho, vista general, sombras incluidas): **92 draw calls** y ~28.400 triángulos;
-  render ~2,4 ms con `gl.finish` en el panel de la app. **Pendiente medir en la laptop.**
+  render ~2,4 ms con `gl.finish` en el panel de la app. **En la laptop de Jesús: 60 fps.**
 
 - Fase 8B parte 1 (vista inicial o de cerca, sombras incluidas): City 25 120 draw calls (~10.300 triángulos), AT 220 119,
   AT 500-8 con lastre 129, LR 300 74, LR 3000 86 (~22.200 triángulos, igual que antes), SK 60 montada 64 de cerca. La AT 650-8
-  no cambia de camino de dibujo (146). **Pendiente medir en la laptop.**
+  no cambia de camino de dibujo (146). **En la laptop de Jesús: 60 fps** (City 25, LR 3000, SK 60).
 
 ### Pendientes
 - SK 60: el lastre es el de la referencia (3 bloques en la contrapluma); su forma va en la fase 8B. Se puede plegar con el
