@@ -109,7 +109,7 @@ Las 11 son jugables, en los niveles y en la prueba libre.
 | M | Montaje (plumín o grúa torre) |
 | K / L | Radio del superlift |
 | Shift | Movimiento fino |
-| V | Cámara: orbital → seguimiento → cabina |
+| V | Cámara: orbital → seguimiento → cabina (en el tándem, además, cámara libre que no cambia con Tab) |
 | X | Devolver la carga a su sitio (solo en la prueba libre) |
 | P | Puentear el LMI para probar el vuelco (solo en la prueba libre) |
 

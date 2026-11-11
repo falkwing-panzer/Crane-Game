@@ -57,7 +57,8 @@ src/
 ## Controles (heredados de la referencia)
 Flechas conducir/dirección · A/D giro · W/S elevar pluma · Q/E telescopar · R/F cable · Espacio gancho ·
 O estabilizadores (no en orugas) · B lastre · Y Y-guy · T/G plumín · M montaje · K/L radio superlift · Shift fino ·
-V cámara (en la referencia cambiaba la vista lateral; aquí: orbital libre → seguimiento → cabina del conductor).
+V cámara (en la referencia cambiaba la vista lateral; aquí: orbital libre → seguimiento → cabina del conductor;
+en el tándem, además, **cámara libre** fija en la obra que no salta de grúa con Tab).
 Extra (no está en la referencia), **solo en la prueba libre**: **X** reponer la carga en su posición inicial ·
 **P** puentear el LMI (sin cortes, para poder probar el vuelco; se apaga al reiniciar).
 Fase 11: **N** silencia el sonido (se guarda). **Mando** (API Gamepad, mapeo standard; mapa en `ui/gamepad.ts`): sticks
@@ -464,6 +465,9 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - **Cargas con orejetas giran libres sobre la vertical** (fase 10; las demás siguen bloqueadas como en la fase 9). Con el giro
   bloqueado, mover un gancho de costado arrastraba la columna entera (Jesús: "solo se movía de forma vertical"). El
   solucionador del reparto usa entonces también el momento vertical.
+- **Cámara libre del tándem** (pedido de Jesús): cuarto modo de V solo con dos grúas (`CameraRig.enableFree`). Entra
+  con una vista amplia centrada entre las grúas y después solo la mueve el ratón: no sigue a nadie y Tab no la mueve.
+  La orbital sigue saltando a la grúa activa con Tab, como antes.
 - **Prueba libre del tándem**: sin obstáculos de prueba; las dos grúas empiezan montadas (estabilizadores, lastre, Y-guy) con
   los ganchos junto a sus orejetas; sin plumín. Columna 40 × 5 × 5 m y 400 t (aprobada por Jesús: la del nivel 13 pesa
   1.200 t y la AT 500-8 no llevaría su mitad). Reiniciar vuelve a colocar las dos.

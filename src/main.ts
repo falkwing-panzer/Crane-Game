@@ -152,6 +152,11 @@ async function start() {
     T.jibDef ? T.foot + T.boom.min + T.jibDef.len + 8 : 0,
     T.superlift ? T.superlift.rMax + T.superlift.w / 2 + 4 : 0)));
   const cam = new CameraRig(ctx, act.crane.cab, (s) => act.crane.eye(s), camSize, shadowHalf);
+  // tándem: cámara libre en el centro de las grúas (V), que no salta al cambiar de grúa con Tab
+  if (units.length > 1) cam.enableFree(() => {
+    const n = units.length;
+    return { x: units.reduce((a, u) => a + u.pose.t.x, 0) / n, z: units.reduce((a, u) => a + u.pose.t.z, 0) / n };
+  });
   const input = new Input();
   const any = (f: (T: CraneSpec, u: Unit) => boolean) => units.some((u) => f(u.T, u));
   const hud = new Hud(document.getElementById('hud')!, act.T.name, act.id, MENU_IDS.map((k) => ({ id: k, name: CRANES[k].name })),
