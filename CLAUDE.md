@@ -60,6 +60,9 @@ O estabilizadores (no en orugas) · B lastre · Y Y-guy · T/G plumín · M mont
 V cámara (en la referencia cambiaba la vista lateral; aquí: orbital libre → seguimiento → cabina del conductor).
 Extra (no está en la referencia), **solo en la prueba libre**: **X** reponer la carga en su posición inicial ·
 **P** puentear el LMI (sin cortes, para poder probar el vuelco; se apaga al reiniciar).
+Fase 11: **N** silencia el sonido (se guarda). **Mando** (API Gamepad, mapeo standard; mapa en `ui/gamepad.ts`): sticks
+marcha/dirección y giro/pluma, LT/RT cable, LB/RB telescopio, cruceta plumín/superlift, A gancho, B estabilizadores,
+X lastre, Y cámara, View montaje, Menu Y-guy, clic izq. fino, clic der. cambiar de grúa.
 
 ## Estado y decisiones
 Se trabaja por fases (ver `FASES.md`), con `/clear` entre fases. **Al cerrar cada fase, actualizar esta sección**
@@ -129,6 +132,10 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   más de 6° de la vertical (1 s), columna ladeada > 10° y doble bloqueo; victoria con la columna de pie en la
   cimentación. Menú y ficha (sin elección de grúa). Pruebas en `levels/tandemLevel.test.ts`. Partida completa con un
   guion en el navegador: de pie a los 83 s, cimentación a los 5:02, tres estrellas.
+
+- **Fase 11** (pulido): draw calls (nivel 14: 220 → 134), menú de calidad (bajo/medio/alto), sonidos con Web Audio,
+  mando, consola limpia en los 14 niveles con cada grúa permitida, las 11 pruebas libres, tándem y menú (60 casos).
+  Pruebas en `models/builder.test.ts`, `ui/settings.test.ts`, `ui/audio.test.ts`, `ui/gamepad.test.ts`.
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -212,6 +219,10 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   tándem en `tandemRules()` de `main.ts`; `Unit.over`/`side`/`sideAng`. `LEVELS` sigue siendo solo la referencia. En `main.ts` cada grúa es un
   `Unit` (`controlUnit` antes del paso, `afterUnit` después); `act` = la que se maneja. `CameraRig.follow`, `Hud.other`/`setTitle`,
   `Input.onSwitch` (Tab), `Rigging(…, drawLoads)`.
+- Fase 11: `ui/settings.ts` (`QUALITY`, `loadSettings`/`saveSettings`, clave `gruas-ajustes`, `?calidad=` manda;
+  `createScene(canvas, calidad)`), `ui/audio.ts` (`soundTargets` sin Web Audio, `Sound`: se arranca con la primera
+  tecla o clic; `update` cada cuadro en `draw()`, `thump` con los eventos `land`/`strike`), `ui/gamepad.ts` (`padAxes`,
+  `padEdges`; `Input.poll()` una vez por cuadro en `frame()`; `advance()` no lo llama).
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
   cut…, de la grúa que se maneja; `units`, todas) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
   dibuja cuadros; así se puede probar desde la consola).
@@ -457,6 +468,21 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   estabilizadores quedan a 2 m del transportador). Tiro lateral solo si esa grúa lleva > 5 t. El doble bloqueo es fallo
   (pasa si la principal sigue subiendo la columna con la cola enganchada: hay que soltarla cuando ya no lleva carga).
 
+- **Draw calls (fase 11)**: `Parts.build` fusiona los colores lisos de un grupo en **una** malla con colores por vértice
+  (`VC_MAT`, Lambert compartido; el color de la paleta en espacio lineal). Cabina, cristal y luces conservan su malla
+  (la RT y las orugas ocultan la cabina buscando `pal.cabin`/`pal.glass`; las luces son emisivas). Las mallas de color
+  **no proyectan**: cada grupo añade una malla solo de sombra (solo posición, sin cristal) en la capa `SHADOW_LAYER` = 1,
+  que la cámara principal no ve y la de sombras sí (`sun.shadow.camera.layers.enable(1)`: three 0.187 usa las capas de
+  la cámara de sombras si tienen algo más que la 0). Va al final de la lista que devuelve `build` (se oculta con el resto).
+  Si se actualiza three, comprobar que `WebGLShadowMap` sigue mirando `shadow.camera.layers`.
+- **Calidad**: alto = lo de antes (2048, antialias, escala hasta 1,5); medio = sombras 1024 y escala 1; bajo = sin
+  sombras ni antialias y escala 0,75. Por defecto alto. Cambiarla recarga la página (el antialias es del contexto WebGL).
+- **Sonido**: todo sintetizado (sin archivos, sin derechos). Motor siempre al ralentí mientras se juega; sube con la marcha
+  y los mandos (también montajes en marcha). Alarma del LMI desde el 90 % (como el ámbar del HUD), rápida con corte; la
+  del LMI tapa la de la línea eléctrica. Silencio en pausa y con la grúa volcada.
+- **Mando**: la tecla manda; sin tecla, el valor del mando (proporcional: `ramp` ya admite mandos parciales). Zona
+  muerta 0,15 reescalada. **Táctil no** (decidido con Jesús: en la laptop no hace falta).
+
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
   grúas grandes (fases 4–6): cabeza cinemática, izado a velocidad plena, estiramiento máximo del cable.
@@ -515,6 +541,11 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   (~48.000 triángulos), por encima de la meta de 150; 60 fps y render CPU ~7 ms en el panel. Jesús lo probó en la laptop y
   le fue bien (sin cifra de fps). Parte B (nivel 14, vista general): **~222 draw calls**, ~50.000 triángulos, 60 fps en el
   panel. Si en la laptop no da 60 fps: sombras solo de la grúa activa, o menos detalle en la lejana.
+
+- Fase 11 (panel de la app, que es la laptop de Jesús: Intel Graphics de la Core Ultra 5; 1080p, sombras incluidas):
+  nivel 14 **134 draw calls** (antes 220), ~50.000 triángulos; render ~1–1,4 ms con `gl.finish` (antes ~2); con calidad
+  baja 79. Nivel 11 con la AT 650-8 sin montar 78 (antes 138), nivel 9 77, SK 60 libre 58. El pase de sombras era ~2/3
+  del render; la física, 0,11 ms por paso con dos grúas. **Pendiente: fps con el panel visible en uso normal.**
 
 ### Pendientes
 - Tándem: Jesús jugó el nivel 14 a mano y le pareció bien (el guion de prueba cambia de grúa ~13 veces al ponerla de
