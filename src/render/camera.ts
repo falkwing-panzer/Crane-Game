@@ -51,6 +51,17 @@ export class CameraRig {
     }
   }
 
+  /**
+   * Tándem (fase 10): seguir a otra grúa (Tab). La vista orbital se desplaza lo mismo que va de una grúa a la otra;
+   * en la cabina, se vuelven a mostrar las piezas de la anterior.
+   */
+  follow(cab: THREE.Object3D[], eye: (S: CraneState) => Eye) {
+    for (const m of this.cab) m.visible = true;
+    this.cab = cab;
+    this.eye = eye;
+    for (const m of this.cab) m.visible = this.mode !== 'cabina';
+  }
+
   cycle(S: CraneState, pose: Pose): string {
     this.mode = ORDER[(ORDER.indexOf(this.mode) + 1) % ORDER.length];
     const { controls, camera } = this.ctx;

@@ -28,7 +28,8 @@ export class Rigging {
   private sling: THREE.LineSegments;
   private slingPos: Float32Array;
 
-  constructor(scene: THREE.Scene, private phys: Physics, T: CraneSpec) {
+  /** drawLoads: dibujar las cargas (en el tándem las dibuja solo el aparejo de la primera grúa) */
+  constructor(scene: THREE.Scene, private phys: Physics, T: CraneSpec, drawLoads = true) {
     const steel = new THREE.MeshLambertMaterial({ color: '#7c8389' });
     const block = new THREE.MeshLambertMaterial({ color: '#f2b632' });
     const dark = new THREE.MeshLambertMaterial({ color: '#2a2e33' });
@@ -74,7 +75,7 @@ export class Rigging {
     // un material por masa (la etiqueta de la textura dice las toneladas); las piezas pesadas, en acero
     // cargas de los niveles: su color y su etiqueta (CT de la referencia)
     const mats = new Map<string, THREE.MeshLambertMaterial>();
-    for (const l of phys.loads) {
+    for (const l of drawLoads ? phys.loads : []) {
       const key = l.color ? `${l.color}|${l.label}` : String(l.mass);
       let mt = mats.get(key);
       if (!mt) mats.set(key, (mt = new THREE.MeshLambertMaterial({ map: l.color ? labelTexture(l.label, l.mass, l.color) : crateTexture(l.mass) })));
@@ -129,8 +130,11 @@ export class Rigging {
     if (L) {
       const hb = p.bodyPoint(p.hookBody, 0, -HOOK_HALF_H, 0);
       let i = 0;
+      const lug = p.attachedLug >= 0 ? L.lugs![p.attachedLug] : null;
       for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-        const c = p.bodyPoint(L.body, sx * (L.half.x - 0.08), L.half.y, sz * (L.half.z - 0.08));
+        // orejeta (tándem): los ramales van a la orejeta, algo abiertos
+        const c = lug ? p.bodyPoint(L.body, lug.x + sx * 0.15, lug.y, lug.z + sz * 0.15)
+          : p.bodyPoint(L.body, sx * (L.half.x - 0.08), L.half.y, sz * (L.half.z - 0.08));
         this.slingPos.set([hb.x, hb.y, hb.z, c.x, c.y, c.z], i);
         i += 6;
       }

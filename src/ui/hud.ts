@@ -82,18 +82,21 @@ export class Hud {
   private physAcc = 0;
   private renderAcc = 0;
 
+  private otherEl: HTMLElement;
+
   constructor(root: HTMLElement, private title: string, current: string, cranes: { id: string; name: string }[],
-    has: { ballast: boolean; yguy: boolean; outriggers: boolean; tele: boolean; superlift: boolean; jib: boolean; tower?: boolean } =
+    has: { ballast: boolean; yguy: boolean; outriggers: boolean; tele: boolean; superlift: boolean; jib: boolean; tower?: boolean; tandem?: boolean } =
     { ballast: false, yguy: false, outriggers: true, tele: true, superlift: false, jib: false }) {
     const opts = cranes.map((c) => `<option value="${c.id}"${c.id === current ? ' selected' : ''}>${c.name}</option>`).join('');
     root.innerHTML = `
       <div class="panel perf" id="perf">— fps</div>
       <label class="panel pick">Grúa <select id="crane">${opts}</select></label>
       <div class="panel data" id="data"></div>
+      <div class="panel data other" id="other" hidden></div>
       <div class="msg" id="msg"></div>
       <div class="panel keys">
         <b>Flechas</b> conducir · <b>A/D</b> giro · <b>W/S</b> pluma · ${has.tower ? '<b>Q/E</b> carro · ' : has.tele ? '<b>Q/E</b> telescopio · ' : ''}<b>R/F</b> gancho ·
-        ${has.outriggers ? '<b>O</b> estabilizadores · ' : ''}${has.ballast ? '<b>B</b> lastre · ' : ''}${has.yguy ? '<b>Y</b> arriostramiento · ' : ''}${has.superlift ? '<b>K/L</b> radio superlift · ' : ''}${has.jib ? '<b>M</b> montar plumín · <b>T/G</b> plumín · ' : ''}${has.tower ? '<b>M</b> montar torre · ' : ''}<b>Espacio</b> enganchar/soltar · <b>X</b> reponer carga · <b>P</b> puentear LMI · <b>Shift</b> fino · <b>V</b> cámara
+        ${has.outriggers ? '<b>O</b> estabilizadores · ' : ''}${has.ballast ? '<b>B</b> lastre · ' : ''}${has.yguy ? '<b>Y</b> arriostramiento · ' : ''}${has.superlift ? '<b>K/L</b> radio superlift · ' : ''}${has.jib ? '<b>M</b> montar plumín · <b>T/G</b> plumín · ' : ''}${has.tower ? '<b>M</b> montar torre · ' : ''}<b>Espacio</b> enganchar/soltar · ${has.tandem ? '<b>Tab</b> cambiar de grúa · ' : ''} <b>X</b> reponer carga · <b>P</b> puentear LMI · <b>Shift</b> fino · <b>V</b> cámara
       </div>
       <div class="card" id="card" hidden>
         <h2>Grúa volcada</h2>
@@ -109,6 +112,26 @@ export class Hud {
     this.perf = root.querySelector('#perf')!;
     this.data = root.querySelector('#data')!;
     this.msg = root.querySelector('#msg')!;
+    this.otherEl = root.querySelector('#other')!;
+  }
+
+  /** Nombre de la grúa que se maneja (tándem: cambia con Tab) */
+  setTitle(title: string) {
+    this.title = title;
+  }
+
+  /** Tándem: resumen de la otra grúa (null = ocultar) */
+  other(o: { name: string; lmi: number; tension: number; share: number | null; tiltDeg: number; tipped: boolean } | null) {
+    this.otherEl.hidden = !o;
+    if (!o) return;
+    const f = (v: number, d = 1) => v.toFixed(d).replace('.', ',');
+    const cls = o.lmi >= 1 ? 'bad' : o.lmi >= 0.9 ? 'warn' : 'ok';
+    this.otherEl.innerHTML = `<div class="title">${o.name} <small>(Tab para manejarla)</small></div>` +
+      (o.tipped ? `<div class="cut">GRÚA VOLCADA</div>` :
+        `<div class="lmi ${cls}"><span>LMI</span><b>${Math.round(o.lmi * 100)} %</b>` +
+        `<i><u style="width:${Math.min(100, (o.lmi / 1.25) * 100).toFixed(1)}%"></u><s></s></i></div>` +
+        (o.tiltDeg > 0.05 ? `<div class="bad">¡Se levanta! ${f(o.tiltDeg)}°</div>` : '') +
+        `Tensión cable <b>${f(o.tension)} t</b>` + (o.share !== null ? ` · lleva <b>${f(o.share)} t</b>` : ''));
   }
 
   /** Cartel de vuelco (null = ocultar) */
