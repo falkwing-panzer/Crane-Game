@@ -137,6 +137,12 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   mando, consola limpia en los 14 niveles con cada grúa permitida, las 11 pruebas libres, tándem y menú (60 casos).
   Pruebas en `models/builder.test.ts`, `ui/settings.test.ts`, `ui/audio.test.ts`, `ui/gamepad.test.ts`.
 
+- **Fase 12** (publicación): repositorio público y GitHub Pages en https://falkwing-panzer.github.io/Crane-Game/.
+  `vite.config.ts` con `base: './'` (la página vive en `/Crane-Game/`; las URL internas ya usaban `location.pathname`);
+  `.github/workflows/publicar.yml` compila (`npm run build`, con tipos) y publica `dist/` en cada push a `main`.
+  Decisión con Jesús: Pages con repo público (Netlify/Vercel permitían privado pero había que crear cuenta).
+  Comprobado en el enlace público: menú y nivel 1 sin errores en consola.
+
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
   `CraneSpec`, `AT60` (= `CRANES.medium`, tipada `WheeledSpec` para el modelo 3D de la fase 0), `CrawlerSpec`/`isCrawler`.

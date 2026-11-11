@@ -9,6 +9,9 @@ Tiene 14 niveles: trabajos de obra con cargas, zonas de destino, viento, líneas
 límite de tiempo y un izaje en tándem con dos grúas. Además, una prueba libre para manejar cualquier grúa sin
 objetivo y otra con las dos grúas del tándem.
 
+**Jugar en el navegador:** https://falkwing-panzer.github.io/Crane-Game/
+(se recomienda un ordenador con teclado; también funciona con un mando).
+
 Proyecto personal en desarrollo. Hecho con Vite, TypeScript, [three.js](https://threejs.org) y
 [Rapier](https://rapier.rs).
 
@@ -131,6 +134,7 @@ La meta es 60 fps a 1080p en una laptop con gráfica integrada Intel, con menos 
 Medido en la laptop: 60 fps con todas las grúas y sus detalles. Con una grúa, el peor caso es la AT 650-8 con
 lastre, Y-guy y plumín montados en el nivel 11: 144 draw calls. El tándem (dos grúas) llega a unas 220.
 
-## Plan
+## Publicación
 
-Siguen el pulido (calidad gráfica, sonidos, rendimiento del tándem) y la versión publicada.
+Cada push a `main` lanza la acción `.github/workflows/publicar.yml`: compila con `npm run build` y publica
+`dist/` en GitHub Pages. Se puede seguir en la pestaña **Actions** del repositorio; tarda un par de minutos.
