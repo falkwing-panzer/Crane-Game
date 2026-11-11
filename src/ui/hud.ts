@@ -98,7 +98,7 @@ export class Hud {
       <div class="msg" id="msg"></div>
       <div class="panel keys">
         <b>Flechas</b> conducir · <b>A/D</b> giro · <b>W/S</b> pluma · ${has.tower ? '<b>Q/E</b> carro · ' : has.tele ? '<b>Q/E</b> telescopio · ' : ''}<b>R/F</b> gancho ·
-        ${has.outriggers ? '<b>O</b> estabilizadores · ' : ''}${has.ballast ? '<b>B</b> lastre · ' : ''}${has.yguy ? '<b>Y</b> arriostramiento · ' : ''}${has.superlift ? '<b>K/L</b> radio superlift · ' : ''}${has.jib ? '<b>M</b> montar plumín · <b>T/G</b> plumín · ' : ''}${has.tower ? '<b>M</b> montar torre · ' : ''}<b>Espacio</b> enganchar/soltar · ${has.tandem ? '<b>Tab</b> cambiar de grúa · ' : ''} <b>X</b> reponer carga · <b>P</b> puentear LMI · <b>Shift</b> fino · <b>V</b> cámara
+        ${has.outriggers ? '<b>O</b> estabilizadores · ' : ''}${has.ballast ? '<b>B</b> lastre · ' : ''}${has.yguy ? '<b>Y</b> arriostramiento · ' : ''}${has.superlift ? '<b>K/L</b> radio superlift · ' : ''}${has.jib ? '<b>M</b> montar plumín · <b>T/G</b> plumín · ' : ''}${has.tower ? '<b>M</b> montar torre · ' : ''}<b>Espacio</b> enganchar/soltar · ${has.tandem ? '<b>Tab</b> cambiar de grúa · ' : ''} <b>X</b> reponer carga · <b>P</b> puentear LMI · <b>Shift</b> fino · <b>V</b> cámara · <b>N</b> sonido
       </div>
       <div class="card" id="card" hidden>
         <h2>Grúa volcada</h2>

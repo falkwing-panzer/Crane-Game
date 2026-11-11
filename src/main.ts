@@ -12,6 +12,7 @@ import { blockWhileAssembling, jibPhase, towerPhase, outriggersLocked, stepAssem
 import { CameraRig } from './render/camera';
 import { buildSite, TEST_HEAVY, TEST_OBSTACLES, TEST_SOFT } from './render/site';
 import { createScene } from './render/scene';
+import { Sound } from './ui/audio';
 import { loadSettings, saveSettings, QUALITIES, type Quality } from './ui/settings';
 import { CraneModel } from './render/craneModel';
 import { CrawlerModel } from './render/crawlerModel';
@@ -232,6 +233,12 @@ async function start() {
     const { T, S, phys, pose } = act;
     if (T.jibDef && !act.jibOk) { hud.say(multi ? 'En el tándem no se monta el plumín' : 'En este trabajo no hace falta el plumín', 2); return; }
     hud.say(toggleMount(T, S, { loadAttached: !!phys.attached, groundBlocked: phys.jibGroundBlocked(S, pose) }), 2.4);
+  };
+  const sound = new Sound(settings.sonido, settings.volumen);
+  input.onMute = () => {
+    settings.sonido = sound.toggle();
+    saveSettings(settings);
+    hud.say(settings.sonido ? 'Sonido activado (N)' : 'Sonido apagado (N)', 1.5);
   };
   input.onView = () => hud.say(cam.cycle(act.S, act.pose), 1.5);
   input.onBypass = () => {
@@ -489,6 +496,8 @@ async function start() {
     for (const u of units) controlUnit(u, dt, u === act);
     if (multi) Physics.stepCrew(units.map((u) => ({ phys: u.phys, S: u.S, pose: u.pose, slR: u.C.slR })));
     else act.phys.step(act.S, act.pose, act.C.slR);
+    // golpe sordo al apoyar o golpear la carga (los mismos umbrales que las reglas de los niveles)
+    for (const u of units) for (const e of u.phys.events) if (e.kind === 'land' ? e.v >= LANDING_MIN : e.v > 0.25) sound.thump(e.v);
     if (L) { if (levelRules()) return; } else for (const u of units) u.phys.events.length = 0;
     for (const u of units) afterUnit(u, dt);
   }
@@ -524,6 +533,17 @@ async function start() {
     }
     cam.update(dt, act.S, act.pose);
     ctx.renderer.render(ctx.scene, ctx.camera);
+    const ki = input.state();
+    sound.update(dt, {
+      speed: act.S.vd,
+      work: Math.max(Math.abs(ki.slew), Math.abs(ki.luff), Math.abs(ki.tele), Math.abs(ki.jib ?? 0), Math.abs(ki.sl ?? 0),
+        act.S.cw !== act.S.cwT || act.S.yg !== act.S.ygT || act.S.jg !== act.S.jgT || act.S.er !== act.S.erT || (act.S.out > 0 && act.S.out < 1) ? 1 : 0),
+      hoist: Math.abs(ki.hoist),
+      lmi: act.dyn.lmi,
+      cut: act.cut,
+      prox: run.inProx,
+      off: !running || tipped(),
+    });
     const t2 = performance.now();
 
     const { T, S, C, phys } = act;
@@ -581,7 +601,7 @@ async function start() {
   if (import.meta.env.DEV) {
     Object.assign(window, {
       __gruas: {
-        ctx, input, hud, cam, L, lui, run, units,
+        ctx, input, hud, cam, L, lui, run, units, sound,
         get S() { return act.S; }, get C() { return act.C; }, get T() { return act.T; }, get phys() { return act.phys; },
         get crane() { return act.crane; }, get act() { return act; },
         /** empieza el turno sin pulsar el botón de la ficha */

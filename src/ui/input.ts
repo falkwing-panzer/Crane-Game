@@ -28,6 +28,8 @@ export class Input {
   onMount: () => void = () => {};
   /** Tab: cambiar de grúa en el tándem (fase 10) */
   onSwitch: () => void = () => {};
+  /** N: silenciar el sonido (fase 11) */
+  onMute: () => void = () => {};
 
   constructor() {
     addEventListener('keydown', (e) => {
@@ -39,6 +41,7 @@ export class Input {
       if (e.code === 'KeyB' && !e.repeat) { this.onBallast(); return; }
       if (e.code === 'KeyY' && !e.repeat) { this.onYGuy(); return; }
       if (e.code === 'KeyM' && !e.repeat) { this.onMount(); return; }
+      if (e.code === 'KeyN' && !e.repeat) { this.onMute(); return; }
       if (e.code === 'Tab') { e.preventDefault(); if (!e.repeat) this.onSwitch(); return; }
       if (e.code === 'Space') {
         e.preventDefault();
