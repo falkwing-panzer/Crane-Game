@@ -454,9 +454,9 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 
 - Fase 9 parte A (vista inicial de cada nivel con la grúa recomendada, sombras incluidas, panel de la app): el escenario suma
   unos 6 draw calls (cajas y depósitos instanciados, zonas, borde, cables). Máximo: nivel 11 con la AT 650-8, **138** (~22.200
-  triángulos, sin montar); AT 500-8 en 9 y 10, 134–135; LR 3000 en 13, 96 (~28.800). **Pendiente medir en la laptop.**
+  triángulos, sin montar); AT 500-8 en 9 y 10, 134–135; LR 3000 en 13, 96 (~28.800). **En la laptop de Jesús: 60 fps.**
 - Fase 9 parte B: la franja de las líneas suma 1 draw call (AT 220 en el nivel 3: 129). Nivel 11 con la AT 650-8 con lastre,
-  Y-guy y plumín montados: **144** draw calls y ~33.200 triángulos. **Pendiente medir en la laptop.**
+  Y-guy y plumín montados: **144** draw calls y ~33.200 triángulos. **En la laptop de Jesús: 60 fps.**
 
 ### Pendientes
 - SK 60: el lastre es el de la referencia (3 bloques en la contrapluma); su forma va en la fase 8B. Se puede plegar con el
@@ -471,7 +471,11 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - AT 650-8: sin lastre, al subir el plumín apoyado con la pluma el LMI llega a ~90 % (modelo de la referencia).
 - Vidrio (nivel 6): bajar con Shift a fondo da ~0,47–0,62 m/s, casi en el límite de 0,5 (en la referencia, 0,3 × 2,1 = 0,63):
   hay que soltar F antes de tocar. Es la dificultad prevista por la referencia; si molesta, preguntar antes de cambiarla.
-- Nadie jugó todavía los 13 niveles de principio a fin (se probaron por partes desde la consola).
+- Jesús probó algunos niveles a mano (no todos de principio a fin).
+- **Temblor de la carga al mover la grúa** (video de Jesús, nivel 1 con la AT 60): la carga tiembla muy rápido y la tensión
+  y el LMI saltan (3–7 t con 4,9 t; LMI 34–75 %), sobre todo con la carga cerca del suelo. Ya pasaba antes de la fase 9.
+  Se probó un tope de izado (`clampHaul`) y la aceleración del cable de la referencia (3 m/s²): en las pruebas mejoraba,
+  en la laptop no; se revirtió. Sin resolver: falta verlo en tiempo real (panel del navegador visible) para encontrar la causa.
 - Prueba libre: límite ±150 m con el terreno blando de prueba.
 - `CLEARANCE` y la suspensión siguen siendo los de la AT 60; el colisionador de la superestructura (`supBox`) no cubre la
   cabina del operador. Revisar si molesta con otras grúas.
