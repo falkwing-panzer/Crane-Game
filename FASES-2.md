@@ -16,7 +16,11 @@ Regla para todo el bloque A: **medir antes y después** (fps, peor cuadro, draw 
 tamaño del bundle) y anotarlo en CLAUDE.md. Ninguna fase del motor puede cambiar el resultado de la estabilidad: las
 pruebas contra la referencia siguen pasando.
 
-Orden recomendado: **13 → 18** (bloque A, el motor) y después **19 → 25** (bloque B, el juego); 26–32 cuando quieras.
+Orden recomendado: **13 → 18** (bloque A, el motor) y después **19 → 25** (bloque B, el juego); 26–41 cuando quieras.
+
+**Probar con jugadores antes de seguir sumando:** son 29 fases. Después de la 13 y la 19, pasa el enlace a 5–10
+personas (mejor si alguna maneja grúas) y usa el botón "Opinión" de la fase 13 para que lo que digan decida el orden
+del resto.
 
 ---
 
@@ -35,6 +39,8 @@ Lee CLAUDE.md. Fase 13: dejar la versión publicada sólida para alguien que la 
 5. Para compartir: favicon, descripción e imagen de vista previa (etiquetas og:).
 6. La acción de GitHub (.github/workflows/publicar.yml) corre `npm test` antes de compilar: si falla una
    prueba, no se publica nada.
+7. Botón "Opinión" en el menú que abre un formulario (lo creo yo en Google Forms y te paso el enlace; el
+   juego no envía nada por su cuenta).
 
 Antes de programar, dime el plan.
 ```
@@ -459,6 +465,170 @@ Antes de programar, dime el plan.
 ```
 
 Para revisar: el nivel 1 se termina en un celular; en la laptop no cambia nada.
+
+---
+
+# Bloque C: más trabajos, más máquinas y más jugadores
+
+Ideas para después del bloque B (o antes, si las pruebas con jugadores lo piden). Las cargas difíciles (34) y los accesorios (33)
+son las que más realismo dan por menos trabajo.
+
+## Fase 33: Accesorios del gancho
+
+```
+Lee CLAUDE.md. Fase 33: herramientas que se cuelgan del gancho en lugar de una eslinga.
+
+1. Sistema de accesorios: se cambian en el suelo (el gancho baja, se suelta uno, se engancha otro), cada uno con
+   su masa (cuenta en el LMI) y su colisionador.
+2. Bola de demolición: derribar una estructura vieja hecha de piezas con física (se rompen por juntas que ceden
+   con el impacto); nivel de demolición con zona de seguridad.
+3. Almeja (cuchara bivalva) con la grúa de orugas: abrir/cerrar con una tecla, sacar material de un hoyo y
+   cargarlo en un camión (material como muchas esferas pequeñas o un volumen que se vacía; mide el coste).
+4. Electroimán: chatarra en un desguace que se pega al imán y cae al cortar la corriente.
+5. Pinza para troncos o tubos, y vibrohincador para clavar pilotes (el pilote baja mientras vibra).
+
+Pregúntame masas y medidas de cada accesorio antes de inventarlas. Antes de programar, dime el plan.
+```
+
+Para revisar: los accesorios se cambian sin trucos; la demolición no baja de 60 fps en la laptop; la masa del
+accesorio se nota en el LMI.
+
+---
+
+## Fase 34: Cargas difíciles
+
+```
+Lee CLAUDE.md. Fase 34: cargas que se comportan como las de verdad.
+
+1. Centro de gravedad descentrado: la carga se ladea al despegar; hay que bajarla y enganchar en otro punto
+   (varios puntos de enganche marcados) hasta que suba nivelada. La caja de la fase 9 ya se inclina: medir.
+2. Peso desconocido: el albarán dice un peso y la carga pesa otro; el jugador lo descubre con la tensión del
+   cable y debe abortar si pasa de la capacidad. Penaliza seguir izando con el LMI en rojo.
+3. Depósito con líquido: el líquido se mueve al girar y frenar (modelo de péndulo interno que desplaza el CDG,
+   no fluidos reales) y empuja la carga.
+4. Carga flexible: tubería larga de varios cuerpos unidos con juntas que se dobla si se levanta de un punto;
+   con balancín (fase 26) no se dobla.
+5. Barcaza con olas: cargar o descargar sobre una base que sube, baja y cabecea.
+6. Cambiar los ramales del gancho: más ramales = más capacidad y gancho más lento. La referencia solo los
+   dibuja (hookFalls): pregúntame los datos antes de cambiar la capacidad.
+
+Antes de programar, dime el plan.
+```
+
+Para revisar: la carga descentrada se nota al despegar y se corrige reenganchando; el peso desconocido se descubre
+con la tensión; el depósito empuja al girar rápido.
+
+---
+
+## Fase 35: Trabajos especiales
+
+```
+Lee CLAUDE.md. Fase 35: misiones de rescate y de montaje de grúas torre.
+
+1. Rescate: levantar un camión volcado sin dañarlo más (dos puntos de enganche, girarlo con cuidado) y sacar
+   un coche de un río (el agua frena y añade peso al salir). Misiones con prisa y tiempo corto.
+2. Montar una grúa torre fija por tramos con una grúa móvil: base, tramos de torre, cabeza giratoria,
+   contrapluma, contrapeso y pluma, cada pieza en su sitio con tolerancias.
+3. Trepado de la grúa torre: subir la grúa tramo a tramo con su jaula de trepado (secuencia de pasos).
+
+La grúa torre fija no está en la referencia: pregúntame medidas y pesos. Antes de programar, dime el plan.
+```
+
+Para revisar: la grúa torre montada queda en pie y se puede usar después; el rescate se siente delicado.
+
+---
+
+## Fase 36: Máquinas nuevas
+
+```
+Lee CLAUDE.md. Fase 36: otras máquinas de elevación.
+
+Candidatas: grúa articulada sobre camión, manipulador telescópico, grúa pórtico de puerto (contenedores) y
+puente grúa en una nave. Ninguna está en la referencia: antes de modelar, dime qué datos necesitas de cada una
+(dimensiones, masas, tabla de capacidad o fórmula) y espera a que te los pase. Una máquina por parte, con su
+modelo, su estabilidad (pruebas como las de stability.test.ts), sus mandos y un nivel.
+```
+
+Para revisar: cada máquina nueva tiene pruebas de estabilidad con mis datos y un nivel jugable.
+
+---
+
+## Fase 37: Ambiente, radio y modo foto
+
+```
+Lee CLAUDE.md. Fase 37: ambiente.
+
+1. Nieve y hielo: suelo resbaladizo al conducir (menos agarre), nieve que cae (partículas de la fase 16),
+   cargas con hielo que pesan algo más.
+2. Radio o música en la cabina: música generada o sin derechos, con volumen y opción de apagarla.
+3. Modo foto: pausa, cámara libre, ocultar el HUD, profundidad de campo opcional y guardar una captura (PNG)
+   para compartir.
+
+Antes de programar, dime el plan.
+```
+
+Para revisar: con hielo se nota al frenar; el modo foto saca capturas limpias.
+
+---
+
+## Fase 38: Modo historia
+
+```
+Lee CLAUDE.md. Fase 38: hilo narrativo para la carrera (fase 25).
+
+Una pequeña empresa de grúas: el capataz, el jefe de obra, clientes que llaman. Encargos que crecen de una
+City 25 a la LR 3000, con mensajes cortos entre misiones y algún giro (una avería en mal momento, un cliente
+con prisa, el gran izaje final). Escríbeme primero el guion (personajes y 10–15 capítulos) para aprobarlo.
+```
+
+Para revisar: el guion aprobado se juega de principio a fin; se puede saltar el texto.
+
+---
+
+## Fase 39: Comunidad y distribución
+
+```
+Lee CLAUDE.md. Fase 39: llegar a más gente.
+
+1. itch.io: explícame paso a paso cómo crear la cuenta y la página del juego, y prepara un .zip de dist/ que
+   funcione allí (rutas relativas, ya están), con capturas y descripción. La acción de GitHub puede generar
+   ese .zip en cada versión.
+2. Galería de niveles de la comunidad sin servidor: una página del juego con los mejores enlaces del editor
+   (fase 28) que yo elijo, guardados en un archivo del repo.
+3. Versión de escritorio con Tauri (más ligera que Electron): instalador para Windows. Explícame qué haría
+   falta para Steam (costes, requisitos) antes de nada.
+
+Antes de programar, dime el plan.
+```
+
+Para revisar: el juego funciona en itch.io igual que en GitHub Pages; el instalador abre el juego sin internet.
+
+---
+
+## Fase 40 (opcional): Realidad virtual
+
+```
+Lee CLAUDE.md. Fase 40: vista de cabina en realidad virtual con WebXR (three.js lo soporta).
+Mide primero si la laptop llega a los fps que pide unas gafas VR; si no, dímelo antes de seguir. Mandos de
+las gafas para las palancas, HUD en la cabina (fase 21).
+```
+
+Para revisar: con unas gafas, la cabina se ve estable y sin mareo.
+
+---
+
+## Fase 41 (opcional): Tándem en red
+
+```
+Lee CLAUDE.md. Fase 41: dos jugadores en dos casas, cada uno con su grúa del tándem (después del cooperativo
+local de la fase 30).
+
+WebRTC entre los dos navegadores; con la física determinista (fase 15) se envían solo las entradas. Hace falta
+un servidor mínimo para presentar a los dos jugadores: explícame las opciones gratuitas y qué datos pasan
+antes de crear nada.
+```
+
+Para revisar: dos personas en redes distintas terminan el nivel 14 sin que las grúas se desincronicen.
 
 ---
 
