@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { SHADOW_LAYER } from './models/builder';
 
 export interface SceneCtx {
   renderer: THREE.WebGLRenderer;
@@ -52,6 +53,8 @@ export function createScene(canvas: HTMLCanvasElement): SceneCtx {
   s.left = -45; s.right = 45; s.top = 45; s.bottom = -45; s.near = 1; s.far = 140;
   sun.shadow.bias = -0.0005;
   sun.shadow.normalBias = 0.03;
+  // las mallas solo de sombra (Parts.build) van en la capa 1: el pase de sombras la ve, la cámara no
+  s.layers.enable(SHADOW_LAYER);
   scene.add(sun, sun.target);
 
   // Suelo con cuadrícula de 5 m (referencia de escala).
