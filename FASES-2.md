@@ -16,7 +16,7 @@ Regla para todo el bloque A: **medir antes y después** (fps, peor cuadro, draw 
 tamaño del bundle) y anotarlo en CLAUDE.md. Ninguna fase del motor puede cambiar el resultado de la estabilidad: las
 pruebas contra la referencia siguen pasando.
 
-Orden recomendado: **13 → 14 → 15 → 16 → 17 → 18**, y luego el bloque B en el orden que quieras.
+Orden recomendado: **13 → 18** (bloque A, el motor) y después **19 → 25** (bloque B, el juego); 26–32 cuando quieras.
 
 ---
 
@@ -84,7 +84,7 @@ Lee CLAUDE.md. Fase 15: mejoras de la simulación.
 1. Interpolación del render: la física va a 60 Hz fijos; en pantallas de 120/144 Hz o con cuadros irregulares
    la grúa y el gancho deben dibujarse interpolados entre dos pasos, sin tirones.
 2. Determinismo: con las mismas entradas, la misma partida paso a paso. Grabar las entradas por paso y una
-   prueba que reproduzca 60 s de un nivel y compare posiciones. Base de las repeticiones y del editor (fase 25).
+   prueba que reproduzca 60 s de un nivel y compare posiciones. Base de las repeticiones, del reto diario y del editor (fases 21, 22 y 28).
 3. Instantáneas de Rapier (world.takeSnapshot / restoreSnapshot) junto con el estado de la grúa: reiniciar al
    instante sin reconstruir, guardar a mitad de un nivel y "rebobinar 10 s" (solo en la prueba libre y la
    escuela, no cuenta para los récords).
@@ -187,7 +187,10 @@ Para revisar: los 14 niveles siguen igual; en una rampa de prueba la grúa se ni
 
 ---
 
-# Bloque B: contenido (usa el motor nuevo)
+# Bloque B: el juego (usa el motor nuevo)
+
+Orden recomendado: 19 → 20 → 21 → 22 → 23 → 24 → 25 (la carrera junta casi todo lo anterior), luego el resto.
+Las marcadas "opcional" se pueden saltar.
 
 ## Fase 19: Escuela de operadores (tutorial)
 
@@ -225,14 +228,118 @@ Para revisar: la tabla coincide con el LMI en cada punto; el fantasma en verde s
 
 ---
 
-## Fase 21: Modo carrera
+## Fase 21: La vista y el tacto del operador
 
 ```
-Lee CLAUDE.md. Fase 21: modo carrera.
+Lee CLAUDE.md. Fase 21: que manejar se sienta como estar en la grúa.
 
-1. Empiezas con una City 25 y poco dinero; contratos (los 14 niveles y obras generadas, con su decorado);
-   cobras según estrellas y tiempo; multas por golpes, cargas rotas o líneas eléctricas.
-2. Comprar o alquilar grúas más grandes, con coste por día.
+1. Cámara del gancho: cámara en la cabeza de la pluma (o en el motón) mirando hacia abajo, como las de las
+   grúas grandes. Como modo de V y como recuadro pequeño que se puede activar (ojo con el coste: es otra
+   vista; sin sombras y a baja resolución). Mide el coste.
+2. Pantalla del LMI en la cabina: en la vista de cabina, una pantalla dentro de la cabina (textura de canvas)
+   con radio, carga, capacidad, ángulo y largo de pluma y la barra del LMI; el HUD se oculta en esa vista.
+3. Vibración del mando (vibrationActuator de la API Gamepad): suave desde el 90 % de LMI, fuerte en golpes y
+   aterrizajes duros, pulso con la alarma de la línea eléctrica. Opción para apagarla.
+4. Ayudas activables (para principiantes): línea vertical del gancho al suelo, sombra/marca de la carga en el
+   suelo, círculo del radio actual y del radio máximo para la carga colgada.
+5. Modo experto: sin porcentaje del LMI ni capacidad en el HUD, solo la alarma; sin ayudas.
+6. Repetición del vuelco o del fallo: al fallar, los últimos ~8 s otra vez a cámara lenta desde una cámara
+   que muestra la grúa entera (usa la grabación de la fase 15).
+7. Accesibilidad: el estado del LMI con forma y texto además del color (daltonismo), tamaño del HUD ajustable.
+
+Antes de programar, dime el plan.
+```
+
+Para revisar: con el mando se nota la carga sin mirar el HUD; la cámara del gancho no baja de 60 fps en la laptop; la
+repetición del vuelco se entiende.
+
+---
+
+## Fase 22: Puntuación y rejugabilidad
+
+```
+Lee CLAUDE.md. Fase 22: razones para volver a jugar.
+
+1. Suavidad: medir el balanceo de la carga, los tirones (picos de tensión sobre la estática) y los arranques y
+   paradas bruscos. Proponme si es una 4.ª estrella o una medalla aparte (no quiero romper los récords
+   guardados de la 1.0) y los umbrales con datos de partidas reales.
+2. Estadísticas guardadas: toneladas izadas, horas de grúa por modelo, izajes, golpes, vuelcos, distancia
+   conducida.
+3. Logros (unos 25): "100 izajes sin golpe", "nivel 14 sin pasar del 80 % de LMI", "vidrio a menos de 0,2 m/s"…
+4. Reto diario: obra generada con la fecha como semilla (la misma para todos ese día, sin servidor), con su
+   récord y un enlace para compartir el tiempo.
+5. Licencias de operador por familia (ruedas, orugas, torre, tándem): un examen corto con la grúa de esa
+   familia; sin licencia, sus niveles quedan bloqueados (opción para desbloquear todo y no frustrar a nadie).
+
+Antes de programar, dime el plan.
+```
+
+Para revisar: la suavidad premia lo que un operador llamaría "manejar bien"; los récords de la 1.0 siguen ahí; el reto
+diario es igual en dos navegadores el mismo día.
+
+---
+
+## Fase 23: Señalero y seguridad en la obra
+
+```
+Lee CLAUDE.md. Fase 23: trabajar con gente en la obra.
+
+1. Señalero (rigger): personaje en el suelo que da órdenes con señales de mano (animación simple) y mensajes de
+   radio en texto ("sube despacio", "gira a la izquierda", "para"), calculados desde la posición del gancho y
+   el destino. Puede ir con voz sintetizada (speechSynthesis) si suena bien.
+2. Niveles "a ciegas": la carga o el destino no se ven desde la cabina (detrás de un edificio, en una azotea);
+   solo el señalero y la cámara del gancho. Dos o tres niveles nuevos.
+3. Lista de chequeo antes del izaje: nivelación, zona despejada, viento bajo el límite, peso confirmado,
+   eslinga correcta. Saltarse un punto resta puntos (o falla en el modo experto).
+4. Zona de exclusión: trabajadores en el suelo que se mueven; pasar la carga por encima de una persona
+   penaliza (como la línea eléctrica: aviso, alarma y fallo si se insiste).
+5. Cesta de personal: levantar operarios con límites más estrictos (velocidad, balanceo, LMI ≤ 50 %, sin
+   viento fuerte). Un nivel nuevo.
+
+Te paso la lista de señales que quiero usar antes de animarlas. Antes de programar, dime el plan.
+```
+
+Para revisar: un nivel a ciegas se puede terminar solo con el señalero; los trabajadores no se meten en sitios
+imposibles; la cesta se siente más delicada que una caja.
+
+---
+
+## Fase 24: Misiones completas
+
+```
+Lee CLAUDE.md. Fase 24: trabajos con principio y fin, como en la vida real.
+
+1. Llegar a la obra: conducir la grúa plegada por una calle o carretera (calles con curvas cerradas, puentes
+   con límite de peso por eje, cables bajos, tráfico parado) hasta la obra, montarla y hacer el trabajo.
+   Con el decorado y el terreno de las fases 17–18. Pregúntame los límites de peso antes de inventarlos.
+2. Camiones con horario: las cargas llegan en camiones que entran por el portón; hay que descargarlos antes de
+   que llegue el siguiente (cola de camiones, tiempo de espera, multa por retraso).
+3. Montaje con grúa auxiliar: una City 25 o AT 60 descarga y coloca el lastre (o tramos de pluma) que llegan
+   en camiones, con dos grúas en el mismo mundo como en el tándem. Pregúntame si el montaje de la LR 3000
+   necesita datos que no están en la referencia.
+4. Clima que cambia durante el nivel: ráfagas que se anuncian en el anemómetro, tormenta con rayos que obliga a
+   bajar la pluma y esperar, niebla que reduce la visibilidad.
+5. Averías durante el turno: anemómetro que falla (sin dato de viento), fuga hidráulica (la pluma baja sola
+   despacio), cable dañado (capacidad reducida). El jugador tiene que reaccionar (bajar la carga, avisar).
+   Solo en niveles nuevos o en la carrera, nunca en los 14 de la referencia.
+
+Antes de programar, dime el plan; puede ir en dos partes (1–3 y 4–5).
+```
+
+Para revisar: una misión "de la base a la obra" completa se juega de principio a fin; las averías se notan y se
+pueden resolver.
+
+---
+
+## Fase 25: Modo carrera
+
+```
+Lee CLAUDE.md. Fase 25: modo carrera, que junta lo de las fases 19–24.
+
+1. Empiezas con una City 25, poco dinero y la licencia de ruedas; contratos (los 14 niveles, misiones
+   completas, obras generadas); cobras según estrellas, suavidad y tiempo; multas por golpes, cargas rotas,
+   líneas eléctricas, zona de exclusión y retrasos de camiones.
+2. Comprar o alquilar grúas, con coste por día; mantenimiento (si no se hace, más averías).
 3. Obras generadas siempre resolubles (comprobar con ratedCap que alguna grúa disponible puede hacerla).
 4. Guardado en localStorage, con exportar/importar a un archivo.
 
@@ -243,10 +350,10 @@ Para revisar: 30 minutos de partida con progreso claro; nunca sale un contrato i
 
 ---
 
-## Fase 22: Aparejos realistas
+## Fase 26: Aparejos realistas
 
 ```
-Lee CLAUDE.md. Fase 22: aparejos y movimiento de la carga más realistas.
+Lee CLAUDE.md. Fase 26: aparejos y movimiento de la carga más realistas.
 
 1. Choque de la carga con la pluma y el plumín (pendiente desde la fase 9).
 2. Eslinga de 4 ramales real en física y balancín para cargas largas.
@@ -261,15 +368,15 @@ Para revisar: las pruebas de física siguen pasando; los niveles 4 y 14 se puede
 
 ---
 
-## Fase 23: Escenarios nuevos
+## Fase 27: Escenarios nuevos
 
 ```
-Lee CLAUDE.md. Fase 23: escenarios nuevos con trabajos típicos de grúa (usan el decorado de la fase 17 y el
+Lee CLAUDE.md. Fase 27: escenarios nuevos con trabajos típicos de grúa (usan el decorado de la fase 17 y el
 terreno de la fase 18).
 
 1. Parque eólico en una loma: montar un aerogenerador (tramos de torre, góndola, buje, palas) esperando calmas.
 2. Puerto: descargar un barco desde el muelle.
-3. Ciudad: calle con edificios, montar un equipo en una azotea.
+3. Ciudad: calle con edificios, montar un equipo en una azotea (con señalero).
 4. Atardecer y noche con luces de trabajo (una sola luz con sombras).
 
 Pregúntame medidas y pesos de las piezas antes de inventarlos. Pasa ?bench=1 en cada escenario.
@@ -279,26 +386,15 @@ Para revisar: 60 fps en la laptop en cada escenario; el aerogenerador se monta e
 
 ---
 
-## Fase 24 (opcional): Inglés
+## Fase 28: Editor de niveles, repeticiones y compartir
 
 ```
-Lee CLAUDE.md. Fase 24: traducir el juego al inglés con el archivo de idioma de la fase 14.
-Selector de idioma en el menú (guardado), por defecto el del navegador. Los nombres de las grúas no cambian.
-```
-
-Para revisar: el juego entero en inglés sin textos sueltos en español; el español sigue igual.
-
----
-
-## Fase 25: Editor de niveles, repeticiones y compartir
-
-```
-Lee CLAUDE.md. Fase 25: editor y retos para compartir (usa el determinismo de la fase 15).
+Lee CLAUDE.md. Fase 28: editor y retos para compartir (usa el determinismo de la fase 15).
 
 1. Editor en el navegador: obra, grúas permitidas, cajas, zonas, obstáculos, líneas, terreno, decorado,
-   viento, tiempo.
+   trabajadores, camiones, viento, clima, tiempo.
 2. El nivel va dentro del enlace (codificado en la URL, sin servidor).
-3. Repeticiones: reproducir una partida a partir de sus entradas; "compartir mi récord" con un enlace.
+3. Repeticiones completas: reproducir una partida a partir de sus entradas; "compartir mi récord" con un enlace.
 
 Antes de programar, dime el plan.
 ```
@@ -307,10 +403,53 @@ Para revisar: un nivel del editor se abre igual en otro navegador; la repetició
 
 ---
 
-## Fase 26 (opcional): Celular y tableta
+## Fase 29 (opcional): Inglés
 
 ```
-Lee CLAUDE.md. Fase 26: jugar en pantalla táctil (en la fase 11 decidimos no hacerlo; ahora quiero probarlo).
+Lee CLAUDE.md. Fase 29: traducir el juego al inglés con el archivo de idioma de la fase 14.
+Selector de idioma en el menú (guardado), por defecto el del navegador. Los nombres de las grúas no cambian.
+```
+
+Para revisar: el juego entero en inglés sin textos sueltos en español; el español sigue igual.
+
+---
+
+## Fase 30 (opcional): Tándem cooperativo local
+
+```
+Lee CLAUDE.md. Fase 30: dos jugadores en el mismo ordenador, cada uno con su grúa.
+
+1. Jugador 1 con teclado (o mando 1) y jugador 2 con mando 2; cada uno maneja una grúa del tándem a la vez
+   (hoy Tab cambia de grúa).
+2. Pantalla dividida (dos cámaras) o una cámara compartida que encuadra las dos; mide el coste: dibujar dos
+   vistas casi duplica el render. En calidad baja/media, sombras compartidas o sin sombras en la segunda.
+3. El nivel 14 y la prueba libre en tándem en modo cooperativo, con el señalero dando órdenes a los dos.
+
+Antes de programar, dime el plan y el coste medido en la laptop.
+```
+
+Para revisar: dos personas terminan el nivel 14 juntas; con pantalla dividida sigue a 60 fps (o se dice cuánto da).
+
+---
+
+## Fase 31 (opcional): Récords en línea
+
+```
+Lee CLAUDE.md. Fase 31: tabla de récords mundial.
+
+Necesita un servidor (opciones gratuitas: Supabase, Firebase, Cloudflare Workers). Antes de nada,
+explícame las opciones, qué datos se guardarían (solo un apodo, sin correo), cómo evitar trampas
+(la repetición de la fase 28 permite verificar un récord) y qué cuenta tengo que crear yo.
+```
+
+Para revisar: un récord enviado desde un navegador aparece en otro; no se guarda nada personal.
+
+---
+
+## Fase 32 (opcional): Celular y tableta
+
+```
+Lee CLAUDE.md. Fase 32: jugar en pantalla táctil (en la fase 11 decidimos no hacerlo; ahora quiero probarlo).
 
 1. Mandos táctiles que no tapen la carga.
 2. Calidad baja por defecto en móviles (con la calidad adaptativa de la fase 15).
