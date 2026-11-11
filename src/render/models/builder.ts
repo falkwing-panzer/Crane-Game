@@ -21,6 +21,15 @@ function clean(g: THREE.BufferGeometry) {
   return n;
 }
 
+/** Capa de las mallas solo de sombra: la cámara principal ve la 0; la de sombras, la 0 y esta. */
+export const SHADOW_LAYER = 1;
+/** Material de las mallas de sombra (solo se usa su lado: el pase de sombras pone el suyo). */
+const SHADOW_MAT = new THREE.MeshBasicMaterial();
+/** Material de los colores lisos fusionados: el color va en cada vértice (el de la paleta, en espacio lineal). */
+const VC_MAT = new THREE.MeshLambertMaterial({ vertexColors: true });
+/** Claves que conservan su malla y su material (ver build). */
+const OWN_MESH = new Set<MatKey>(['cabin', 'glass', 'lamp', 'beacon']);
+
 export class Parts {
   private geos = new Map<MatKey, THREE.BufferGeometry[]>();
 
@@ -93,18 +102,61 @@ export class Parts {
     this.geos.get(k)![n].rotateY(Math.PI / 2);
   }
 
-  /** Fusiona por material y cuelga las mallas de `parent`. */
+  /**
+   * Fusiona y cuelga las mallas de `parent` (fase 11, para bajar draw calls):
+   * - los colores lisos van en **una** malla con colores por vértice (material compartido `VC_MAT`);
+   * - cabina, cristal y luces (emisivas) siguen en mallas propias: la RT y las orugas ocultan su cabina buscando
+   *   esos materiales, y las luces tienen brillo propio;
+   * - con sombras, las mallas de color no proyectan: **una** malla solo de sombra con todo el grupo (menos el
+   *   cristal) en la capa `SHADOW_LAYER`, que solo ve la cámara de sombras.
+   * La malla de sombra va al final de la lista devuelta (se oculta junto con las demás).
+   */
   build(parent: THREE.Object3D, pal: Palette, shadow = true): THREE.Mesh[] {
     const out: THREE.Mesh[] = [];
-    for (const [k, list] of this.geos) {
-      const g = list.length === 1 ? list[0] : mergeGeometries(list, false);
-      if (list.length > 1) for (const x of list) x.dispose();
+    const casters: THREE.BufferGeometry[] = [];
+    const flat: THREE.BufferGeometry[] = [];
+    const add = (g: THREE.BufferGeometry, mat: THREE.Material, cast: boolean) => {
       g.computeBoundingSphere();
-      const m = new THREE.Mesh(g, pal[k]);
-      m.castShadow = shadow && k !== 'glass';
+      const m = new THREE.Mesh(g, mat);
+      m.castShadow = false;
       m.receiveShadow = shadow;
+      if (shadow && cast) casters.push(g);
       parent.add(m);
       out.push(m);
+    };
+    for (const [k, list] of this.geos) {
+      if (OWN_MESH.has(k)) {
+        const g = list.length === 1 ? list[0] : mergeGeometries(list, false);
+        if (list.length > 1) for (const x of list) x.dispose();
+        add(g, pal[k], k !== 'glass');
+        continue;
+      }
+      const c = pal[k].color;
+      for (const g of list) {
+        const n = g.attributes.position.count, col = new Float32Array(n * 3);
+        for (let i = 0; i < n; i++) { col[3 * i] = c.r; col[3 * i + 1] = c.g; col[3 * i + 2] = c.b; }
+        g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+        flat.push(g);
+      }
+    }
+    if (flat.length) {
+      const g = flat.length === 1 ? flat[0] : mergeGeometries(flat, false);
+      if (flat.length > 1) for (const x of flat) x.dispose();
+      add(g, VC_MAT, true);
+    }
+    if (casters.length) {
+      const sg = mergeGeometries(casters.map((g) => {
+        const s = new THREE.BufferGeometry();
+        s.setAttribute('position', g.attributes.position);
+        return s;
+      }), false);
+      sg.computeBoundingSphere();
+      const sm = new THREE.Mesh(sg, SHADOW_MAT);
+      sm.castShadow = true;
+      sm.layers.set(SHADOW_LAYER);
+      sm.name = 'sombra';
+      parent.add(sm);
+      out.push(sm);
     }
     this.geos.clear();
     return out;
