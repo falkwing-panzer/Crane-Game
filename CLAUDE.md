@@ -571,10 +571,7 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - Vidrio (nivel 6): bajar con Shift a fondo da ~0,47–0,62 m/s, casi en el límite de 0,5 (en la referencia, 0,3 × 2,1 = 0,63):
   hay que soltar F antes de tocar. Es la dificultad prevista por la referencia; si molesta, preguntar antes de cambiarla.
 - Jesús probó algunos niveles a mano (no todos de principio a fin).
-- **Temblor de la carga al mover la grúa** (video de Jesús, nivel 1 con la AT 60): la carga tiembla muy rápido y la tensión
-  y el LMI saltan (3–7 t con 4,9 t; LMI 34–75 %), sobre todo con la carga cerca del suelo. Ya pasaba antes de la fase 9.
-  Se probó un tope de izado (`clampHaul`) y la aceleración del cable de la referencia (3 m/s²): en las pruebas mejoraba,
-  en la laptop no; se revirtió. Sin resolver: falta verlo en tiempo real (panel del navegador visible) para encontrar la causa.
+
 - Prueba libre: límite ±150 m con el terreno blando de prueba.
 - `CLEARANCE` y la suspensión siguen siendo los de la AT 60; el colisionador de la superestructura (`supBox`) no cubre la
   cabina del operador. Revisar si molesta con otras grúas.
