@@ -1,5 +1,6 @@
 import { CRANES, type CraneId } from '../crane/cranes';
-import { LEVELS, type Level } from '../levels/levels';
+import type { Level } from '../levels/levels';
+import { ALL_LEVELS as LEVELS } from '../levels/tandemSetup';
 
 // Pantallas de los niveles (HTML simple, como el HUD): menú de niveles, ficha de briefing con la elección de
 // grúa (showBrief de la referencia), cartel de nivel completado o fallido (checkWin, fail), reloj y récords
@@ -43,6 +44,18 @@ export const TEXT_3D: Record<string, string> = {
 };
 const text3d = (s: string) => TEXT_3D[s] ?? s;
 
+/** Tándem (fase 10): las dos grúas ya están colocadas y montadas; no se eligen */
+function tandemCranes(L: Level) {
+  const t = L.tandem!;
+  const card = (id: CraneId, role: string, what: string) => {
+    const c = CRANES[id];
+    return `<div class="copt" aria-pressed="true"><small>${role}</small><b>${c.name}</b><small>${c.structMax} t máx</small><em>${what}</em></div>`;
+  };
+  return `<div class="eyebrow">Las grúas (ya colocadas y montadas · Tab cambia de una a otra)</div><div class="cranes">
+    ${card(t.main.id, 'Principal', 'Engancha la cabeza de la columna, la pone de pie y la lleva a la cimentación.')}
+    ${card(t.tail.id, 'De cola', 'Sostiene el pie hasta que la columna queda vertical; después se suelta.')}</div>`;
+}
+
 const starText = (n: number) => `${'★'.repeat(n)}<span class="off">${'★'.repeat(3 - n)}</span>`;
 
 /** URL de un nivel (1…13) con una grúa, o de la prueba libre (nivel 0) */
@@ -80,7 +93,7 @@ export class LevelUi {
 
   close() { this.overlay.hidden = true; }
 
-  /** Menú: los 13 niveles con su tipo y sus estrellas, más la prueba libre */
+  /** Menú: los 13 niveles de la referencia y el de tándem (fase 10) con su tipo y sus estrellas, más las pruebas libres */
   menu() {
     const rec = loadRecords();
     this.show(`<div class="eyebrow">Simulador de grúas</div><h2>Elige un trabajo</h2>
@@ -89,7 +102,8 @@ export class LevelUi {
         return `<a class="lvl" href="${levelUrl(i + 1)}"><small>${i + 1} · ${L.type}</small><b>${L.name}</b>
           <span class="stars">${starText(r?.stars ?? 0)}</span><small>${r ? `récord ${fmt(r.time)}` : `par ${fmt(L.par)}`}</small></a>`;
       }).join('')}
-      <a class="lvl free" href="${levelUrl(0)}"><small>Sin objetivo</small><b>Prueba libre</b><small>todas las grúas, obstáculos de prueba</small></a></div>`);
+      <a class="lvl free" href="${levelUrl(0)}"><small>Sin objetivo</small><b>Prueba libre</b><small>todas las grúas, obstáculos de prueba</small></a>
+      <a class="lvl free" href="${location.pathname}?tandem=1"><small>Sin objetivo</small><b>Prueba libre en tándem</b><small>LR 3000 y AT 500-8 con una columna</small></a></div>`);
   }
 
   /**
@@ -101,7 +115,7 @@ export class LevelUi {
     const list = Object.values(CRANES).sort((a, b) => a.structMax - b.structMax);
     this.show(`<div class="eyebrow"><span class="tag">${L.type}</span>Nivel ${i + 1} de ${LEVELS.length} · viento ${L.wind[0]} m/s · par ${fmt(L.par)}${L.time ? ` · límite ${fmt(L.time)}` : ''}${r ? ` · récord ${fmt(r.time)} ${starText(r.stars)}` : ''}</div>
       <h2>${L.name}</h2><p>${text3d(L.brief)}</p><ul>${L.tips.map((t) => `<li>${text3d(t)}</li>`).join('')}</ul>
-      <div class="eyebrow">Elige la grúa</div>
+      ${L.tandem ? tandemCranes(L) : `<div class="eyebrow">Elige la grúa</div>
       <div class="cranes">${list.map((c) => {
         const ok = L.cranes.includes(c.id as CraneId);
         const boom = c.boom.min === c.boom.max ? `${c.boom.min} m fija` : `${c.boom.min}–${c.boom.max} m`;
@@ -109,7 +123,7 @@ export class LevelUi {
         return `<button class="copt" data-c="${c.id}" aria-pressed="${c.id === current}" ${ok ? '' : 'disabled'}>
           <small>${c.size}${c.id === L.rec ? ' · recomendada' : ''}</small><b>${c.name}</b>
           <small>${c.structMax} t máx · pluma ${boom}</small><em class="${ok ? '' : 'why'}">${ok ? c.note : why}</em></button>`;
-      }).join('')}</div>
+      }).join('')}</div>`}
       <div class="row"><a class="btn" href="${location.pathname}">Niveles</a><button class="btn primary" id="l-start">Empezar turno</button></div>`);
     this.card.querySelectorAll<HTMLButtonElement>('.copt').forEach((b) => {
       b.onclick = () => { if (b.dataset.c !== current) onPick(b.dataset.c as CraneId); };

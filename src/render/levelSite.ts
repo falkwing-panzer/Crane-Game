@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { KIND_COL, WD, WW, type Level, type LevelBox } from '../levels/levels';
-import { levelBoxes, levelSofts } from '../levels/setup';
+import { KIND_COL, type Level, type LevelBox } from '../levels/levels';
+import { levelBoxes, levelSize, levelSofts } from '../levels/setup';
 
 // Escenario de un nivel: la obra (84 × 56 m con el color de suelo del nivel), las cajas de la referencia
 // (edificios, muros, pilas, camiones, contenedores…) en un InstancedMesh con color por instancia, los depósitos
@@ -11,7 +11,8 @@ const SOFT_COLOR = { mud: '#54432f', water: '#28465e' };
 const ZONE_COLOR = '#4cc38a';
 
 export function buildLevelSite(scene: THREE.Scene, L: Level) {
-  // suelo de la obra, encima del terreno general, con un borde
+  // suelo de la obra, encima del terreno general, con un borde (fase 10: el nivel de tándem es más grande)
+  const [WW, WD] = levelSize(L);
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(WW, WD), new THREE.MeshLambertMaterial({
     color: lighten(L.ground), polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
   }));

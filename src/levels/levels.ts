@@ -15,7 +15,15 @@ export type BoxKind = 'building' | 'wall' | 'pier' | 'pad' | 'bed' | 'cab' | 'po
 export const KIND_COL: Record<BoxKind, string> = { building: '#69717a', wall: '#8e959c', pier: '#8a8378', pad: '#9a958c', bed: '#2b2f36', cab: '#c4473a', pole: '#5b4632', container: '#3d6f8f', rack: '#7a6a55', shelter: '#7d8a80', tank: '#8a8f96' };
 
 export interface LevelBox { x: number; z: number; w: number; d: number; h: number; kind: BoxKind; color?: string }
-export interface LevelCrate { x: number; z: number; w: number; d: number; h: number; m: number; label: string; color: string; kind: string; fragile?: number }
+export interface LevelCrate {
+  x: number; z: number; w: number; d: number; h: number; m: number; label: string; color: string; kind: string; fragile?: number;
+  /** Tándem (fase 10, no está en la referencia): orejetas en el marco de la carga (0 = cabeza, 1 = pie) */
+  lugs?: { x: number; y: number; z: number }[];
+  /** Se coloca de pie sobre su eje x (la columna del tándem va tumbada a lo largo de x) */
+  stand?: 'x';
+}
+/** Una grúa del tándem: rumbo, giro y ángulo de pluma; se coloca con la cabeza sobre su orejeta */
+export interface TandemCrane { id: CraneId; h: number; slew: number; ang?: number; Lb?: number }
 export interface LevelZone { x: number; z: number; w: number; d: number; y: number; label: string; stack?: number }
 export interface PowerLine { a: [number, number]; b: [number, number]; y: number; kv: string; clear: number; poles: number[] }
 export interface Level {
@@ -37,6 +45,10 @@ export interface Level {
   boxes: LevelBox[]; crates: LevelCrate[]; zones: LevelZone[];
   lines?: PowerLine[];
   soft?: { x: number; z: number; w: number; d: number; kind: SoftKind }[];
+  /** Medidas de la obra (m, x y z) si no es la de la referencia (WW × WD). Fase 10. */
+  size?: [number, number];
+  /** Izaje en tándem (fase 10): grúa principal (orejeta 0) y de cola (orejeta 1) de la primera carga */
+  tandem?: { main: TandemCrane; tail: TandemCrane };
 }
 
 const B = (x: number, z: number, w: number, d: number, h: number, kind: BoxKind = 'building', extra: { color?: string } = {}): LevelBox => ({ x, z, w, d, h, kind, ...extra });

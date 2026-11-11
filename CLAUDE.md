@@ -123,8 +123,12 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - **Fase 10, parte A** (tándem en la prueba libre, `?tandem=1`): dos grúas en el mismo mundo de Rapier (LR 3000 en la
   cabeza, AT 500-8 en el pie, montadas), columna de prueba con dos orejetas, Tab cambia de grúa (la otra queda quieta y
   su física sigue), reparto de la carga medido, LMI de cada grúa con su parte, panel de la otra grúa, doble bloqueo del
-  gancho. Pruebas en `physics/tandem.test.ts` y `levels/tandemSetup.test.ts`. **Falta la parte B** (nivel de tándem y
-  fallos), a la espera de las respuestas de Jesús (ver Pendientes).
+  gancho. Pruebas en `physics/tandem.test.ts` y `levels/tandemSetup.test.ts`.
+- **Fase 10, parte B** (nivel 14 "Columna en tándem"): columna de 40 m, Ø 5 m y 400 t en un transportador; LR 3000
+  (cabeza) y AT 500-8 (pie) fijas y montadas; obra de 120 × 80 m; fallos por LMI > 100 % (0,5 s), cable con carga a
+  más de 6° de la vertical (1 s), columna ladeada > 10° y doble bloqueo; victoria con la columna de pie en la
+  cimentación. Menú y ficha (sin elección de grúa). Pruebas en `levels/tandemLevel.test.ts`. Partida completa con un
+  guion en el navegador: de pie a los 83 s, cimentación a los 5:02, tres estrellas.
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -201,7 +205,11 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   mundo; `Physics.stepCrew(units)` = `beforeStep` de cada una, un `world.step()`, `afterStep` de cada una (`step()` es lo
   mismo con una). `Load.lugs` (orejetas, marco de la carga) y `Load.dyn`; `attachedLug`, `slingShare()` (t que lleva esta
   grúa, filtrada), `release()`, `lugWorld()`, `twoBlocked()`, `TWO_BLOCK`. `physics/tandem.ts` (`slingTensions`, sin Rapier).
-  `levels/tandemSetup.ts` (`TANDEM_IDS`, `TEST_COLUMN`, `rigged`, `aimHead`, `placeTandem`). En `main.ts` cada grúa es un
+  `levels/tandemSetup.ts` (`TANDEM_IDS`, `TEST_COLUMN`, `TANDEM_FREE`, `rigged`, `aimHead`, `placeTandem(main, tail, def,
+  col)`, `TANDEM_LEVEL`, `ALL_LEVELS` = los 13 + el de tándem, `tandemColumn`, límites `SIDE_MAX`/`ROLL_MAX`/`OVER_T`/
+  `SIDE_T`/`SIDE_LOAD`, `cableAngle`, `rollOf`). `Level.size`/`tandem`, `LevelCrate.lugs`/`stand`, `TandemCrane`;
+  `levelSize`/`levelBounds` en `setup.ts`; `Load.stand = 'x'` (`placed` mide la inclinación de ese eje). Fallos del
+  tándem en `tandemRules()` de `main.ts`; `Unit.over`/`side`/`sideAng`. `LEVELS` sigue siendo solo la referencia. En `main.ts` cada grúa es un
   `Unit` (`controlUnit` antes del paso, `afterUnit` después); `act` = la que se maneja. `CameraRig.follow`, `Hud.other`/`setTitle`,
   `Input.onSwitch` (Tab), `Rigging(…, drawLoads)`.
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
@@ -422,8 +430,10 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   contactos; mínimos cuadrados con T ≥ 0 y eslinga floja (5 cm más corta que su largo) = 0. Sin el momento vertical
   (la carga no gira alrededor de la vertical). Cada grúa: tensión del cable = gancho + su eslinga; su "parte" = la fuerza
   de la eslinga proyectada en su cable. El LMI estático de los cortes usa esa parte medida (siempre cuenta, aunque la
-  carga se apoye). Cargas sin orejetas: como antes. **Limitación**: el contacto gancho–carga no entra en la tensión del
-  cable (por eso la orejeta de cabeza sobresale 1,5 m: apoyado contra la columna, el gancho de la LR 3000 se llevaba 20 t).
+  carga se apoye). Cargas sin orejetas: como antes. El contacto gancho–carga entra en la ecuación del gancho (parte B:
+  sin él, el gancho de cola apoyado sobre la columna inclinada sumaba cientos de t a su cable y fallaba por sobrecarga);
+  la "parte" de cada grúa = tensión del cable − gancho. La orejeta de cabeza sobresale 1,5 m para que el gancho de la
+  LR 3000 cuelgue libre.
 - **Eslinga a una orejeta**: se engancha con el fondo del gancho a menos de 1,8 m de una orejeta libre; su largo es la
   distancia en ese momento (≥ 0,5 m). Cada orejeta, una grúa; una carga sin orejetas, una sola grúa. Una grúa puede soltar
   mientras otra sostiene la carga. Amortiguadores (`dampRope`, `dampSling`) en la orejeta, con la masa efectiva en ese punto.
@@ -438,8 +448,14 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   bloqueado, mover un gancho de costado arrastraba la columna entera (Jesús: "solo se movía de forma vertical"). El
   solucionador del reparto usa entonces también el momento vertical.
 - **Prueba libre del tándem**: sin obstáculos de prueba; las dos grúas empiezan montadas (estabilizadores, lastre, Y-guy) con
-  los ganchos junto a sus orejetas; sin plumín. Columna de prueba 40 × 5 × 5 m y 400 t (**propuesta, no aprobada**: la del
-  nivel 13 pesa 1.200 t y la AT 500-8 no llevaría su mitad). Reiniciar vuelve a colocar las dos.
+  los ganchos junto a sus orejetas; sin plumín. Columna 40 × 5 × 5 m y 400 t (aprobada por Jesús: la del nivel 13 pesa
+  1.200 t y la AT 500-8 no llevaría su mitad). Reiniciar vuelve a colocar las dos.
+- **Nivel de tándem (parte B)**, datos aprobados por Jesús (columna, 6°, 10°, 120 × 80 m); lo demás es aproximación del
+  juego: columna con la cabeza al oeste y el pie junto a la LR 3000 (al ponerla de pie el radio baja de 72 a ~32 m y la
+  cimentación queda a 30 m); transportador sin cabina (la cabina chocaba con el gancho de cabeza); la AT 500-8 con 30 m
+  de pluma a 67° (con 16 m su cable medía 6,7 m y el límite de 6° obligaba a cambiar de grúa cada segundo; los
+  estabilizadores quedan a 2 m del transportador). Tiro lateral solo si esa grúa lleva > 5 t. El doble bloqueo es fallo
+  (pasa si la principal sigue subiendo la columna con la cola enganchada: hay que soltarla cuando ya no lleva carga).
 
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
@@ -496,18 +512,14 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   Y-guy y plumín montados: **144** draw calls y ~33.200 triángulos. **En la laptop de Jesús: 60 fps.**
 
 - Fase 10 parte A (`?tandem=1`, LR 3000 + AT 500-8 + columna, sombras incluidas, panel de la app): **195 draw calls**
-  (~48.000 triángulos), por encima de la meta de 150; 60 fps y render CPU ~7 ms en el panel. **Pendiente medir en la laptop.**
-  Si no da 60 fps: sombras solo de la grúa activa, o menos detalle en la lejana.
+  (~48.000 triángulos), por encima de la meta de 150; 60 fps y render CPU ~7 ms en el panel. Jesús lo probó en la laptop y
+  le fue bien (sin cifra de fps). Parte B (nivel 14, vista general): **~222 draw calls**, ~50.000 triángulos, 60 fps en el
+  panel. Si en la laptop no da 60 fps: sombras solo de la grúa activa, o menos detalle en la lejana.
 
 ### Pendientes
-- **Fase 10, parte B**: preguntas a Jesús sin responder: (1) la columna (propuesta: 40 m, Ø 5 m, 400 t; la de cola lleva
-  ~210 t al empezar); (2) el límite de inclinación (propuesta: cable de cualquier grúa a más de 6° de la vertical, o la
-  columna ladeada más de 10° sobre su eje largo); (3) obra de 84 × 56 m o más grande. También: el doble bloqueo como fallo
-  en el nivel; `levelRules` y la victoria usan `units[0]` (los niveles tienen una sola grúa).
-- Tándem: en una puesta en pie de prueba (la LR 3000 iza y sigue con giro y pluma; la AT 500-8 quieta) la columna llega a
-  90° en ~77 s; la cola pasa de ~210 t a ~4 t y puede soltar. Subiendo la pluma de la LR 3000 10 s, la cabeza de la columna
-  se va 10 m de costado y el pie no se mueve. En esta colocación, girar (A/D) mueve las cabezas a lo largo de la columna;
-  de costado se mueve con la pluma (W/S). Si la principal sigue izando con la cola enganchada, la cola
+- Tándem: Jesús jugó el nivel 14 a mano y le pareció bien (el guion de prueba cambia de grúa ~13 veces al ponerla de
+  pie). Si algún día resulta muy difícil, lo primero a revisar son la pluma de la cola y los tiempos de `SIDE_T`/`OVER_T`.
+  En la prueba libre, girar (A/D) mueve las cabezas a lo largo de la columna; de costado se mueve con la pluma (W/S). Si la principal sigue izando con la cola enganchada, la cola
   queda en doble bloqueo y termina volcando (correcto, pero sin aviso claro todavía).
 - SK 60: el lastre es el de la referencia (3 bloques en la contrapluma); su forma va en la fase 8B. Se puede plegar con el
   cable largo (referencia): el gancho queda en el suelo y se arrastra al conducir. La pluma y la torre no tienen colisionador
