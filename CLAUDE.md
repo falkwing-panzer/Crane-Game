@@ -120,6 +120,11 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   distancia en el HUD, alarma a 2 m, fallo por contacto), aterrizajes (apoyo, duro > 1,4 m/s, vidrio roto > 0,5 m/s),
   golpes (carga de costado, chasis > 1,2 m/s, plumín o torre) y estrellas con todo eso. Pruebas en `levels/rules.test.ts`
   (`windAt` y `segSeg` contra el HTML, márgenes a las líneas) y `levels/rules.world.test.ts` (viento, apoyos y golpes en Rapier).
+- **Fase 10, parte A** (tándem en la prueba libre, `?tandem=1`): dos grúas en el mismo mundo de Rapier (LR 3000 en la
+  cabeza, AT 500-8 en el pie, montadas), columna de prueba con dos orejetas, Tab cambia de grúa (la otra queda quieta y
+  su física sigue), reparto de la carga medido, LMI de cada grúa con su parte, panel de la otra grúa, doble bloqueo del
+  gancho. Pruebas en `physics/tandem.test.ts` y `levels/tandemSetup.test.ts`. **Falta la parte B** (nivel de tándem y
+  fallos), a la espera de las respuestas de Jesús (ver Pendientes).
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -192,8 +197,15 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   `wind` (fuerza) y `events` (`land`/`strike`). `levels/rules.ts` sin three.js ni Rapier: `windAt`, `windArea`, `windForce`,
   `segSeg`, `lineMargin`, umbrales. `boomFoot(T, S)` en `kinematics.ts`. Reglas por paso en `levelRules()` de `main.ts`.
   URL: `?nivel=1…13[&grua=id]` nivel; `?grua=id` o `?libre=1` prueba libre; sin parámetros, menú.
+- Tándem (fase 10): `Physics(…, { site })` comparte mundo, suelo, obstáculos, cargas, terreno y límites; `crew` = grúas del
+  mundo; `Physics.stepCrew(units)` = `beforeStep` de cada una, un `world.step()`, `afterStep` de cada una (`step()` es lo
+  mismo con una). `Load.lugs` (orejetas, marco de la carga) y `Load.dyn`; `attachedLug`, `slingShare()` (t que lleva esta
+  grúa, filtrada), `release()`, `lugWorld()`, `twoBlocked()`, `TWO_BLOCK`. `physics/tandem.ts` (`slingTensions`, sin Rapier).
+  `levels/tandemSetup.ts` (`TANDEM_IDS`, `TEST_COLUMN`, `rigged`, `aimHead`, `placeTandem`). En `main.ts` cada grúa es un
+  `Unit` (`controlUnit` antes del paso, `afterUnit` después); `act` = la que se maneja. `CameraRig.follow`, `Hud.other`/`setTitle`,
+  `Input.onSwitch` (Tab), `Rigging(…, drawLoads)`.
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
-  cut…) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
+  cut…, de la grúa que se maneja; `units`, todas) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
   dibuja cuadros; así se puede probar desde la consola).
 
 ### Convenciones
@@ -404,6 +416,31 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - **Plumín** solo en el nivel 11 (`jib: true`, `jibAvail` de la referencia) y en la prueba libre. **X** y **P** solo en la prueba
   libre. Récords: mejores estrellas y mejor tiempo por nivel (clave `gruas-records`).
 
+- **Tándem: reparto de la carga** (fase 10). Rapier no da la fuerza de las juntas: se resuelve la dinámica de la carga
+  (m·a, I·α + ω×Iω medidas por posiciones, como la tensión) con las direcciones de las eslingas y las fuerzas normales
+  de los contactos (`contactImpulse`); incógnitas: la tensión de cada eslinga y el rozamiento en el centro de los
+  contactos; mínimos cuadrados con T ≥ 0 y eslinga floja (5 cm más corta que su largo) = 0. Sin el momento vertical
+  (la carga no gira alrededor de la vertical). Cada grúa: tensión del cable = gancho + su eslinga; su "parte" = la fuerza
+  de la eslinga proyectada en su cable. El LMI estático de los cortes usa esa parte medida (siempre cuenta, aunque la
+  carga se apoye). Cargas sin orejetas: como antes. **Limitación**: el contacto gancho–carga no entra en la tensión del
+  cable (por eso la orejeta de cabeza sobresale 1,5 m: apoyado contra la columna, el gancho de la LR 3000 se llevaba 20 t).
+- **Eslinga a una orejeta**: se engancha con el fondo del gancho a menos de 1,8 m de una orejeta libre; su largo es la
+  distancia en ese momento (≥ 0,5 m). Cada orejeta, una grúa; una carga sin orejetas, una sola grúa. Una grúa puede soltar
+  mientras otra sostiene la carga. Amortiguadores (`dampRope`, `dampSling`) en la orejeta, con la masa efectiva en ese punto.
+- **Doble bloqueo** (fase 10, para todas las grúas): después de cada paso, el gancho no sube más alto que `TWO_BLOCK`
+  (1 m) bajo la cabeza (se baja y pierde la velocidad hacia arriba), salvo con la punta casi en el suelo (plumín recién
+  montado). Sin esto el gancho de la grúa de cola subía a través de la pluma. Se descartó una distancia mínima en el cable
+  (el gancho rodeaba la esfera, y puesta siempre el paso de física tardaba el doble). Aviso en el HUD.
+- **Gancho sin giro propio** (fase 10, todas las grúas; pedido de Jesús, "el gancho se pone wiggly" al izar): `lockRotations`.
+  Entre el cable y una carga de cientos de t, el gancho liviano giraba solo hasta 12 rad/s (error del solucionador) y la
+  tensión saltaba. Efecto secundario: el balanceo del péndulo se amortigua algo menos (prueba del plumín: 0,6 m en vez de 0,5).
+- **Cargas con orejetas giran libres sobre la vertical** (fase 10; las demás siguen bloqueadas como en la fase 9). Con el giro
+  bloqueado, mover un gancho de costado arrastraba la columna entera (Jesús: "solo se movía de forma vertical"). El
+  solucionador del reparto usa entonces también el momento vertical.
+- **Prueba libre del tándem**: sin obstáculos de prueba; las dos grúas empiezan montadas (estabilizadores, lastre, Y-guy) con
+  los ganchos junto a sus orejetas; sin plumín. Columna de prueba 40 × 5 × 5 m y 400 t (**propuesta, no aprobada**: la del
+  nivel 13 pesa 1.200 t y la AT 500-8 no llevaría su mitad). Reiniciar vuelve a colocar las dos.
+
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
   grúas grandes (fases 4–6): cabeza cinemática, izado a velocidad plena, estiramiento máximo del cable.
@@ -458,7 +495,20 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - Fase 9 parte B: la franja de las líneas suma 1 draw call (AT 220 en el nivel 3: 129). Nivel 11 con la AT 650-8 con lastre,
   Y-guy y plumín montados: **144** draw calls y ~33.200 triángulos. **En la laptop de Jesús: 60 fps.**
 
+- Fase 10 parte A (`?tandem=1`, LR 3000 + AT 500-8 + columna, sombras incluidas, panel de la app): **195 draw calls**
+  (~48.000 triángulos), por encima de la meta de 150; 60 fps y render CPU ~7 ms en el panel. **Pendiente medir en la laptop.**
+  Si no da 60 fps: sombras solo de la grúa activa, o menos detalle en la lejana.
+
 ### Pendientes
+- **Fase 10, parte B**: preguntas a Jesús sin responder: (1) la columna (propuesta: 40 m, Ø 5 m, 400 t; la de cola lleva
+  ~210 t al empezar); (2) el límite de inclinación (propuesta: cable de cualquier grúa a más de 6° de la vertical, o la
+  columna ladeada más de 10° sobre su eje largo); (3) obra de 84 × 56 m o más grande. También: el doble bloqueo como fallo
+  en el nivel; `levelRules` y la victoria usan `units[0]` (los niveles tienen una sola grúa).
+- Tándem: en una puesta en pie de prueba (la LR 3000 iza y sigue con giro y pluma; la AT 500-8 quieta) la columna llega a
+  90° en ~77 s; la cola pasa de ~210 t a ~4 t y puede soltar. Subiendo la pluma de la LR 3000 10 s, la cabeza de la columna
+  se va 10 m de costado y el pie no se mueve. En esta colocación, girar (A/D) mueve las cabezas a lo largo de la columna;
+  de costado se mueve con la pluma (W/S). Si la principal sigue izando con la cola enganchada, la cola
+  queda en doble bloqueo y termina volcando (correcto, pero sin aviso claro todavía).
 - SK 60: el lastre es el de la referencia (3 bloques en la contrapluma); su forma va en la fase 8B. Se puede plegar con el
   cable largo (referencia): el gancho queda en el suelo y se arrastra al conducir. La pluma y la torre no tienen colisionador
   (la carga las atraviesa, como la pluma de las otras grúas).

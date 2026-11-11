@@ -79,3 +79,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #cfdde9; }
 .clock .arrow { display: inline-block; font-style: normal; font-weight: 700; color: #f0bb27; }
 .blink { animation: blink 0.6s steps(2, start) infinite; }
 @keyframes blink { to { visibility: hidden; } }
+/* tándem (fase 10): la otra grúa, abajo a la derecha (encima de la ayuda de teclas en pantallas chicas) */
+.data.other { top: auto; bottom: 64px; min-width: 210px; }
+.data.other[hidden] { display: none; }
+.data.other .title small { font-weight: 400; }

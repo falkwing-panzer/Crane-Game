@@ -193,7 +193,8 @@ describe('física: cable en la punta del plumín y choques', () => {
     for (let i = 0; i < 60 * 12; i++) { stepCrane(T, S, { ...idle(), luff: 1 }, DT); pose = carrierPose(T, S, 'out'); P.step(S, pose); }
     for (let i = 0; i < 60 * 3; i++) P.step(S, pose);
     const t2 = P.headWorld(), hk2 = P.hookBody.translation();
-    expect(Math.hypot(hk2.x - t2.x, hk2.z - t2.z)).toBeLessThan(0.5);
+    // 0,6 m (0,5 hasta la fase 10: el giro del gancho, ahora bloqueado, se comía algo del balanceo)
+    expect(Math.hypot(hk2.x - t2.x, hk2.z - t2.z)).toBeLessThan(0.6);
     expect(Math.abs(P.tension - T.hookM)).toBeLessThan(0.3); // todavía balancea un poco tras despegar del suelo
   });
 

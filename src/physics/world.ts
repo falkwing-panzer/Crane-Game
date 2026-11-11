@@ -10,6 +10,7 @@ import { padsOnSoft, terrainBlocked, type SoftZone } from '../crane/terrain';
 import { COUNTER_JIB, towerGeom } from '../crane/tower';
 import { foldedTowerBox } from '../render/models/tower';
 import type { BoxKind } from '../levels/levels';
+import { slingTensions, type SlingObs } from './tandem';
 
 // Unidades de masa: toneladas (igual que la referencia). Gravedad 9,81 m/s².
 // Mientras la grúa está de pie NO es un cuerpo dinámico: su cinemática viene del modelo analítico y aquí
@@ -34,6 +35,13 @@ export interface Load {
   color?: string;
   kind?: string;
   fragile?: number;
+  /**
+   * Orejetas (tándem, fase 10): puntos de enganche en el marco de la carga, uno por grúa. Sin orejetas, la eslinga
+   * va al centro de la cara superior y la carga la lleva una sola grúa.
+   */
+  lugs?: V3[];
+  /** Dinámica de la carga para el reparto entre eslingas: posiciones y velocidades angulares de los últimos pasos */
+  dyn?: { p: V3[]; w: V3[]; step: number; T: Map<Physics, number> };
 }
 
 /** Límites de la obra en planta (x0…x1, z0…z1) */
@@ -56,12 +64,24 @@ const CLEARANCE = 0.35;
 
 export class Physics {
   readonly world: RAPIER.World;
+  /** Grúas que comparten este mundo (fase 10, tándem): la primera es la que creó el mundo */
+  readonly crew: Physics[];
+  /** Orejeta de la carga enganchada (−1 = centro de la cara superior) */
+  attachedLug = -1;
+  /** Paso de física del mundo (lo cuenta la primera grúa): el reparto del tándem se calcula una vez por paso */
+  private stepNo = 0;
+  /** Parte de la carga del tándem que lleva esta grúa (t), filtrada como la tensión */
+  private share = 0;
+  /** Gancho contra la cabeza (doble bloqueo) en el último paso */
+  private blocked = false;
+  /** Largo de la eslinga enganchada (fondo del gancho a la orejeta) */
+  private slingLen = SLING - HOOK_HALF_H;
   readonly hookBody: RAPIER.RigidBody;
   readonly hookCollider: RAPIER.Collider;
-  readonly loads: Load[] = [];
-  readonly obstacles: Obstacle[] = [];
+  readonly loads: Load[];
+  readonly obstacles: Obstacle[];
   /** Terreno blando (barro, agua): no es un colisionador, solo impide entrar o apoyar zapatas */
-  readonly softs: SoftZone[] = [];
+  readonly softs: SoftZone[];
   /** Carga enganchada, si la hay */
   attached: Load | null = null;
   /** Tensión del cable (t), filtrada; incluye el gancho */
@@ -111,22 +131,41 @@ export class Physics {
   /** Límites de la obra (prueba libre: ±SITE_HALF; niveles: 0…84 × 0…56 de la referencia) */
   readonly bounds: Bounds;
 
-  /** testLoad: caja de 2 t de prueba (prueba libre); bounds: límites de la obra */
-  constructor(private T: CraneSpec, S: CraneState, pose: Pose, opts: { testLoad?: boolean; bounds?: Bounds } = {}) {
-    this.bounds = opts.bounds ?? { x0: -SITE_HALF, x1: SITE_HALF, z0: -SITE_HALF, z1: SITE_HALF };
+  /**
+   * testLoad: caja de 2 t de prueba (prueba libre); bounds: límites de la obra.
+   * site (tándem, fase 10): otra grúa cuyo mundo se comparte (suelo, obstáculos, cargas, terreno y límites).
+   */
+  constructor(private T: CraneSpec, S: CraneState, pose: Pose, opts: { testLoad?: boolean; bounds?: Bounds; site?: Physics } = {}) {
     this.slR = T.superlift?.r0 ?? 0;
     this.slew = S.slew;
     // contrapeso en placas (fase 8B: también el fijo de las grúas sin lastre); la grúa torre lo lleva arriba
     if (!isCrawler(T) && !T.tower) this.wheeledL = layout(T as WheeledSpec);
-    const world = (this.world = new RAPIER.World({ x: 0, y: -G, z: 0 }));
-    world.timestep = FIXED_DT;
-    // Medido (fase 2): con 8 + 16 iteraciones internas el cable no se estira al izar ni con 200 t colgando
-    // de un gancho de 0,4 t (≤ 6 cm); con los valores por defecto se estiraba metros. Costo < 0,02 ms por paso.
-    world.numSolverIterations = 8;
-    world.numInternalPgsIterations = 16;
-
-    // Suelo
-    this.groundCol = world.createCollider(RAPIER.ColliderDesc.cuboid(200, 0.5, 200).setTranslation(0, -0.5, 0).setFriction(0.8));
+    const site = opts.site;
+    let world: RAPIER.World;
+    if (site) {
+      world = this.world = site.world;
+      this.bounds = site.bounds;
+      this.loads = site.loads;
+      this.obstacles = site.obstacles;
+      this.softs = site.softs;
+      this.groundCol = site.groundCol;
+      this.crew = site.crew;
+    } else {
+      this.bounds = opts.bounds ?? { x0: -SITE_HALF, x1: SITE_HALF, z0: -SITE_HALF, z1: SITE_HALF };
+      this.loads = [];
+      this.obstacles = [];
+      this.softs = [];
+      this.crew = [];
+      world = this.world = new RAPIER.World({ x: 0, y: -G, z: 0 });
+      world.timestep = FIXED_DT;
+      // Medido (fase 2): con 8 + 16 iteraciones internas el cable no se estira al izar ni con 200 t colgando
+      // de un gancho de 0,4 t (≤ 6 cm); con los valores por defecto se estiraba metros. Costo < 0,02 ms por paso.
+      world.numSolverIterations = 8;
+      world.numInternalPgsIterations = 16;
+      // Suelo
+      this.groundCol = world.createCollider(RAPIER.ColliderDesc.cuboid(200, 0.5, 200).setTranslation(0, -0.5, 0).setFriction(0.8));
+    }
+    this.crew.push(this);
 
     this.buildStanding(pose);
     this.head = apply(pose, tipPos(T, S));
@@ -138,6 +177,9 @@ export class Physics {
         .setTranslation(h.x, h.y - S.cable - HOOK_HALF_H, h.z)
         .setLinearDamping(0.02)
         .setAngularDamping(2.0)
+        // sin giro propio (fase 10): los ramales del cable mantienen el motón derecho. Entre el cable y una carga de
+        // cientos de t, el gancho liviano giraba solo hasta 12 rad/s al izar (error del solucionador)
+        .lockRotations()
         .setCanSleep(false)
         .setCcdEnabled(true),
     );
@@ -150,7 +192,7 @@ export class Physics {
     this.cableJoint = this.makeCable(this.headBody, { x: 0, y: 0, z: 0 }, S.cable);
 
     // Carga de prueba: caja de 2 t delante a la derecha de la grúa (fuera del chasis de la LR 3000)
-    if (opts.testLoad ?? true) this.addLoad('Caja', 2.0, { x: 1.0, y: 0.5, z: 0.7 }, { x: Math.max(9, T.len[1] + 3), y: 0.5, z: 6 });
+    if (opts.testLoad ?? !site) this.addLoad('Caja', 2.0, { x: 1.0, y: 0.5, z: 0.7 }, { x: Math.max(9, T.len[1] + 3), y: 0.5, z: 6 });
   }
 
   /** ¿(x, z) queda fuera de la obra, o a menos de `m` de su borde? */
@@ -413,34 +455,34 @@ export class Physics {
   }
 
   addLoad(label: string, mass: number, half: Load['half'], pos: { x: number; y: number; z: number },
-    extra: { color?: string; kind?: string; fragile?: number } = {}) {
+    extra: { color?: string; kind?: string; fragile?: number; lugs?: V3[] } = {}) {
     // Sin giro alrededor del eje vertical (fase 9): como en la referencia, la carga no gira sobre sí misma, como si
     // la guiaran con cuerdas; colgada de un punto no se podría alinear (la viga de 22 m tiene < 1 m de margen).
+    // Con orejetas (tándem, fase 10) gira libre: los dos ganchos fijan su orientación y, sin ese giro, mover un gancho
+    // de lado no movía la columna.
     const body = this.world.createRigidBody(
       RAPIER.RigidBodyDesc.dynamic().setTranslation(pos.x, pos.y, pos.z).setLinearDamping(0.02).setAngularDamping(0.4)
-        .enabledRotations(true, false, true),
+        .enabledRotations(true, !!extra.lugs, true),
     );
     const collider = this.world.createCollider(
       RAPIER.ColliderDesc.cuboid(half.x, half.y, half.z).setMass(mass).setFriction(0.7),
       body,
     );
     const load: Load = { label, mass, half, body, collider, home: { ...pos }, ...extra };
+    if (extra.lugs) load.dyn = { p: [], w: [], step: -1, T: new Map() };
     this.loads.push(load);
     return load;
   }
 
   /** Tecla X: suelta la carga y devuelve todas las cargas a su posición inicial, quietas. */
   resetLoads(): string {
-    if (this.slingJoint) {
-      this.world.removeImpulseJoint(this.slingJoint, true);
-      this.slingJoint = null;
-    }
-    this.attached = null;
+    for (const c of this.crew) c.release();
     for (const l of this.loads) {
       l.body.setTranslation(l.home, true);
       l.body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
       l.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
       l.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      if (l.dyn) { l.dyn.p = []; l.dyn.w = []; }
     }
     return 'Carga repuesta en su posición inicial';
   }
@@ -470,6 +512,23 @@ export class Physics {
 
   /** Un paso de física. `pose` = pose del portador según el modelo analítico (se ignora si ya volcó). */
   step(S: CraneState, pose: Pose, slR = this.slR) {
+    const pre = this.beforeStep(S, pose, slR);
+    this.world.step();
+    this.afterStep(S, pre);
+  }
+
+  /**
+   * Tándem: un paso de física con varias grúas en el mismo mundo. Cada una prepara su parte (pose, cable, viento),
+   * el mundo avanza una vez y cada una mide lo suyo. La primera grúa del mundo va primero.
+   */
+  static stepCrew(units: { phys: Physics; S: CraneState; pose: Pose; slR?: number }[]) {
+    const pres = units.map((u) => u.phys.beforeStep(u.S, u.pose, u.slR ?? u.phys.slR));
+    units[0].phys.world.step();
+    units.forEach((u, i) => u.phys.afterStep(u.S, pres[i]));
+  }
+
+  /** Antes del paso del mundo: pose de los cuerpos cinemáticos, largo del cable, amortiguadores y viento. */
+  private beforeStep(S: CraneState, pose: Pose, slR: number) {
     this.slR = slR;
     this.slew = S.slew;
     if (this.trayCol && this.trayAt !== slR) {
@@ -504,18 +563,26 @@ export class Physics {
     this.dampRope(S);
     // viento (fase 9): sobre la carga enganchada o, sin carga, sobre el gancho (el péndulo de la referencia)
     this.hookBody.resetForces(false);
-    for (const l of this.loads) l.body.resetForces(false);
+    if (this.crew[0] === this) { this.stepNo++; for (const l of this.loads) l.body.resetForces(false); }
     const L = this.attached;
-    if (this.wind.x || this.wind.z) (L ? L.body : this.hookBody).addForce({ x: this.wind.x, y: 0, z: this.wind.z }, true);
+    // carga en tándem: el viento lo pone solo la primera grúa que la lleva
+    if ((this.wind.x || this.wind.z) && (!L || this.crew.find((c) => c.attached === L) === this)) {
+      (L ? L.body : this.hookBody).addForce({ x: this.wind.x, y: 0, z: this.wind.z }, true);
+    }
     // aterrizajes y golpes de la carga enganchada: velocidad y contactos antes del paso
-    const pre = L && !this.tipped ? { v: L.body.linvel(), touch: this.touching(L), side: this.sideContact(L) } : null;
-    this.world.step();
+    return L && !this.tipped ? { v: L.body.linvel(), touch: this.touching(L), side: this.sideContact(L) } : null;
+  }
+
+  /** Después del paso del mundo: aterrizajes y golpes, cabeza de la grúa volcada y tensión del cable. */
+  private afterStep(S: CraneState, pre: { v: V3; touch: boolean; side: boolean } | null) {
+    const L = this.attached;
     if (L && pre && this.attached === L) {
       if (!pre.touch && -pre.v.y > 0 && this.touching(L)) this.events.push({ kind: 'land', load: L, v: -pre.v.y });
       const vh = Math.hypot(pre.v.x, pre.v.z);
       if (!pre.side && this.sideContact(L)) this.events.push({ kind: 'strike', load: L, v: vh });
     }
     if (this.tipped) this.head = this.bodyPoint(this.tipped, this.headLocal.x, this.headLocal.y, this.headLocal.z);
+    else this.stopAtHead();
     this.measureTension(S);
   }
 
@@ -535,12 +602,23 @@ export class Physics {
     if (dist < S.cable - 0.25 || dist < 0.5) return;
     const nx = dx / dist, ny = dy / dist, nz = dz / dist;
     const vh = (tip.x - prev.x) * nx + (tip.y - prev.y) * ny + (tip.z - prev.z) * nz;
-    for (const [b, m] of [[this.hookBody, this.T.hookM], [L.body, L.mass]] as const) {
-      const v = b.linvel();
-      const dev = v.x * nx + v.y * ny + v.z * nz - vh / FIXED_DT - rate;
-      const j = -ROPE_DAMP * dev * m;
-      b.applyImpulse({ x: j * nx, y: j * ny, z: j * nz }, true);
+    const dev = (v: V3) => v.x * nx + v.y * ny + v.z * nz - vh / FIXED_DT - rate;
+    const jh = -ROPE_DAMP * dev(this.hookBody.linvel()) * this.T.hookM;
+    this.hookBody.applyImpulse({ x: jh * nx, y: jh * ny, z: jh * nz }, true);
+    if (this.attachedLug >= 0) {
+      // orejeta (tándem): la velocidad de la orejeta, no la del centro (la carga gira entre las dos grúas), y la masa
+      // efectiva en ese punto a lo largo del cable: 1 / (1/m + (r×n)·I⁻¹·(r×n))
+      const p = this.lugWorld(L, this.attachedLug), c = L.body.worldCom();
+      const rn = cross3({ x: p.x - c.x, y: p.y - c.y, z: p.z - c.z }, { x: nx, y: ny, z: nz });
+      const iI = L.body.effectiveWorldInvInertia();
+      const q = rn.x * (iI.m11 * rn.x + iI.m12 * rn.y + iI.m13 * rn.z) + rn.y * (iI.m12 * rn.x + iI.m22 * rn.y + iI.m23 * rn.z)
+        + rn.z * (iI.m13 * rn.x + iI.m23 * rn.y + iI.m33 * rn.z);
+      const j = -ROPE_DAMP * dev(L.body.velocityAtPoint(p)) / (1 / L.mass + q);
+      L.body.applyImpulseAtPoint({ x: j * nx, y: j * ny, z: j * nz }, p, true);
+      return;
     }
+    const jl = -ROPE_DAMP * dev(L.body.linvel()) * L.mass;
+    L.body.applyImpulse({ x: jl * nx, y: jl * ny, z: jl * nz }, true);
   }
 
   /**
@@ -554,10 +632,31 @@ export class Physics {
     if (!L || this.touching(L)) return;
     const mh = this.T.hookM, ml = L.mass, mu = (mh * ml) / (mh + ml);
     const k = Math.min(0.5, 2 * 0.5 * 10 * FIXED_DT) * mu; // impulso por (m/s) de velocidad relativa
-    const a = this.hookBody.linvel(), b = L.body.linvel();
+    // tándem: velocidad de la orejeta y el impulso en ella (la carga gira entre las dos grúas)
+    const p = this.attachedLug >= 0 ? this.lugWorld(L, this.attachedLug) : null;
+    const a = this.hookBody.linvel(), b = p ? L.body.velocityAtPoint(p) : L.body.linvel();
     const jx = (a.x - b.x) * k, jz = (a.z - b.z) * k;
     this.hookBody.applyImpulse({ x: -jx, y: 0, z: -jz }, true);
-    L.body.applyImpulse({ x: jx, y: 0, z: jz }, true);
+    if (p) L.body.applyImpulseAtPoint({ x: jx, y: 0, z: jz }, p, true);
+    else L.body.applyImpulse({ x: jx, y: 0, z: jz }, true);
+  }
+
+  /** Doble bloqueo: el gancho no sube más de TWO_BLOCK bajo la cabeza; se baja a ese punto y pierde la velocidad hacia arriba. */
+  private stopAtHead() {
+    const top = this.head.y - TWO_BLOCK, t = this.hookBody.translation();
+    // punta casi en el suelo (plumín recién montado, a 0,7 m): el gancho está apoyado al lado
+    if (top < 2 * HOOK_HALF_H + 0.1) { this.blocked = false; return; }
+    const over = t.y + HOOK_HALF_H - top;
+    this.blocked = over > -0.05;
+    if (over <= 0) return;
+    this.hookBody.setTranslation({ x: t.x, y: t.y - over, z: t.z }, true);
+    const v = this.hookBody.linvel();
+    if (v.y > 0) this.hookBody.setLinvel({ x: v.x, y: 0, z: v.z }, true);
+  }
+
+  /** ¿El gancho está contra la cabeza (doble bloqueo)? */
+  twoBlocked(): boolean {
+    return !this.tipped && this.blocked;
   }
 
   /** Cabeza de pluma en el mundo (donde se ancla el cable). */
@@ -594,7 +693,17 @@ export class Physics {
     const ah = acc(this.trHook, this.hookBody.translation());
     let fx = this.T.hookM * ah.x, fy = this.T.hookM * (ah.y + G), fz = this.T.hookM * ah.z;
     const L = this.attached;
-    if (L) {
+    if (L?.dyn) {
+      // tándem: la eslinga tira del gancho hacia la orejeta con la parte de la carga que lleva esta grúa
+      const ts = this.slingForce();
+      const p = this.lugWorld(L, this.attachedLug), hb = this.bodyPoint(this.hookBody, 0, -HOOK_HALF_H, 0);
+      const ux = p.x - hb.x, uy = p.y - hb.y, uz = p.z - hb.z, ul = Math.hypot(ux, uy, uz) || 1;
+      fx -= ts * ux / ul; fy -= ts * uy / ul; fz -= ts * uz / ul;
+      // lo que la eslinga carga sobre el cable: su fuerza proyectada en la dirección del cable
+      const c = this.head, t = this.hookTop(), cl = Math.hypot(t.x - c.x, t.y - c.y, t.z - c.z) || 1;
+      const along = Math.max(0, (ux * (t.x - c.x) + uy * (t.y - c.y) + uz * (t.z - c.z)) / (ul * cl));
+      this.share += (ts * along / G - this.share) * Math.min(1, FIXED_DT / TENSION_TAU);
+    } else if (L) {
       const al = acc(this.trLoad, L.body.translation());
       if (!this.touching(L)) { fx += L.mass * al.x; fy += L.mass * (al.y + G); fz += L.mass * al.z; }
     }
@@ -707,11 +816,16 @@ export class Physics {
     return { x: t.x + p.x, y: t.y + p.y, z: t.z + p.z };
   }
 
-  /** ¿La carga toca algo que no sea el gancho? */
+  /** ¿Es el gancho de alguna de las grúas de este mundo? */
+  private isHook(col: RAPIER.Collider) {
+    return this.crew.some((c) => c.hookCollider.handle === col.handle);
+  }
+
+  /** ¿La carga toca algo que no sea un gancho? */
   private touching(load: Load) {
     let touching = false;
     this.world.contactPairsWith(load.collider, (other) => {
-      if (touching || other.handle === this.hookCollider.handle) return;
+      if (touching || this.isHook(other)) return;
       this.world.contactPair(load.collider, other, (manifold) => {
         if (manifold.numContacts() > 0) touching = true;
       });
@@ -726,7 +840,7 @@ export class Physics {
   private sideContact(load: Load) {
     let side = false;
     this.world.contactPairsWith(load.collider, (other) => {
-      if (side || other.handle === this.hookCollider.handle || other.handle === this.groundCol.handle) return;
+      if (side || this.isHook(other) || other.handle === this.groundCol.handle) return;
       this.world.contactPair(load.collider, other, (manifold) => {
         if (manifold.numContacts() > 0 && Math.abs(manifold.normal().y) < 0.5) side = true;
       });
@@ -739,7 +853,7 @@ export class Physics {
    * null si está enganchada o se mueve más de 5 cm/s.
    */
   placed(load: Load): { x: number; z: number; hx: number; hz: number; bottom: number; tilt: number } | null {
-    if (load === this.attached) return null;
+    if (this.crew.some((c) => c.attached === load)) return null;
     const v = load.body.linvel();
     if (Math.hypot(v.x, v.y, v.z) > 0.05) return null;
     const t = load.body.translation(), q = load.body.rotation(), h = load.half;
@@ -760,31 +874,127 @@ export class Physics {
   toggleHook(): string {
     if (this.attached) {
       const load = this.attached;
-      if (!this.isResting(load)) return 'Apoya la carga antes de soltarla';
-      this.world.removeImpulseJoint(this.slingJoint!, true);
-      this.slingJoint = null;
-      this.attached = null;
-      return `${load.label} soltada`;
+      // tándem: una grúa puede soltar mientras otra sostiene la carga (la de cola, con la columna ya de pie)
+      const held = this.crew.some((c) => c !== this && c.attached === load);
+      if (!held && !this.isResting(load)) return 'Apoya la carga antes de soltarla';
+      this.release();
+      return `${load.label} soltada${held ? ' · la sostiene la otra grúa' : ''}`;
     }
     const hp = this.hookBody.translation();
     const hv = this.hookBody.linvel();
     const hookBottom = hp.y - HOOK_HALF_H;
+    let lug = -1;
     const load = this.loads.find((l) => {
+      if (l.lugs) {
+        // orejetas: una libre al alcance del gancho (cada una lleva una sola grúa)
+        lug = l.lugs.findIndex((_, i) => {
+          if (this.crew.some((c) => c !== this && c.attached === l && c.attachedLug === i)) return false;
+          // el fondo del gancho a menos de 1,8 m de la orejeta, sin estar por debajo (la de cabeza va en la cara
+          // del extremo: el gancho cuelga al lado)
+          const w = this.lugWorld(l, i);
+          return Math.hypot(w.x - hp.x, w.y - hookBottom, w.z - hp.z) < 1.8 && hookBottom > w.y - 0.3;
+        });
+        return lug >= 0;
+      }
+      if (this.crew.some((c) => c !== this && c.attached === l)) return false; // sin orejetas, una sola grúa
       const top = this.bodyPoint(l.body, 0, l.half.y, 0);
       const gap = hookBottom - top.y; // gancho apoyado = 0; colgando a la distancia de eslinga ≈ 0,5
       return Math.hypot(top.x - hp.x, top.z - hp.z) < 1.0 && gap > -0.1 && gap < 1.1;
     });
-    if (!load) return 'Baja el gancho sobre el centro de la carga para engancharla';
+    if (!load) return 'Baja el gancho sobre el centro de la carga (o sobre una orejeta libre) para engancharla';
     if (Math.hypot(hv.x, hv.z) > 0.6) return 'Estabiliza el gancho antes de enganchar';
-    // Eslinga: rope joint del fondo del gancho al centro de la cara superior de la carga.
+    // Eslinga: rope joint del fondo del gancho al centro de la cara superior de la carga (o a la orejeta).
+    const anchor = load.lugs ? load.lugs[lug] : { x: 0, y: load.half.y, z: 0 };
+    // orejeta: la eslinga se ajusta a la distancia (la de cabeza está al costado del gancho), sin tirón al enganchar
+    const hb = this.bodyPoint(this.hookBody, 0, -HOOK_HALF_H, 0), w = this.bodyPoint(load.body, anchor.x, anchor.y, anchor.z);
+    this.slingLen = Math.max(SLING - HOOK_HALF_H, load.lugs ? Math.hypot(w.x - hb.x, w.y - hb.y, w.z - hb.z) : 0);
     this.slingJoint = this.world.createImpulseJoint(
-      RAPIER.JointData.rope(SLING - HOOK_HALF_H, { x: 0, y: -HOOK_HALF_H, z: 0 }, { x: 0, y: load.half.y, z: 0 }),
+      RAPIER.JointData.rope(this.slingLen, { x: 0, y: -HOOK_HALF_H, z: 0 }, anchor),
       this.hookBody, load.body, true,
     );
     this.attached = load;
+    this.attachedLug = load.lugs ? lug : -1;
     this.trLoad = newTrack();
     load.body.wakeUp();
-    return `Enganchada ${load.label} · ${load.mass.toFixed(1).replace('.', ',')} t`;
+    const where = load.lugs ? (lug === 0 ? ' por la cabeza' : ' por el pie') : '';
+    return `Enganchada ${load.label}${where} · ${load.mass.toFixed(1).replace('.', ',')} t`;
+  }
+
+  /** Suelta la eslinga, si hay (sin condiciones). */
+  release() {
+    if (this.slingJoint) this.world.removeImpulseJoint(this.slingJoint, true);
+    this.slingJoint = null;
+    this.attached = null;
+    this.attachedLug = -1;
+    this.share = 0;
+  }
+
+  /** Orejeta `i` de la carga, en el mundo */
+  lugWorld(l: Load, i: number): V3 {
+    const p = l.lugs![i];
+    return this.bodyPoint(l.body, p.x, p.y, p.z);
+  }
+
+  /**
+   * Fuerza en la eslinga de esta grúa con una carga con orejetas (t·m/s²): reparto por la dinámica de la carga
+   * (tandem.ts), calculado una vez por paso para todas las grúas que la llevan.
+   */
+  private slingForce(): number {
+    const L = this.attached!, d = L.dyn!, step = this.crew[0].stepNo;
+    if (d.step !== step) {
+      d.step = step;
+      d.T = this.solveSlings(L);
+    }
+    return d.T.get(this) ?? 0;
+  }
+
+  /** Reparto de la carga entre las eslingas de todas las grúas enganchadas a `L` (ver tandem.ts). */
+  private solveSlings(L: Load): Map<Physics, number> {
+    const d = L.dyn!, b = L.body, h = ACC_STEPS * FIXED_DT;
+    const c = b.worldCom(), w = b.angvel();
+    d.p.push({ x: c.x, y: c.y, z: c.z });
+    d.w.push({ x: w.x, y: w.y, z: w.z });
+    if (d.p.length > 2 * ACC_STEPS + 1) { d.p.shift(); d.w.shift(); }
+    let a = { x: 0, y: 0, z: 0 }, al = { x: 0, y: 0, z: 0 };
+    if (d.p.length === 2 * ACC_STEPS + 1) {
+      const p0 = d.p[0], p1 = d.p[ACC_STEPS], p2 = d.p[2 * ACC_STEPS];
+      a = { x: (p2.x - 2 * p1.x + p0.x) / (h * h), y: (p2.y - 2 * p1.y + p0.y) / (h * h), z: (p2.z - 2 * p1.z + p0.z) / (h * h) };
+      const w0 = d.w[ACC_STEPS], w2 = d.w[2 * ACC_STEPS];
+      al = { x: (w2.x - w0.x) / h, y: (w2.y - w0.y) / h, z: (w2.z - w0.z) / h };
+    }
+    // I·α + ω × I·ω, con la inercia efectiva en el mundo
+    const I = b.effectiveAngularInertia();
+    const mulI = (v: V3) => ({ x: I.m11 * v.x + I.m12 * v.y + I.m13 * v.z, y: I.m12 * v.x + I.m22 * v.y + I.m23 * v.z, z: I.m13 * v.x + I.m23 * v.y + I.m33 * v.z });
+    const Ia = mulI(al), gyro = cross3(w, mulI(w));
+    // fuerzas normales de los contactos sobre la carga (impulso / paso)
+    const contacts: { p: V3; f: V3 }[] = [];
+    this.world.contactPairsWith(L.collider, (other) => {
+      this.world.contactPair(L.collider, other, (m, flipped) => {
+        const n = m.normal(), sg = (flipped ? 1 : -1) / FIXED_DT;
+        for (let i = 0; i < m.numSolverContacts(); i++) {
+          const imp = m.contactImpulse(i), p = m.solverContactPoint(i);
+          if (!p || !imp) continue;
+          contacts.push({ p: { x: p.x, y: p.y, z: p.z }, f: { x: n.x * imp * sg, y: n.y * imp * sg, z: n.z * imp * sg } });
+        }
+      });
+    });
+    const crew = this.crew.filter((k) => k.attached === L && k.attachedLug >= 0);
+    const slings: SlingObs[] = crew.map((k) => {
+      const p = k.lugWorld(L, k.attachedLug), hb = k.bodyPoint(k.hookBody, 0, -HOOK_HALF_H, 0);
+      const ux = hb.x - p.x, uy = hb.y - p.y, uz = hb.z - p.z, ul = Math.hypot(ux, uy, uz) || 1;
+      // floja si le sobran más de 5 cm (tensa, la junta la deja a su largo con 1–2 cm de diferencia)
+      return { p, u: { x: ux / ul, y: uy / ul, z: uz / ul }, slack: ul < k.slingLen - 0.05 };
+    });
+    const T = slingTensions({
+      m: L.mass, c: { x: c.x, y: c.y, z: c.z }, a, contacts, size: Math.max(L.half.x, L.half.y, L.half.z), yawFree: true,
+      tau: { x: Ia.x + gyro.x, y: Ia.y + gyro.y, z: Ia.z + gyro.z },
+    }, slings);
+    return new Map(crew.map((k, i) => [k, T[i]]));
+  }
+
+  /** Parte de la carga que lleva esta grúa (t, sin el gancho) si es una carga con orejetas; si no, null */
+  slingShare(): number | null {
+    return this.attached?.dyn ? this.share : null;
   }
 }
 
@@ -794,6 +1004,7 @@ const JIB_MIN_H = 0.5;
 const JIB_HALF = 0.75;
 
 const xyz = (p: V3): [number, number, number] => [p.x, p.y, p.z];
+const cross3 = (a: V3, b: V3): V3 => ({ x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x });
 
 /** Seguimiento de posición para derivar velocidad y aceleración */
 interface Track { hist: V3[] }
@@ -804,6 +1015,13 @@ const ACC_STEPS = 6;
 const TENSION_TAU = 0.3;
 /** Fracción de la velocidad sobrante a lo largo del cable que se quita en cada paso (dampRope) */
 const ROPE_DAMP = 0.3;
+
+/**
+ * Doble bloqueo (fase 10): el motón no sube a menos de TWO_BLOCK bajo la cabeza (choca con las poleas). El cable de
+ * Rapier es solo una distancia máxima: en el tándem, al subir la columna con la grúa de cola enganchada, su gancho
+ * pasaba a través de la cabeza (una distancia mínima de 1 m tampoco basta: el gancho la rodeaba). CABLE_MIN es 1,2 m.
+ */
+export const TWO_BLOCK = 1.0;
 
 function setRopeLength(joint: RAPIER.ImpulseJoint, length: number) {
   const raw = (joint as unknown as { rawSet: { jointSetLimits(h: number, axis: number, min: number, max: number): void } }).rawSet;
