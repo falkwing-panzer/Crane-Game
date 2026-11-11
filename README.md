@@ -5,8 +5,9 @@ estabilizadores, montas el lastre y levantas cargas sin volcar. La estabilidad (
 según radio) se calcula con un modelo analítico como el de una grúa real. El cable, el gancho, la carga y
 la caída de la grúa usan física de cuerpos rígidos.
 
-Tiene 13 niveles: trabajos de obra con cargas, zonas de destino, viento, líneas eléctricas, terreno blando
-y límite de tiempo, y una prueba libre para manejar cualquier grúa sin objetivo.
+Tiene 14 niveles: trabajos de obra con cargas, zonas de destino, viento, líneas eléctricas, terreno blando,
+límite de tiempo y un izaje en tándem con dos grúas. Además, una prueba libre para manejar cualquier grúa sin
+objetivo y otra con las dos grúas del tándem.
 
 Proyecto personal en desarrollo. Hecho con Vite, TypeScript, [three.js](https://threejs.org) y
 [Rapier](https://rapier.rs).
@@ -28,6 +29,7 @@ Abre la dirección que muestra Vite (normalmente `http://localhost:5173`). Se ab
 | `?nivel=3` | El nivel 3 con su grúa recomendada |
 | `?nivel=3&grua=at300` | El nivel 3 con otra grúa permitida |
 | `?grua=xl` o `?libre=1` | Prueba libre (por ejemplo `?grua=xl` para la AT 500-8) |
+| `?tandem=1` | Prueba libre en tándem: LR 3000 y AT 500-8 con una columna de 400 t |
 
 | Comando | Qué hace |
 |---|---|
@@ -56,10 +58,15 @@ grúa (las que no sirven aparecen desactivadas con el motivo). El turno empieza 
 | 11 | Sobre la nave | Plumín abatible | AT 650-8 |
 | 12 | Patio interior | Grúa torre | SK 60 |
 | 13 | Columna de destilación | Izaje extremo | LR 3000 |
+| 14 | Columna en tándem | Tándem | LR 3000 + AT 500-8 (fijas) |
 
 - **Se gana** cuando todas las cargas quedan sueltas y quietas dentro de su zona.
 - **Se pierde** si la grúa vuelca, si el equipo invade la distancia mínima de una línea eléctrica, si se rompe una
   carga frágil (vidrio que toca a más de 0,5 m/s) o si se acaba el tiempo.
+- **Tándem (nivel 14):** se pone de pie una columna de 400 t con dos grúas; **Tab** cambia de grúa y la otra queda
+  quieta. Cada grúa lleva su parte de la carga (medida en la física) y tiene su propio LMI. Además se pierde si una
+  grúa pasa del 100 % de LMI, si un cable que lleva carga se aparta más de 6° de la vertical, si la columna se ladea
+  más de 10° sobre su eje o si un gancho choca con la cabeza de su pluma.
 - **Estrellas:** 3, menos una por aterrizajes duros (más de 1,4 m/s), otra por golpes o alarmas de línea y otra por
   pasarse del par. El mejor tiempo y las mejores estrellas se guardan en el navegador.
 
@@ -91,6 +98,7 @@ Las 11 son jugables, en los niveles y en la prueba libre.
 | Q / E | Telescopar (en la grúa torre, mover el carro) |
 | R / F | Subir / bajar el cable |
 | Espacio | Enganchar / soltar la carga |
+| Tab | Cambiar de grúa (tándem) |
 | O | Estabilizadores (no en orugas) |
 | B | Lastre |
 | Y | Y-guy |
@@ -108,7 +116,7 @@ Las 11 son jugables, en los niveles y en la prueba libre.
 src/
   crane/     datos de las grúas, estabilidad y LMI, cinemática, conducción, montajes, terreno
   physics/   mundo Rapier: cable, gancho, carga, choques, vuelco, viento, aterrizajes
-  levels/    los 13 niveles, su armado y sus reglas (viento, líneas eléctricas)
+  levels/    los 14 niveles, su armado y sus reglas (viento, líneas eléctricas, tándem)
   render/    escena, cámaras, escenario de los niveles y modelos 3D de las grúas
   ui/        teclado, HUD, menú y fichas de los niveles
 referencia/  versión anterior en un solo HTML (fuente de datos; no se edita) e imágenes de referencia
@@ -120,9 +128,9 @@ medido.
 ## Rendimiento
 
 La meta es 60 fps a 1080p en una laptop con gráfica integrada Intel, con menos de unas 150 draw calls.
-Medido en la laptop: 60 fps con todas las grúas y sus detalles. En los niveles, el peor caso es la AT 650-8
-con lastre, Y-guy y plumín montados en el nivel 11: 144 draw calls (los fps en la laptop están pendientes).
+Medido en la laptop: 60 fps con todas las grúas y sus detalles. Con una grúa, el peor caso es la AT 650-8 con
+lastre, Y-guy y plumín montados en el nivel 11: 144 draw calls. El tándem (dos grúas) llega a unas 220.
 
 ## Plan
 
-Siguen el izaje en tándem con dos grúas, el pulido (calidad gráfica, sonidos) y la versión publicada.
+Siguen el pulido (calidad gráfica, sonidos, rendimiento del tándem) y la versión publicada.

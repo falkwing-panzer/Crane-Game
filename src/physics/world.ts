@@ -40,8 +40,10 @@ export interface Load {
    * va al centro de la cara superior y la carga la lleva una sola grúa.
    */
   lugs?: V3[];
+  /** Eje que queda vertical cuando la carga está colocada (por defecto y; la columna del tándem, x) */
+  stand?: 'x';
   /** Dinámica de la carga para el reparto entre eslingas: posiciones y velocidades angulares de los últimos pasos */
-  dyn?: { p: V3[]; w: V3[]; step: number; T: Map<Physics, number> };
+  dyn?: { p: V3[]; w: V3[]; step: number; T: Map<Physics, number>; hook: Map<Physics, V3> };
 }
 
 /** Límites de la obra en planta (x0…x1, z0…z1) */
@@ -455,7 +457,7 @@ export class Physics {
   }
 
   addLoad(label: string, mass: number, half: Load['half'], pos: { x: number; y: number; z: number },
-    extra: { color?: string; kind?: string; fragile?: number; lugs?: V3[] } = {}) {
+    extra: { color?: string; kind?: string; fragile?: number; lugs?: V3[]; stand?: 'x' } = {}) {
     // Sin giro alrededor del eje vertical (fase 9): como en la referencia, la carga no gira sobre sí misma, como si
     // la guiaran con cuerdas; colgada de un punto no se podría alinear (la viga de 22 m tiene < 1 m de margen).
     // Con orejetas (tándem, fase 10) gira libre: los dos ganchos fijan su orientación y, sin ese giro, mover un gancho
@@ -469,7 +471,7 @@ export class Physics {
       body,
     );
     const load: Load = { label, mass, half, body, collider, home: { ...pos }, ...extra };
-    if (extra.lugs) load.dyn = { p: [], w: [], step: -1, T: new Map() };
+    if (extra.lugs) load.dyn = { p: [], w: [], step: -1, T: new Map(), hook: new Map() };
     this.loads.push(load);
     return load;
   }
@@ -694,15 +696,14 @@ export class Physics {
     let fx = this.T.hookM * ah.x, fy = this.T.hookM * (ah.y + G), fz = this.T.hookM * ah.z;
     const L = this.attached;
     if (L?.dyn) {
-      // tándem: la eslinga tira del gancho hacia la orejeta con la parte de la carga que lleva esta grúa
-      const ts = this.slingForce();
+      // tándem: la eslinga tira del gancho hacia la orejeta con la parte de la carga que lleva esta grúa, y el gancho,
+      // si está apoyado en la carga (la orejeta de cola va en su cara de arriba), recibe el empuje de la carga: la
+      // fuerza del gancho sobre la carga, cambiada de signo (sin ella, el gancho apoyado sumaba cientos de t al cable)
+      const ts = this.slingForce(), fc = L.dyn.hook.get(this);
       const p = this.lugWorld(L, this.attachedLug), hb = this.bodyPoint(this.hookBody, 0, -HOOK_HALF_H, 0);
       const ux = p.x - hb.x, uy = p.y - hb.y, uz = p.z - hb.z, ul = Math.hypot(ux, uy, uz) || 1;
       fx -= ts * ux / ul; fy -= ts * uy / ul; fz -= ts * uz / ul;
-      // lo que la eslinga carga sobre el cable: su fuerza proyectada en la dirección del cable
-      const c = this.head, t = this.hookTop(), cl = Math.hypot(t.x - c.x, t.y - c.y, t.z - c.z) || 1;
-      const along = Math.max(0, (ux * (t.x - c.x) + uy * (t.y - c.y) + uz * (t.z - c.z)) / (ul * cl));
-      this.share += (ts * along / G - this.share) * Math.min(1, FIXED_DT / TENSION_TAU);
+      if (fc) { fx += fc.x; fy += fc.y; fz += fc.z; }
     } else if (L) {
       const al = acc(this.trLoad, L.body.translation());
       if (!this.touching(L)) { fx += L.mass * al.x; fy += L.mass * (al.y + G); fz += L.mass * al.z; }
@@ -715,6 +716,8 @@ export class Physics {
     if (dist >= S.cable - 0.25) t = Math.max(0, -(fx * dx + fy * dy + fz * dz) / dist) / G;
     // Filtro de primer orden (0,3 s; 0,1 s hasta la fase 6B): quita el ruido de derivar sin perder un tirón.
     this.tension += (t - this.tension) * Math.min(1, FIXED_DT / TENSION_TAU);
+    // tándem: la parte de la carga que lleva esta grúa = lo que su cable lleva además del gancho
+    if (L?.dyn) this.share += (Math.max(0, t - this.T.hookM) - this.share) * Math.min(1, FIXED_DT / TENSION_TAU);
     // gp: prolongación del cable hasta el suelo, a lo sumo 10 m de la punta (como la referencia)
     const k = tip.y / Math.max(0.5, tip.y - top.y);
     let gx = dx * k, gz = dz * k;
@@ -860,7 +863,8 @@ export class Physics {
     // columnas de la matriz de giro: ejes x, y, z del cuerpo en el mundo
     const ax = rotate(q, { x: 1, y: 0, z: 0 }), ay = rotate(q, { x: 0, y: 1, z: 0 }), az = rotate(q, { x: 0, y: 0, z: 1 });
     const ext = (k: 'x' | 'y' | 'z') => Math.abs(ax[k]) * h.x + Math.abs(ay[k]) * h.y + Math.abs(az[k]) * h.z;
-    return { x: t.x, z: t.z, hx: ext('x'), hz: ext('z'), bottom: t.y - ext('y'), tilt: Math.acos(Math.min(1, Math.abs(ay.y))) };
+    const up = load.stand === 'x' ? ax : ay;
+    return { x: t.x, z: t.z, hx: ext('x'), hz: ext('z'), bottom: t.y - ext('y'), tilt: Math.acos(Math.min(1, Math.abs(up.y))) };
   }
 
   /** ¿La carga está apoyada en algo que no sea el gancho? */
@@ -966,15 +970,22 @@ export class Physics {
     const I = b.effectiveAngularInertia();
     const mulI = (v: V3) => ({ x: I.m11 * v.x + I.m12 * v.y + I.m13 * v.z, y: I.m12 * v.x + I.m22 * v.y + I.m23 * v.z, z: I.m13 * v.x + I.m23 * v.y + I.m33 * v.z });
     const Ia = mulI(al), gyro = cross3(w, mulI(w));
-    // fuerzas normales de los contactos sobre la carga (impulso / paso)
+    // fuerzas normales de los contactos sobre la carga (impulso / paso); las de cada gancho, además, aparte
     const contacts: { p: V3; f: V3 }[] = [];
+    d.hook = new Map();
     this.world.contactPairsWith(L.collider, (other) => {
+      const hookOf = this.crew.find((k) => k.hookCollider.handle === other.handle);
       this.world.contactPair(L.collider, other, (m, flipped) => {
         const n = m.normal(), sg = (flipped ? 1 : -1) / FIXED_DT;
         for (let i = 0; i < m.numSolverContacts(); i++) {
           const imp = m.contactImpulse(i), p = m.solverContactPoint(i);
           if (!p || !imp) continue;
-          contacts.push({ p: { x: p.x, y: p.y, z: p.z }, f: { x: n.x * imp * sg, y: n.y * imp * sg, z: n.z * imp * sg } });
+          const f = { x: n.x * imp * sg, y: n.y * imp * sg, z: n.z * imp * sg };
+          contacts.push({ p: { x: p.x, y: p.y, z: p.z }, f });
+          if (hookOf) {
+            const h = d.hook.get(hookOf) ?? { x: 0, y: 0, z: 0 };
+            d.hook.set(hookOf, { x: h.x + f.x, y: h.y + f.y, z: h.z + f.z });
+          }
         }
       });
     });

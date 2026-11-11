@@ -19,9 +19,8 @@ import { Physics, FIXED_DT } from './physics/world';
 import { Input } from './ui/input';
 import { Hud } from './ui/hud';
 import { stepSuperlift } from './crane/superlift';
-import { LEVELS } from './levels/levels';
-import { LEVEL_BOUNDS, allPlaced, placeCrane, populate } from './levels/setup';
-import { TANDEM_IDS, TEST_COLUMN, placeTandem } from './levels/tandemSetup';
+import { allPlaced, levelBounds, placeCrane, populate } from './levels/setup';
+import { ALL_LEVELS as LEVELS, OVER_T, ROLL_MAX, SIDE_LOAD, SIDE_MAX, SIDE_T, SIDE_WARN, TANDEM_IDS, TEST_COLUMN, cableAngle, placeTandem, rollOf, tandemColumn } from './levels/tandemSetup';
 import { buildLevelSite } from './render/levelSite';
 import { LevelUi, levelUrl, saveRecord, stars } from './ui/levelUi';
 import { HARD_LANDING, LANDING_MIN, LINE_WARN, lineMargin, windArea, windForce } from './levels/rules';
@@ -33,6 +32,8 @@ const MENU_IDS: CraneId[] = [...TRUCK_IDS, 'crawler', 'lr'];
 const MODE_TEXT = { out: 'estabilizadores', tire: 'neumáticos', move: 'en marcha', crawler: 'orugas', crawlMove: 'orugas en marcha' };
 
 const _lat = new THREE.Vector3();
+const deg = (r: number) => Math.round((r * 180) / Math.PI);
+
 const _wd = new THREE.Vector3();
 
 /**
@@ -56,7 +57,13 @@ interface Unit {
   tipText: string;
   /** Plumín abatible permitido (nivel "Sobre la nave" y prueba libre) */
   jibOk: boolean;
+  /** Nivel de tándem: tiempo seguido con el LMI por encima del 100 % y con el cable inclinado más del límite (s) */
+  over: number;
+  side: number;
+  /** Ángulo del cable con la vertical (rad) */
+  sideAng: number;
 }
+
 
 /** Mandos sueltos: la grúa que no se maneja se queda quieta */
 const IDLE = { slew: 0, luff: 0, tele: 0, hoist: 0, fine: false, sl: 0, jib: 0 };
@@ -73,10 +80,12 @@ async function start() {
   const nivel = Number(params.get('nivel')) || 0;
   const li = nivel >= 1 && nivel <= LEVELS.length ? nivel - 1 : -1;
   const L = li >= 0 ? LEVELS[li] : null;
-  const tandem = !L && params.has('tandem');
-  const showMenu = !L && !tandem && !params.has('grua') && !params.has('libre');
+  // tándem: la prueba libre (?tandem=1) o el nivel 14
+  const freeTandem = !L && params.has('tandem');
+  const tandem = freeTandem || !!L?.tandem;
+  const showMenu = !L && !freeTandem && !params.has('grua') && !params.has('libre');
   const q = params.get('grua') as CraneId | null;
-  const ids: CraneId[] = tandem ? [...TANDEM_IDS]
+  const ids: CraneId[] = L?.tandem ? [L.tandem.main.id, L.tandem.tail.id] : freeTandem ? [...TANDEM_IDS]
     : [L ? (q && L.cranes.includes(q) ? q : L.rec) : q && MENU_IDS.includes(q) ? q : 'medium'];
 
   // Estado de cada grúa y su colocación
@@ -84,8 +93,12 @@ async function start() {
     const T = CRANES[id];
     return { id, T, S: initialState(T), C: baseConfig(T) };
   });
-  if (L) placeCrane(states[0].T, states[0].S, L);
-  if (tandem) placeTandem(states[0], states[1]);
+  const place = () => {
+    if (L?.tandem) placeTandem(states[0], states[1], L.tandem, tandemColumn(L));
+    else if (freeTandem) placeTandem(states[0], states[1]);
+    else if (L) placeCrane(states[0].T, states[0].S, L);
+  };
+  place();
 
   // Física: la primera grúa crea el mundo; la segunda lo comparte
   const units: Unit[] = [];
@@ -93,19 +106,19 @@ async function start() {
     const { T, S } = st;
     const pose = carrierPose(T, S, supportMode(S, T));
     const phys = units.length ? new Physics(T, S, pose, { site: units[0].phys })
-      : new Physics(T, S, pose, L ? { testLoad: false, bounds: LEVEL_BOUNDS } : tandem ? { testLoad: false } : {});
+      : new Physics(T, S, pose, L ? { testLoad: false, bounds: levelBounds(L) } : freeTandem ? { testLoad: false } : {});
     const crane = isCrawler(T) ? new CrawlerModel(T) : new CraneModel(T as WheeledSpec);
     ctx.scene.add(crane.root);
     units.push({
       ...st, crane, phys, pose, rig: null as unknown as Rigging, dyn: { u: 0, edge: 0, lmi: 0 }, cut: false, cutMsg: false,
-      tipClock: -1, tipText: '', jibOk: !!T.jibDef && !tandem && (!L || !!L.jib),
+      tipClock: -1, tipText: '', jibOk: !!T.jibDef && !tandem && (!L || !!L.jib), over: 0, side: 0, sideAng: 0,
     });
   }
   const site = units[0].phys;
   if (L) {
     populate(site, L);
     buildLevelSite(ctx.scene, L);
-  } else if (tandem) {
+  } else if (freeTandem) {
     const c = TEST_COLUMN;
     site.addLoad(c.label, c.mass, c.half, c.pos, { lugs: c.lugs, color: '#9aa3aa', kind: 'vessel' });
     buildSite(ctx.scene, site.obstacles, site.softs);
@@ -225,7 +238,7 @@ async function start() {
       Object.assign(u.S, initialState(u.T));
       Object.assign(u.C, baseConfig(u.T)); // sin lastre ni Y-guy
     }
-    if (tandem) placeTandem(units[0], units[1]); // con los montajes hechos
+    place(); // tándem: con los montajes hechos
     for (const u of units) {
       u.pose = carrierPose(u.T, u.S, supportMode(u.S, u.T));
       u.phys.reset(u.S, u.pose);
@@ -236,7 +249,7 @@ async function start() {
     hud.showTipped(null);
     hud.say('Grúa reiniciada', 1.5);
   };
-  if (tandem) hud.say('Tándem: LR 3000 en la cabeza de la columna y AT 500-8 en el pie · Espacio engancha cada una · Tab cambia de grúa', 5);
+  if (freeTandem) hud.say('Tándem: LR 3000 en la cabeza de la columna y AT 500-8 en el pie · Espacio engancha cada una · Tab cambia de grúa', 5);
   else if (!L && !showMenu) {
     const T = act.T;
     hud.say(T.tower ? `${T.name} · O despliega los estabilizadores · M monta la grúa torre · Q/E mueven el carro · V cambia la cámara`
@@ -252,7 +265,8 @@ async function start() {
    */
   function levelRules(): boolean {
     const { T, S, phys, pose } = units[0];
-    for (const e of phys.events.splice(0)) {
+    // tándem: los aterrizajes y golpes de la carga los registra cada grúa que la lleva (el golpe espera 1 s)
+    for (const e of units.flatMap((u) => u.phys.events.splice(0))) {
       if (e.kind === 'land') {
         if (e.v < LANDING_MIN) continue;
         if (e.load.fragile && e.v > e.load.fragile) {
@@ -263,6 +277,7 @@ async function start() {
         else hud.say(`Apoyada · ${e.v.toFixed(2).replace('.', ',')} m/s`, 1.4);
       } else if (e.v > 0.25) bump('La carga chocó con un obstáculo');
     }
+    if (L!.tandem && tandemRules()) return true;
     if (!L!.lines?.length || tipped(units[0])) return false;
     const hk = phys.hookBody.translation(), a = phys.attached;
     let load;
@@ -279,6 +294,43 @@ async function start() {
     } else run.inProx = false;
     if (run.lineD < 0) {
       finish({ title: 'Contacto eléctrico', text: 'El equipo invadió la distancia mínima de seguridad del conductor energizado. Mantén la pluma, el cable y la carga lejos de los cables.' });
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Fallos del nivel de tándem (fase 10, no están en la referencia): una grúa con el LMI por encima del 100 % más de
+   * 0,5 s; un cable que lleva carga a más de 6° de la vertical más de 1 s (tiro lateral sobre la pluma); la columna
+   * ladeada más de 10° sobre su eje largo; un gancho contra su cabeza (doble bloqueo). Devuelve true si falló.
+   */
+  function tandemRules(): boolean {
+    const dt = FIXED_DT;
+    for (const u of units) {
+      if (tipped(u)) continue;
+      const { T, phys } = u;
+      u.over = u.dyn.lmi > 1 ? u.over + dt : 0;
+      if (u.over > OVER_T) {
+        finish({ title: 'Grúa sobrecargada', text: `La ${T.name} pasó del 100 % de LMI (${Math.round(u.dyn.lmi * 100)} %). En un tándem, al mover una grúa cambia el reparto de la carga: mueve una función a la vez y vigila el LMI de las dos.` });
+        return true;
+      }
+      const share = phys.slingShare();
+      if (share !== null && share > SIDE_LOAD) {
+        if (u.sideAng > SIDE_WARN) sayOnceU(u, `Tiro lateral: cable a ${deg(u.sideAng)}° de la vertical (máximo 6°)`);
+        u.side = u.sideAng > SIDE_MAX ? u.side + dt : 0;
+        if (u.side > SIDE_T) {
+          finish({ title: 'Tiro lateral', text: `El cable de la ${T.name} se apartó ${deg(u.sideAng)}° de la vertical (máximo 6°). La pluma no aguanta cargas de costado: mantén cada cable vertical con el giro y la pluma, y mueve una grúa a la vez.` });
+          return true;
+        }
+      } else u.side = 0;
+      if (phys.attached && phys.twoBlocked()) {
+        finish({ title: 'Doble bloqueo', text: `El gancho de la ${T.name} chocó con la cabeza de su pluma. Al subir la columna con la otra grúa, baja (F) el cable de esta o suéltala cuando ya no lleve carga.` });
+        return true;
+      }
+    }
+    const col = units[0].phys.loads[0];
+    if (col && rollOf(col.body.rotation()) > ROLL_MAX) {
+      finish({ title: 'Columna ladeada', text: `La columna se ladeó ${deg(rollOf(col.body.rotation()))}° sobre su eje (máximo 10°). Las dos grúas deben tirar en el mismo plano: no gires una mientras la otra sostiene el otro extremo.` });
       return true;
     }
     return false;
@@ -377,6 +429,8 @@ async function start() {
       return;
     }
     if (phys.twoBlocked()) sayOnceU(u, 'Gancho contra la cabeza de la pluma (doble bloqueo)');
+    // ángulo del cable con la vertical (tiro lateral del tándem)
+    u.sideAng = cableAngle(phys.headWorld(), phys.hookTop());
     // Estabilidad con la tensión real del cable: un balanceo o un tirón también cuentan.
     const md = supportMode(S, T);
     u.dyn = dynamicStability(T, C, S, md, phys.tension, worldToCarrier(S, phys.gp));
@@ -408,14 +462,16 @@ async function start() {
       // checkWin: cada 0,25 s, sin nada enganchado, todas las cargas sueltas y quietas en una zona
       if ((winCheck += dt) >= 0.25 && !tipped(units[0])) {
         winCheck = 0;
-        if (!phys.attached && allPlaced(phys.loads.map((l) => phys.placed(l)), L.zones)) { finish(null); return; }
+        if (units.every((u) => !u.phys.attached) && allPlaced(phys.loads.map((l) => phys.placed(l)), L.zones)) { finish(null); return; }
       }
       run.bumpCd = Math.max(0, run.bumpCd - dt);
-      // viento sobre la carga enganchada o el gancho (step de la referencia)
-      const a = phys.attached;
-      const w = windForce(L, run.t, windArea(a ? { w: 2 * a.half.x, d: 2 * a.half.z, h: 2 * a.half.y } : null));
-      run.wind = w.v;
-      phys.wind = { x: w.x, z: w.z };
+      // viento sobre la carga enganchada o el gancho (step de la referencia); tándem: lo pone una sola grúa
+      for (const u of units) {
+        const a = u.phys.attached;
+        const w = windForce(L, run.t, windArea(a ? { w: 2 * a.half.x, d: 2 * a.half.z, h: 2 * a.half.y } : null));
+        run.wind = w.v;
+        u.phys.wind = { x: w.x, z: w.z };
+      }
     }
     for (const u of units) controlUnit(u, dt, u === act);
     if (multi) Physics.stepCrew(units.map((u) => ({ phys: u.phys, S: u.S, pose: u.pose, slR: u.C.slR })));
@@ -498,9 +554,11 @@ async function start() {
       superlift: T.superlift ? { r: C.slR, min: T.superlift.rMin, max: T.superlift.rMax } : null,
       jib: T.jibDef ? { text: jibPhase(S.jg), p: S.jg, deg: ((S.ang - S.jibRel) * 180) / Math.PI, len: T.jibDef.len } : null,
       tower: T.tower ? { text: towerPhase(S.er, S.erT), p: S.er } : null,
+      side: share !== null ? { deg: (act.sideAng * 180) / Math.PI, max: 6 } : null,
     });
     const o = multi ? units.find((u) => u !== act)! : null;
-    hud.other(o ? { name: o.T.name, lmi: o.dyn.lmi, tension: o.phys.tension, share: o.phys.slingShare(), tiltDeg: (o.S.phi * 180) / Math.PI, tipped: tipped(o) } : null);
+    hud.other(o ? { name: o.T.name, lmi: o.dyn.lmi, tension: o.phys.tension, share: o.phys.slingShare(), tiltDeg: (o.S.phi * 180) / Math.PI, tipped: tipped(o),
+      sideDeg: o.phys.slingShare() !== null ? (o.sideAng * 180) / Math.PI : null } : null);
   }
   requestAnimationFrame(frame);
 

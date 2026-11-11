@@ -42,6 +42,8 @@ export interface Readout {
   jib: { text: string; p: number; deg: number; len: number } | null;
   /** Grúa torre: fase del montaje y avance 0…1 (null si no es grúa torre); con torre, Lb es la posición del carro */
   tower?: { text: string; p: number } | null;
+  /** Tándem: ángulo del cable con la vertical (°) y el máximo (null sin carga con orejetas) */
+  side?: { deg: number; max: number } | null;
 }
 
 /** Indicadores de montaje: verde montado, amarillo montando, gris desmontado. */
@@ -121,7 +123,7 @@ export class Hud {
   }
 
   /** Tándem: resumen de la otra grúa (null = ocultar) */
-  other(o: { name: string; lmi: number; tension: number; share: number | null; tiltDeg: number; tipped: boolean } | null) {
+  other(o: { name: string; lmi: number; tension: number; share: number | null; tiltDeg: number; tipped: boolean; sideDeg?: number | null } | null) {
     this.otherEl.hidden = !o;
     if (!o) return;
     const f = (v: number, d = 1) => v.toFixed(d).replace('.', ',');
@@ -131,7 +133,8 @@ export class Hud {
         `<div class="lmi ${cls}"><span>LMI</span><b>${Math.round(o.lmi * 100)} %</b>` +
         `<i><u style="width:${Math.min(100, (o.lmi / 1.25) * 100).toFixed(1)}%"></u><s></s></i></div>` +
         (o.tiltDeg > 0.05 ? `<div class="bad">¡Se levanta! ${f(o.tiltDeg)}°</div>` : '') +
-        `Tensión cable <b>${f(o.tension)} t</b>` + (o.share !== null ? ` · lleva <b>${f(o.share)} t</b>` : ''));
+        `Tensión cable <b>${f(o.tension)} t</b>` + (o.share !== null ? ` · lleva <b>${f(o.share)} t</b>` : '') +
+        (o.sideDeg != null ? `<br>Cable a <b class="${o.sideDeg > 6 ? 'bad' : o.sideDeg > 4 ? 'warn' : ''}">${f(o.sideDeg)}°</b> de la vertical` : ''));
   }
 
   /** Cartel de vuelco (null = ocultar) */
@@ -195,6 +198,7 @@ export class Hud {
       (!r.tipped && r.tiltDeg > 0.05 ? `<div class="bad">¡La grúa se levanta! ${f(r.tiltDeg)}°</div>` : '') +
       `Capacidad <b class="${r.mHook > r.rated ? 'bad' : ''}">${f(r.mHook)} / ${f(r.rated)} t</b><br>` +
       `Tensión cable <b>${f(r.tension, 2)} t</b><br>` +
+      (r.side ? `Cable a <b class="${r.side.deg > r.side.max ? 'bad' : r.side.deg > (r.side.max * 2) / 3 ? 'warn' : ''}">${f(r.side.deg)}°</b> de la vertical (máx ${r.side.max}°)<br>` : '') +
       assemblyLine(r) +
       `<small>Apoyo: ${r.mode} · masa y capacidad con gancho</small>`;
   }

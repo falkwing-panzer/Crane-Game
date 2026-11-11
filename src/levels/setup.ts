@@ -9,6 +9,9 @@ import type { Bounds, Obstacle, Physics } from '../physics/world';
 import { WD, WW, type Level, type LevelBox, type LevelCrate, type LevelZone } from './levels';
 
 export const LEVEL_BOUNDS: Bounds = { x0: 0, x1: WW, z0: 0, z1: WD };
+/** Medidas de la obra del nivel (fase 10: el de tándem es más grande) */
+export const levelSize = (L: Level): [number, number] => L.size ?? [WW, WD];
+export const levelBounds = (L: Level): Bounds => { const [w, d] = levelSize(L); return { x0: 0, x1: w, z0: 0, z1: d }; };
 
 /** Nombres de los tipos de caja para los mensajes */
 const KIND_LABEL: Record<string, string> = {
@@ -72,7 +75,7 @@ export function crateLoad(c: LevelCrate, base: number) {
     label: c.label, mass: c.m,
     half: { x: c.w / 2, y: c.h / 2, z: c.d / 2 },
     pos: { x: c.x, y: base + c.h / 2, z: c.z },
-    extra: { color: c.color, kind: c.kind, fragile: c.fragile },
+    extra: { color: c.color, kind: c.kind, fragile: c.fragile, lugs: c.lugs, stand: c.stand },
   };
 }
 
