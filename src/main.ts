@@ -8,6 +8,7 @@ import { baseConfig, lmiStatic, ratedCap, reach, type CraneConfig } from './cran
 import { dynamicStability, stepTilt, supportMode, toggleOutriggers, TILTED_PHI, type Dyn } from './crane/ops';
 import { apply, carrierFrame, carrierPose, edgeAxis, rotate, worldToCarrier, type Pose } from './crane/pose';
 import { stepDrive, stepSuspension } from './crane/drive';
+import { blockWhileTied } from './crane/tiedown';
 import { blockWhileAssembling, jibPhase, towerPhase, outriggersLocked, stepAssembly, teleLimit, toggleBallast, toggleMount, toggleYGuy, yGuyPhase } from './crane/assembly';
 import { CameraRig } from './render/camera';
 import { buildSite, TEST_HEAVY, TEST_OBSTACLES, TEST_SOFT } from './render/site';
@@ -236,6 +237,7 @@ async function start() {
   input.onMount = () => {
     if (!live()) return;
     const { T, S, phys, pose } = act;
+    if (phys.tied) { hud.say('Suelta primero el gancho del frente (Espacio)', 2); return; }
     if (T.jibDef && !act.jibOk) { hud.say(multi ? 'En el tándem no se monta el plumín' : 'En este trabajo no hace falta el plumín', 2); return; }
     hud.say(toggleMount(T, S, { loadAttached: !!phys.attached, groundBlocked: phys.jibGroundBlocked(S, pose) }), 2.4);
   };
@@ -389,6 +391,8 @@ async function start() {
     if (am) sayU(u, am, 2);
     const bm = blockWhileAssembling(S, inp, T);
     if (bm) sayOnceU(u, bm);
+    const tm = phys.tied ? blockWhileTied(inp) : null;
+    if (tm) sayOnceU(u, tm);
     const teleMax = teleLimit(T, S);
     if (inp.tele > 0 && S.Lb >= teleMax - 1e-6 && teleMax < T.boom.max) {
       sayOnceU(u, `Sin arriostramiento tensado la pluma solo llega a ${teleMax} m (Y)`);
@@ -576,7 +580,7 @@ async function start() {
       cable: S.cable,
       // tándem: la parte de la carga que lleva esta grúa
       load: att ? (share !== null ? `${att.label} ${phys.attachedLug === 0 ? '(cabeza)' : '(pie)'} ${f1(share)} de ${f1(att.mass)} t`
-        : `${att.label} ${f1(att.mass)} t`) : 'libre',
+        : `${att.label} ${f1(att.mass)} t`) : phys.tied ? 'amarrado al frente' : 'libre',
       fine: input.state().fine,
       lmi: act.dyn.lmi,
       rated: ratedCap(T, C, md, S.Lb, S.ang, S.slew),

@@ -61,6 +61,7 @@ V cámara (en la referencia cambiaba la vista lateral; aquí: orbital libre → 
 en el tándem, además, **cámara libre** fija en la obra que no salta de grúa con Tab).
 Extra (no está en la referencia), **solo en la prueba libre**: **X** reponer la carga en su posición inicial ·
 **P** puentear el LMI (sin cortes, para poder probar el vuelco; se apaga al reiniciar).
+**Espacio** junto al gancho de remolque delantero (grúas de ruedas): amarrar / soltar el gancho (posición de transporte).
 Fase 11: **N** silencia el sonido (se guarda). **Mando** (API Gamepad, mapeo standard; mapa en `ui/gamepad.ts`): sticks
 marcha/dirección y giro/pluma, LT/RT cable, LB/RB telescopio, cruceta plumín/superlift, A gancho, B estabilizadores,
 X lastre, Y cámara, View montaje, Menu Y-guy, clic izq. fino, clic der. cambiar de grúa.
@@ -408,8 +409,8 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   la RT y las orugas ocultan su cabina buscando ese material). La sección achaflanada cabe en la caja de la pluma (las
   pruebas de choques siguen con la caja). Las chapas de la cabeza no bajan del fondo de la pluma. La escalerilla del capó
   cuenta en `tailR`. **Sin materiales nuevos por grupo** (franjas blancas en `chrome`, barandillas en `dark`): la AT 650-8
-  queda en 145 draw calls. **No se hizo**: motón amarrado al parachoques (cambia el estado inicial de la física; se haría
-  aparte como "posición de transporte").
+  queda en 145 draw calls. El motón amarrado al parachoques se hizo después como acción
+  del jugador (ver "Amarre del gancho"); no cambia el estado inicial.
 
 - **LR 3000 / LR 300, equipos y remolque** (aproximación visual): en la LR 3000 los equipos van a los lados fuera del ancho
   del derrick (|z| ≥ 2,5) y los cabrestantes en el centro detrás de su pie; en la LR 300, detrás de las patas del caballete
@@ -468,6 +469,13 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - **Cámara libre del tándem** (pedido de Jesús): cuarto modo de V solo con dos grúas (`CameraRig.enableFree`). Entra
   con una vista amplia centrada entre las grúas y después solo la mueve el ratón: no sigue a nadie y Tab no la mueve.
   La orbital sigue saltando a la grúa activa con Tab, como antes.
+- **Amarre del gancho al frente** (pedido de Jesús; no está en la referencia), `crane/tiedown.ts`: en las 8 grúas de ruedas,
+  Espacio sin carga al alcance amarra el gancho al gancho de remolque delantero si su fondo está a ≤ 4 m en planta y entre
+  −1 y +1,5 m de alto (la RT 90 tiene la cabeza 3,4 m por delante del frente). Amarrado, el gancho es **cinemático** y sigue
+  la pose del chasis (girado 90°, lado estrecho hacia el camión); `S.cable` = distancia cabeza–gancho cada paso; tensión =
+  gancho; sin doble bloqueo. Se bloquean giro, pluma, telescopio, cable y plumín (conducir no); M avisa. Se suelta con
+  Espacio, al reiniciar y al volcar. Eslinga dibujada con los 4 ramales de la carga. Pruebas en `crane/tiedown.test.ts`
+  (las 8 grúas: conducir 8 s con curvas mueve el gancho < 0,15 m respecto del chasis; sin amarrar, > 0,3 m).
 - **Prueba libre del tándem**: sin obstáculos de prueba; las dos grúas empiezan montadas (estabilizadores, lastre, Y-guy) con
   los ganchos junto a sus orejetas; sin plumín. Columna 40 × 5 × 5 m y 400 t (aprobada por Jesús: la del nivel 13 pesa
   1.200 t y la AT 500-8 no llevaría su mitad). Reiniciar vuelve a colocar las dos.
