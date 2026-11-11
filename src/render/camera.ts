@@ -5,14 +5,16 @@ import type { SceneCtx } from './scene';
 import type { Eye } from './craneModel';
 
 // Cámaras (tecla V): orbital libre que acompaña a la grúa, seguimiento por detrás y cabina del conductor.
+// En el tándem hay una cuarta: cámara libre fija en la obra, que no sigue a ninguna grúa ni salta con Tab.
 // También mueve la luz con sombras para que su encuadre (±45 m) siga a la grúa.
 
-export type CamMode = 'orbita' | 'seguir' | 'cabina';
-const ORDER: CamMode[] = ['orbita', 'seguir', 'cabina'];
+export type CamMode = 'orbita' | 'seguir' | 'cabina' | 'libre';
+const ORDER: CamMode[] = ['orbita', 'seguir', 'cabina', 'libre'];
 const TEXT: Record<CamMode, string> = {
   orbita: 'Cámara orbital libre (ratón)',
   seguir: 'Cámara de seguimiento',
   cabina: 'Vista desde la cabina del conductor',
+  libre: 'Cámara libre: no sigue a ninguna grúa ni cambia con Tab (ratón; botón derecho para desplazarla)',
 };
 /** Distancia a la que se vuelve a centrar la luz: a saltos, para que la sombra no tiemble al moverse */
 const SUN_RECENTER = 15;
@@ -28,6 +30,8 @@ export class CameraRig {
   private sunAt = new THREE.Vector3(1e9, 0, 0); // fuerza el primer centrado
   /** Posición del sol respecto del centro del encuadre de sombras */
   private sunOffset = SUN_OFFSET.clone();
+  /** Tándem: centro de la vista libre (entre las grúas); sin él no hay modo 'libre' */
+  private freeCenter: (() => { x: number; z: number }) | null = null;
 
   /**
    * cab = piezas que se ocultan en la vista de cabina; eye(S) = ojo y mirada en el marco del chasis;
@@ -62,10 +66,16 @@ export class CameraRig {
     for (const m of this.cab) m.visible = this.mode !== 'cabina';
   }
 
+  /** Tándem: activa la cámara libre (modo 'libre' en el ciclo de V), centrada al entrar en center() */
+  enableFree(center: () => { x: number; z: number }) {
+    this.freeCenter = center;
+  }
+
   cycle(S: CraneState, pose: Pose): string {
-    this.mode = ORDER[(ORDER.indexOf(this.mode) + 1) % ORDER.length];
+    const order = this.freeCenter ? ORDER : ORDER.filter((m) => m !== 'libre');
+    this.mode = order[(order.indexOf(this.mode) + 1) % order.length];
     const { controls, camera } = this.ctx;
-    controls.enabled = this.mode === 'orbita';
+    controls.enabled = this.mode === 'orbita' || this.mode === 'libre';
     for (const m of this.cab) m.visible = this.mode !== 'cabina';
     if (this.mode === 'orbita') {
       // vuelve a una vista libre desde fuera, mirando a la grúa
@@ -73,6 +83,14 @@ export class CameraRig {
       const k = this.size;
       controls.target.set(c.x, 5 * k, c.z);
       camera.position.set(c.x + 22 * k, 16 * k, c.z + 26 * k);
+      controls.update();
+    }
+    if (this.mode === 'libre') {
+      // vista amplia entre las grúas; luego se queda donde el jugador la deje
+      const c = this.freeCenter!();
+      const k = this.size;
+      controls.target.set(c.x, 5 * k, c.z);
+      camera.position.set(c.x + 22 * k, 18 * k, c.z + 30 * k);
       controls.update();
     }
     if (this.mode === 'seguir') {
@@ -95,6 +113,8 @@ export class CameraRig {
       camera.position.add(d);
       controls.target.add(d);
       controls.update();
+    } else if (this.mode === 'libre') {
+      controls.update(); // solo el ratón la mueve (amortiguación de OrbitControls)
     } else if (this.mode === 'seguir') {
       // rumbo suavizado; detrás y arriba del portador
       let dy = S.h - this.yaw;
