@@ -8,6 +8,7 @@ import { craneMasses, supportRect, type CraneConfig, type SupportMode } from '..
 import { apply, axisAngle, mul, rotate, type Pose, type V3 } from '../crane/pose';
 import { padsOnSoft, terrainBlocked, type SoftZone } from '../crane/terrain';
 import { COUNTER_JIB, towerGeom } from '../crane/tower';
+import { canTie, tieLug, tieReach, tiedHookCenter } from '../crane/tiedown';
 import { foldedTowerBox } from '../render/models/tower';
 import type { BoxKind } from '../levels/levels';
 import { slingTensions, type SlingObs } from './tandem';
@@ -86,6 +87,10 @@ export class Physics {
   readonly softs: SoftZone[];
   /** Carga enganchada, si la hay */
   attached: Load | null = null;
+  /** Gancho amarrado al frente del chasis (posición de transporte): cinemático, sigue al chasis */
+  tied = false;
+  /** Pose del portador del último paso (para amarrar el gancho al pulsar Espacio) */
+  private lastPose: Pose | null = null;
   /** Tensión del cable (t), filtrada; incluye el gancho */
   tension = 0;
   /** Punto de suspensión para el momento de la tensión (gp de la referencia), en el mundo */
@@ -492,6 +497,7 @@ export class Physics {
   /** Reiniciar tras el vuelco: grúa de pie con la pose dada, gancho bajo la cabeza y cargas en su sitio. */
   reset(S: CraneState, pose: Pose) {
     this.resetLoads();
+    this.untie();
     if (this.tipped) { this.world.removeRigidBody(this.tipped); this.tipped = null; }
     else {
       this.world.removeImpulseJoint(this.cableJoint, true);
@@ -559,6 +565,15 @@ export class Physics {
       this.head = anchor;
       this.headBody.setNextKinematicTranslation(this.head);
       // El rope joint de Rapier no expone setMaxDistance en JS: su largo es el límite del eje LinX.
+      if (this.tied) {
+        // amarrado: el gancho va con el chasis y el cable mide lo que hay de la cabeza al gancho (R/F bloqueados)
+        const c = apply(pose, tiedHookCenter(this.T, hookScale(this.T), HOOK_HALF_H));
+        this.hookBody.setNextKinematicTranslation(c);
+        this.hookBody.setNextKinematicRotation(mul(pose.q, axisAngle(0, 1, 0, Math.PI / 2)));
+        const t = { x: c.x, y: c.y + HOOK_HALF_H, z: c.z };
+        S.cable = Math.hypot(t.x - this.head.x, t.y - this.head.y, t.z - this.head.z);
+      }
+      this.lastPose = pose;
       setRopeLength(this.cableJoint, S.cable);
     }
     this.dampSling();
@@ -584,7 +599,7 @@ export class Physics {
       if (!pre.side && this.sideContact(L)) this.events.push({ kind: 'strike', load: L, v: vh });
     }
     if (this.tipped) this.head = this.bodyPoint(this.tipped, this.headLocal.x, this.headLocal.y, this.headLocal.z);
-    else this.stopAtHead();
+    else if (!this.tied) this.stopAtHead();
     this.measureTension(S);
   }
 
@@ -684,6 +699,13 @@ export class Physics {
    * paso a paso, daba ±150 % de tensión con 800 t en la LR 3000 (fase 6B). Con 0,1 s el tirón se sigue viendo.
    */
   private measureTension(S: CraneState) {
+    if (this.tied) {
+      // amarrado: el cable solo sostiene el gancho (sin medir: el gancho cinemático no tiene la aceleración del cable)
+      this.tension += (this.T.hookM - this.tension) * Math.min(1, FIXED_DT / TENSION_TAU);
+      this.gp = { x: this.head.x, z: this.head.z };
+      this.trHook = newTrack();
+      return;
+    }
     const h = ACC_STEPS * FIXED_DT;
     const acc = (k: Track, p: V3) => {
       k.hist.push({ x: p.x, y: p.y, z: p.z });
@@ -732,6 +754,7 @@ export class Physics {
    */
   tipOver(C: CraneConfig, S: CraneState, md: SupportMode, pose: Pose, edgeP: V3, axis: V3) {
     if (this.tipped) return;
+    this.untie();
     const T = this.T, world = this.world, lift = carrierLift(S);
     // Masas puntuales en el marco del chasis (x, altura, z). Las alturas son aproximaciones:
     // la referencia solo tiene el modelo en planta. Las de solo-estabilizar (superlift) se quedan en el suelo.
@@ -876,6 +899,7 @@ export class Physics {
 
   /** Espacio: enganchar o soltar. Devuelve el mensaje para el operador (condiciones de la referencia). */
   toggleHook(): string {
+    if (this.tied) { this.untie(); return 'Gancho suelto del frente'; }
     if (this.attached) {
       const load = this.attached;
       // tándem: una grúa puede soltar mientras otra sostiene la carga (la de cola, con la columna ya de pie)
@@ -905,7 +929,13 @@ export class Physics {
       const gap = hookBottom - top.y; // gancho apoyado = 0; colgando a la distancia de eslinga ≈ 0,5
       return Math.hypot(top.x - hp.x, top.z - hp.z) < 1.0 && gap > -0.1 && gap < 1.1;
     });
-    if (!load) return 'Baja el gancho sobre el centro de la carga (o sobre una orejeta libre) para engancharla';
+    if (!load) {
+      const tie = this.tryTie();
+      if (tie) return tie;
+      return canTie(this.T) && !this.tipped
+        ? 'Baja el gancho sobre el centro de la carga para engancharla, o junto al gancho de remolque delantero para amarrarlo'
+        : 'Baja el gancho sobre el centro de la carga (o sobre una orejeta libre) para engancharla';
+    }
     if (Math.hypot(hv.x, hv.z) > 0.6) return 'Estabiliza el gancho antes de enganchar';
     // Eslinga: rope joint del fondo del gancho al centro de la cara superior de la carga (o a la orejeta).
     const anchor = load.lugs ? load.lugs[lug] : { x: 0, y: load.half.y, z: 0 };
@@ -922,6 +952,39 @@ export class Physics {
     load.body.wakeUp();
     const where = load.lugs ? (lug === 0 ? ' por la cabeza' : ' por el pie') : '';
     return `Enganchada ${load.label}${where} · ${load.mass.toFixed(1).replace('.', ',')} t`;
+  }
+
+  /**
+   * Amarra el gancho al frente del chasis si su fondo está al alcance del gancho de remolque delantero (tieReach;
+   * posición de transporte, no está en la referencia). null si no está al alcance.
+   */
+  private tryTie(): string | null {
+    const pose = this.lastPose;
+    if (!canTie(this.T) || this.tipped || !pose) return null;
+    const lug = apply(pose, tieLug(this.T)), hb = this.bodyPoint(this.hookBody, 0, -HOOK_HALF_H, 0);
+    if (!tieReach(lug, hb)) return null;
+    const hv = this.hookBody.linvel();
+    if (Math.hypot(hv.x, hv.z) > 0.6) return 'Estabiliza el gancho antes de amarrarlo';
+    this.hookBody.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased, true);
+    this.hookBody.setTranslation(apply(pose, tiedHookCenter(this.T, hookScale(this.T), HOOK_HALF_H)), true);
+    this.hookBody.setRotation(mul(pose.q, axisAngle(0, 1, 0, Math.PI / 2)), true);
+    this.tied = true;
+    return 'Gancho amarrado al frente (posición de transporte) · Espacio para soltarlo';
+  }
+
+  /** Suelta el amarre del gancho, si lo hay: vuelve a colgar del cable, quieto. */
+  untie() {
+    if (!this.tied) return;
+    this.tied = false;
+    this.hookBody.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
+    this.hookBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    this.hookBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    this.trHook = newTrack();
+  }
+
+  /** Argolla del amarre en el mundo (para dibujar la eslinga), o null si el gancho no está amarrado */
+  tieWorld(): V3 | null {
+    return this.tied && this.lastPose ? apply(this.lastPose, tieLug(this.T)) : null;
   }
 
   /** Suelta la eslinga, si hay (sin condiciones). */

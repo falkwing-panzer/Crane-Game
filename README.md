@@ -100,7 +100,7 @@ Las 11 son jugables, en los niveles y en la prueba libre.
 | W / S | Subir / bajar la pluma |
 | Q / E | Telescopar (en la grúa torre, mover el carro) |
 | R / F | Subir / bajar el cable |
-| Espacio | Enganchar / soltar la carga |
+| Espacio | Enganchar / soltar la carga; junto al frente, amarrar / soltar el gancho para conducir sin que se balancee (grúas de ruedas) |
 | Tab | Cambiar de grúa (tándem) |
 | O | Estabilizadores (no en orugas) |
 | B | Lastre |

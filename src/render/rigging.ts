@@ -126,7 +126,18 @@ export class Rigging {
 
     // Eslinga de 4 ramales (solo visual; en física es un punto)
     const L = p.attached;
-    this.sling.visible = !!L;
+    const tie = L ? null : p.tieWorld();
+    this.sling.visible = !!L || !!tie;
+    if (tie) {
+      // amarre al frente: cuatro ramales cortos del fondo del gancho al gancho de remolque
+      const hb = p.bodyPoint(p.hookBody, 0, -HOOK_HALF_H, 0);
+      let i = 0;
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+        this.slingPos.set([hb.x, hb.y, hb.z, tie.x + sx * 0.05, tie.y, tie.z + sz * 0.12], i);
+        i += 6;
+      }
+      (this.sling.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+    }
     if (L) {
       const hb = p.bodyPoint(p.hookBody, 0, -HOOK_HALF_H, 0);
       let i = 0;
