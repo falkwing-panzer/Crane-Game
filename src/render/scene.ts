@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { SHADOW_LAYER } from './models/builder';
+import { QUALITY, pixelRatio, type Quality } from '../ui/settings';
 
 export interface SceneCtx {
   renderer: THREE.WebGLRenderer;
@@ -13,14 +14,14 @@ export interface SceneCtx {
 const SKY_TOP = new THREE.Color('#5d8fc9');
 const SKY_HORIZON = new THREE.Color('#cfdde9');
 
-export function createScene(canvas: HTMLCanvasElement): SceneCtx {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-  // Tope de 1,5 para no renderizar muy por encima de 1080p con el escalado de Windows.
-  // Se puede forzar con ?pr=1 en la URL para comparar.
-  const pr = Number(new URLSearchParams(location.search).get('pr')) || Math.min(devicePixelRatio, 1.5);
-  renderer.setPixelRatio(pr);
+export function createScene(canvas: HTMLCanvasElement, quality: Quality = 'alto'): SceneCtx {
+  const Q = QUALITY[quality];
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: Q.antialias, powerPreference: 'high-performance' });
+  // Escala de píxel según la calidad (alto: tope de 1,5 para no renderizar muy por encima de 1080p con el escalado
+  // de Windows). Se puede forzar con ?pr=1 en la URL para comparar.
+  renderer.setPixelRatio(pixelRatio(quality, devicePixelRatio, Number(new URLSearchParams(location.search).get('pr')) || undefined));
   renderer.setSize(innerWidth, innerHeight, false);
-  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.enabled = Q.shadowMap > 0;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
 
@@ -47,8 +48,8 @@ export function createScene(canvas: HTMLCanvasElement): SceneCtx {
   // Una sola luz con sombras, mapa de 2048, encuadre fijo alrededor de la grúa.
   const sun = new THREE.DirectionalLight('#fff4e0', 2.4);
   sun.position.set(30, 50, 20);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.castShadow = Q.shadowMap > 0;
+  sun.shadow.mapSize.set(Q.shadowMap || 512, Q.shadowMap || 512);
   const s = sun.shadow.camera;
   s.left = -45; s.right = 45; s.top = 45; s.bottom = -45; s.near = 1; s.far = 140;
   sun.shadow.bias = -0.0005;

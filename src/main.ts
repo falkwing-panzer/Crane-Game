@@ -12,6 +12,7 @@ import { blockWhileAssembling, jibPhase, towerPhase, outriggersLocked, stepAssem
 import { CameraRig } from './render/camera';
 import { buildSite, TEST_HEAVY, TEST_OBSTACLES, TEST_SOFT } from './render/site';
 import { createScene } from './render/scene';
+import { loadSettings, saveSettings, QUALITIES, type Quality } from './ui/settings';
 import { CraneModel } from './render/craneModel';
 import { CrawlerModel } from './render/crawlerModel';
 import { Rigging } from './render/rigging';
@@ -72,7 +73,8 @@ const IDLE_DRIVE = { throttle: 0, steer: 0, fine: false };
 async function start() {
   await RAPIER.init();
 
-  const ctx = createScene(document.getElementById('c') as HTMLCanvasElement);
+  const settings = loadSettings();
+  const ctx = createScene(document.getElementById('c') as HTMLCanvasElement, settings.calidad);
   // ?nivel=1…13: un nivel (con ?grua= una de las permitidas; si no, la recomendada).
   // ?grua=id o ?libre=1: prueba libre con los obstáculos de prueba. ?tandem=1: prueba libre del tándem (dos grúas).
   // Sin parámetros: menú de niveles.
@@ -161,6 +163,17 @@ async function start() {
   const lui = new LevelUi(hudRoot);
   hudRoot.insertAdjacentHTML('beforeend', `<a class="panel menu-btn" href="${location.pathname}" style="top:${L ? 86 : 124}px">☰ Niveles</a>`);
   if (L) hudRoot.querySelector<HTMLElement>('.pick')!.hidden = true;
+  // Ajustes (fase 11): calidad gráfica (recarga la página: el antialias no cambia en marcha) y sonido
+  const qOpts = QUALITIES.map((q) => `<option value="${q}"${q === settings.calidad ? ' selected' : ''}>${q}</option>`).join('');
+  hudRoot.insertAdjacentHTML('beforeend', `<label class="panel pick prefs" style="top:${L ? 124 : 162}px">Calidad <select id="quality">${qOpts}</select></label>`);
+  const qSel = hudRoot.querySelector('#quality') as HTMLSelectElement;
+  qSel.addEventListener('change', () => {
+    saveSettings({ ...settings, calidad: qSel.value as Quality });
+    const u = new URL(location.href);
+    u.searchParams.delete('calidad');
+    location.href = u.toString();
+  });
+  qSel.addEventListener('keydown', (e) => { if (e.key !== 'Enter') { e.preventDefault(); qSel.blur(); } });
   let running = !L && !showMenu;
   /** Nivel: tiempo de turno, terminado (ganado o fallido), LMI máximo con la carga colgada */
   // (parte B) bumpCd: espera entre golpes; lineD: margen a la línea eléctrica más cercana; inProx: dentro de la alarma;
