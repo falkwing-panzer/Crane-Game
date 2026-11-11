@@ -1,5 +1,6 @@
 import type { CraneInput } from '../crane/kinematics';
 import type { DriveInput } from '../crane/drive';
+import { padAxes, padEdges, pressedList, type PadAction, type PadAxes } from './gamepad';
 
 // Mismas teclas que la referencia (keymap de crane-v20.html).
 const KEYMAP: Record<string, string> = {
@@ -11,6 +12,12 @@ const KEYMAP: Record<string, string> = {
 export class Input {
   private k: Record<string, number> = { sll: 0, slr: 0, lu: 0, ld: 0, to: 0, ti: 0, hu: 0, hd: 0, fw: 0, bk: 0, stl: 0, str: 0, sli: 0, slo: 0, ju: 0, jd: 0 };
   private fine = false;
+  /** mando (fase 11): ejes del último poll() y botones pulsados entonces */
+  private pad: PadAxes | null = null;
+  private padPrev: boolean[] = [];
+  /** se avisó de que hay un mando conectado */
+  onPad: (name: string) => void = () => {};
+  private padName = '';
   onHook: () => void = () => {};
   /** X: reponer la carga (ayuda de prueba, no está en la referencia) */
   onReset: () => void = () => {};
@@ -62,13 +69,36 @@ export class Input {
     });
   }
 
+  /**
+   * Mando (fase 11): lee el primer mando conectado; llamar una vez por cuadro. Los botones de un toque llaman a los
+   * mismos avisos que las teclas.
+   */
+  poll() {
+    const gp = typeof navigator !== 'undefined' && navigator.getGamepads ? [...navigator.getGamepads()].find((g) => g && g.connected) : null;
+    if (!gp) { this.pad = null; this.padPrev = []; this.padName = ''; return; }
+    if (gp.id !== this.padName) { this.padName = gp.id; this.onPad(gp.id); }
+    this.pad = padAxes(gp.axes, gp.buttons);
+    const act: Record<PadAction, () => void> = {
+      hook: () => this.onHook(), outriggers: () => this.onOutriggers(), ballast: () => this.onBallast(), view: () => this.onView(),
+      mount: () => this.onMount(), yguy: () => this.onYGuy(), switch: () => this.onSwitch(),
+    };
+    for (const a of padEdges(this.padPrev, gp.buttons)) act[a]();
+    this.padPrev = pressedList(gp.buttons);
+  }
+
   state(): CraneInput {
-    const k = this.k;
-    return { slew: k.sll - k.slr, luff: k.lu - k.ld, tele: k.to - k.ti, hoist: k.hd - k.hu, fine: this.fine, sl: k.slo - k.sli, jib: k.jd - k.ju };
+    const k = this.k, p = this.pad;
+    // la tecla manda; si no hay tecla, el mando (proporcional)
+    const m = (key: number, pad: number | undefined) => (key !== 0 ? key : pad ?? 0);
+    return {
+      slew: m(k.sll - k.slr, p?.slew), luff: m(k.lu - k.ld, p?.luff), tele: m(k.to - k.ti, p?.tele), hoist: m(k.hd - k.hu, p?.hoist),
+      fine: this.fine || !!p?.fine, sl: m(k.slo - k.sli, p?.sl), jib: m(k.jd - k.ju, p?.jib),
+    };
   }
 
   drive(): DriveInput {
-    const k = this.k;
-    return { throttle: k.fw - k.bk, steer: k.stl - k.str, fine: this.fine };
+    const k = this.k, p = this.pad;
+    const m = (key: number, pad: number | undefined) => (key !== 0 ? key : pad ?? 0);
+    return { throttle: m(k.fw - k.bk, p?.throttle), steer: m(k.stl - k.str, p?.steer), fine: this.fine || !!p?.fine };
   }
 }

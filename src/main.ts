@@ -240,6 +240,7 @@ async function start() {
     saveSettings(settings);
     hud.say(settings.sonido ? 'Sonido activado (N)' : 'Sonido apagado (N)', 1.5);
   };
+  input.onPad = (id) => hud.say(`Mando conectado: ${id.replace(/\s*\(.*$/, '')}`, 2.5);
   input.onView = () => hud.say(cam.cycle(act.S, act.pose), 1.5);
   input.onBypass = () => {
     if (L) { hud.say('El puenteo del LMI (P) solo está en la prueba libre', 2); return; }
@@ -513,6 +514,7 @@ async function start() {
     last = now;
     acc += dt;
 
+    input.poll(); // mando (fase 11)
     const t0 = performance.now();
     let n = 0;
     while (acc >= FIXED_DT && n < MAX_STEPS) {
