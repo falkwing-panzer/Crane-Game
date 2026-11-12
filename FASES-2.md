@@ -16,37 +16,37 @@ Regla para todo el bloque A: **medir antes y después** (fps, peor cuadro, draw 
 tamaño del bundle) y anotarlo en CLAUDE.md. Ninguna fase del motor puede cambiar el resultado de la estabilidad: las
 pruebas contra la referencia siguen pasando.
 
-Orden recomendado: **13 → 18** (bloque A, el motor) y después **19 → 25** (bloque B, el juego); 26–41 cuando quieras.
+Orden recomendado: **13 → 18** (bloque A, el motor), **19 → 25** (bloque B, el juego) y el **lanzamiento** cuando esté
+listo; 26–41 cuando quieras.
 
-**Probar con jugadores antes de seguir sumando:** son 29 fases. Después de la 13 y la 19, pasa el enlace a 5–10
-personas (mejor si alguna maneja grúas) y usa el botón "Opinión" de la fase 13 para que lo que digan decida el orden
-del resto.
+**Todavía no es para el público.** El enlace existe, pero no se comparte hasta que decidas que el juego está listo:
+entonces toca la sección **Lanzamiento al público** (después de la fase 25, sin número; se puede adelantar o atrasar).
+Ahí se prepara el enlace para compartir y se prueba con 5–10 personas (mejor si alguna maneja grúas), y lo que digan
+decide el orden del resto.
 
 ---
 
 # Bloque A: el motor
 
-## Fase 13: Listo para el público
+## Fase 13: Base de trabajo
 
 ```
-Lee CLAUDE.md. Fase 13: dejar la versión publicada sólida para alguien que la abre por primera vez.
+Lee CLAUDE.md. Fase 13: preparar la base para trabajar en la 2.0 (el juego todavía NO sale al público:
+nada de esto es para compartir el enlace).
 
-1. Pantalla de carga: el JS pesa ~1,9 MB comprimido. Muestra "Cargando…" con progreso hasta que Rapier y la
-   escena estén listos.
-2. Contador de fps y tiempos solo en desarrollo o con ?fps=1 (ahora salen también en la versión publicada).
-3. Ayuda de controles: tecla H (y un botón "?") con las teclas agrupadas; que aparezca sola la primera vez.
-4. Avisos: sin WebGL, un mensaje claro; en un celular sin teclado, decir que se juega con teclado o mando.
-5. Para compartir: favicon, descripción e imagen de vista previa (etiquetas og:).
-6. La acción de GitHub (.github/workflows/publicar.yml) corre `npm test` antes de compilar: si falla una
+1. La acción de GitHub (.github/workflows/publicar.yml) corre `npm test` antes de compilar: si falla una
    prueba, no se publica nada.
-7. Botón "Opinión" en el menú que abre un formulario (lo creo yo en Google Forms y te paso el enlace; el
-   juego no envía nada por su cuenta).
+2. Pantalla de carga: el JS pesa ~1,9 MB comprimido. Muestra "Cargando…" con progreso hasta que Rapier y la
+   escena estén listos.
+3. Ayuda de controles: tecla H (y un botón "?") con las teclas agrupadas, incluidas las que se fueron
+   añadiendo (cámara libre del tándem, amarre del gancho).
+4. Contador de fps y tiempos: en desarrollo siempre; en la versión publicada solo con ?fps=1.
 
 Antes de programar, dime el plan.
 ```
 
-Para revisar: abrir el enlace en una ventana privada; el fps no sale sin `?fps=1`; el enlace pegado en WhatsApp
-muestra imagen y descripción; en la pestaña Actions se ve el paso de las pruebas.
+Para revisar: en la pestaña Actions se ve el paso de las pruebas (y una prueba rota a propósito impide publicar);
+la ayuda con H lista todas las teclas; `?fps=1` muestra el contador en el enlace.
 
 ---
 
@@ -353,6 +353,31 @@ Diseña primero el equilibrio de dinero y enséñamelo antes de programar.
 ```
 
 Para revisar: 30 minutos de partida con progreso claro; nunca sale un contrato imposible.
+
+---
+
+## Lanzamiento al público (sin número: cuando decidas que está listo)
+
+```
+Lee CLAUDE.md. Lanzamiento: el juego ya está listo para compartirlo. Prepara el enlace público para alguien
+que lo abre por primera vez.
+
+1. Primera vez: la ayuda de controles (fase 13) sale sola; sugerir la escuela (fase 19) si está hecha.
+2. Avisos: sin WebGL, un mensaje claro; en un celular sin teclado, decir que se juega con teclado o mando.
+3. Para compartir: favicon, título, descripción e imagen de vista previa (etiquetas og:) para WhatsApp y redes.
+4. Botón "Opinión" en el menú que abre un formulario (lo creo yo en Google Forms y te paso el enlace; el
+   juego no envía nada por su cuenta).
+5. README pensado para jugadores (qué es, cómo se juega, el enlace) y la etiqueta de versión en git
+   (por ejemplo v2.0) con un resumen de lo nuevo.
+6. Revisión final: consola limpia en todos los niveles y pruebas libres desde el enlace publicado, en una
+   ventana privada (sin récords ni ajustes guardados).
+
+Antes de programar, dime el plan.
+```
+
+Para revisar: abrir el enlace en una ventana privada como alguien nuevo; el enlace pegado en WhatsApp muestra imagen
+y descripción; el botón Opinión abre el formulario. Después: pasar el enlace a 5–10 personas y ordenar el resto de
+fases con lo que digan.
 
 ---
 
