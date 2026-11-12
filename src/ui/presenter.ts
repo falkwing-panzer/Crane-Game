@@ -12,7 +12,7 @@ import { MENU_IDS, type Session, type Unit } from '../game/session';
 import { Hud } from './hud';
 import { Help } from './help';
 import { LevelUi, homeUrl, levelUrl } from './levelUi';
-import { Sound } from './audio';
+import type { Sound } from './audio';
 import { bootDone } from './boot';
 import { saveSettings, showFps, QUALITIES, type Quality, type Settings } from './settings';
 
@@ -53,7 +53,11 @@ export class Presenter {
   readonly sound: Sound;
   private readonly off: (() => void)[] = [];
 
-  constructor(private ctx: SceneCtx, private ses: Session, settings: Settings, root: HTMLElement) {
+  /**
+   * root = contenedor de esta partida dentro de #hud (se quita entero al desmontarla); sound = el de la app (uno solo);
+   * go(url) = ir a otro nivel o grúa sin recargar (fase 14).
+   */
+  constructor(private ctx: SceneCtx, private ses: Session, settings: Settings, root: HTMLElement, sound: Sound, go: (url: string) => void) {
     const { units, L, def, multi, bus } = ses;
     const act = ses.act;
     const specs = units.map((u) => u.T);
@@ -73,7 +77,7 @@ export class Presenter {
       ballast: any((T) => !!T.ballast), yguy: any((T) => !!T.yguy), jib: any((_, u) => u.jibOk), superlift: any((T) => !!T.superlift),
       tandem: multi, free: !L,
     }, hud.helpBtn);
-    hud.onCrane = (k) => { location.href = levelUrl(0, k); };
+    hud.onCrane = (k) => go(levelUrl(0, k));
 
     // Niveles: menú, ficha, carteles y reloj. El turno empieza en pausa hasta "Empezar turno".
     const lui = this.lui = new LevelUi(root);
@@ -91,9 +95,9 @@ export class Presenter {
     });
     qSel.addEventListener('keydown', (e) => { if (e.key !== 'Enter') { e.preventDefault(); qSel.blur(); } });
     if (def.showMenu) lui.menu();
-    else if (L) lui.brief(def.li, def.ids[0], (k) => { location.href = levelUrl(def.nivel, k); }, () => { ses.running = true; });
+    else if (L) lui.brief(def.li, def.ids[0], (k) => go(levelUrl(def.nivel, k)), () => { ses.running = true; });
 
-    this.sound = new Sound(settings.sonido, settings.volumen);
+    this.sound = sound;
 
     // Mensajes: en el tándem, los de la grúa que no se maneja llevan su nombre
     const name = (unit: number | undefined, text: string) => multi && unit !== undefined && units[unit] !== ses.act ? `${units[unit].T.name}: ${text}` : text;
@@ -205,6 +209,9 @@ export class Presenter {
       sideDeg: o.phys.slingShare() !== null ? (o.sideAng * 180) / Math.PI : null } : null);
   }
 
-  /** Quita los oyentes del bus */
-  dispose() { for (const f of this.off) f(); }
+  /** Quita los oyentes del bus y deja la cámara sin piezas ocultas de esta partida */
+  dispose() {
+    for (const f of this.off) f();
+    this.off.length = 0;
+  }
 }

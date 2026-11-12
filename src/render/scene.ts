@@ -87,6 +87,20 @@ export function createScene(canvas: HTMLCanvasElement, quality: Quality = 'alto'
   return { renderer, scene, camera, controls, sun };
 }
 
+/**
+ * Fase 14: deja la vista como al crear la escena (cámara, objetivo, niebla, distancia máxima), para montar otra
+ * partida sin recargar. `CameraRig` la ajusta después a la grúa nueva (encuadre de sombras, alejamiento de la LR 3000).
+ */
+export function resetView(ctx: SceneCtx) {
+  const { scene, camera, controls } = ctx;
+  if (scene.fog instanceof THREE.Fog) { scene.fog.near = 120; scene.fog.far = 420; }
+  camera.position.set(22, 16, 26);
+  controls.target.set(2, 5, 0);
+  controls.maxDistance = 200;
+  controls.enabled = true;
+  controls.update();
+}
+
 function gridTexture() {
   const c = document.createElement('canvas');
   c.width = c.height = 256;

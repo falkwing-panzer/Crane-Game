@@ -1,11 +1,10 @@
 import type * as THREE from 'three';
-import { CRANES, isCrawler, type CraneId, type CraneSpec, type WheeledSpec } from '../crane/cranes';
+import { CRANES, type CraneId, type CraneSpec } from '../crane/cranes';
 import { initialState, type CraneState } from '../crane/kinematics';
 import { baseConfig, type CraneConfig } from '../crane/stability';
 import { supportMode, type Dyn } from '../crane/ops';
 import { carrierPose, type Pose } from '../crane/pose';
-import { CraneModel } from '../render/craneModel';
-import { CrawlerModel } from '../render/crawlerModel';
+import type { CraneView, ModelFactory } from '../render/models/load';
 import { Rigging } from '../render/rigging';
 import { buildSite, TEST_HEAVY, TEST_OBSTACLES, TEST_SOFT } from '../render/site';
 import { buildLevelSite } from '../render/levelSite';
@@ -30,7 +29,7 @@ export interface Unit {
   T: CraneSpec;
   S: CraneState;
   C: CraneConfig;
-  crane: CraneModel | CrawlerModel;
+  crane: CraneView;
   phys: Physics;
   rig: Rigging;
   pose: Pose;
@@ -114,7 +113,8 @@ export class Session {
   bypass = false;
   run: Run = newRun();
 
-  constructor(def: SessionDef, scene: THREE.Scene) {
+  /** makeModel: los modelos 3D (`loadModels` en el juego, `allModels` en las pruebas) */
+  constructor(def: SessionDef, scene: THREE.Scene, makeModel: ModelFactory) {
     this.def = def;
     const L = (this.L = def.L);
     // Estado de cada grúa y su colocación
@@ -130,7 +130,7 @@ export class Session {
       const pose = carrierPose(T, S, supportMode(S, T));
       const phys = this.units.length ? new Physics(T, S, pose, { site: this.units[0].phys })
         : new Physics(T, S, pose, L ? { testLoad: false, bounds: levelBounds(L) } : def.freeTandem ? { testLoad: false } : {});
-      const crane = isCrawler(T) ? new CrawlerModel(T) : new CraneModel(T as WheeledSpec);
+      const crane = makeModel(T);
       scene.add(crane.root);
       this.units.push({
         ...st, i: this.units.length, crane, phys, pose, rig: null as unknown as Rigging, dyn: { u: 0, edge: 0, lmi: 0 }, cut: false,

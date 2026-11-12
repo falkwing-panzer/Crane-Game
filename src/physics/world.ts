@@ -142,7 +142,19 @@ export class Physics {
    * testLoad: caja de 2 t de prueba (prueba libre); bounds: límites de la obra.
    * site (tándem, fase 10): otra grúa cuyo mundo se comparte (suelo, obstáculos, cargas, terreno y límites).
    */
+  /** Esta grúa creó el mundo (la primera); la segunda del tándem lo comparte */
+  private readonly ownsWorld: boolean;
+
+  /**
+   * Fase 14: libera el mundo de Rapier (memoria del wasm) al desmontar la partida. Solo lo hace la grúa que lo creó;
+   * llamar después de soltar las demás. El objeto no se puede usar después.
+   */
+  dispose() {
+    if (this.ownsWorld) this.world.free();
+  }
+
   constructor(private T: CraneSpec, S: CraneState, pose: Pose, opts: { testLoad?: boolean; bounds?: Bounds; site?: Physics } = {}) {
+    this.ownsWorld = !opts.site;
     this.slR = T.superlift?.r0 ?? 0;
     this.slew = S.slew;
     // contrapeso en placas (fase 8B: también el fijo de las grúas sin lastre); la grúa torre lo lleva arriba
