@@ -65,6 +65,7 @@ Extra (no está en la referencia), **solo en la prueba libre**: **X** reponer la
 Fase 11: **N** silencia el sonido (se guarda). **Mando** (API Gamepad, mapeo standard; mapa en `ui/gamepad.ts`): sticks
 marcha/dirección y giro/pluma, LT/RT cable, LB/RB telescopio, cruceta plumín/superlift, A gancho, B estabilizadores,
 X lastre, Y cámara, View montaje, Menu Y-guy, clic izq. fino, clic der. cambiar de grúa.
+Fase 13: **H** (o el botón "?" de la franja de abajo) abre la ayuda con todas las teclas; **Esc** la cierra.
 
 ## Estado y decisiones
 Se trabaja por fases (ver `FASES.md`), con `/clear` entre fases. **Al cerrar cada fase, actualizar esta sección**
@@ -144,6 +145,11 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   `.github/workflows/publicar.yml` compila (`npm run build`, con tipos) y publica `dist/` en cada push a `main`.
   Decisión con Jesús: Pages con repo público (Netlify/Vercel permitían privado pero había que crear cuenta).
   Comprobado en el enlace público: menú y nivel 1 sin errores en consola.
+
+- **Fase 13** (base de trabajo de la 2.0, `FASES-2.md`; el juego todavía no es para el público): la acción corre
+  `npm test` antes de compilar (una prueba rota a propósito en una rama temporal detuvo la acción antes de publicar);
+  pantalla de carga; ayuda de controles con H / "?"; contador de fps en desarrollo o con `?fps=1`.
+  Pruebas en `ui/help.test.ts`.
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -231,6 +237,12 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   `createScene(canvas, calidad)`), `ui/audio.ts` (`soundTargets` sin Web Audio, `Sound`: se arranca con la primera
   tecla o clic; `update` cada cuadro en `draw()`, `thump` con los eventos `land`/`strike`), `ui/gamepad.ts` (`padAxes`,
   `padEdges`; `Input.poll()` una vez por cuadro en `frame()`; `advance()` no lo llama).
+- Fase 13: `ui/boot.ts` (`bootStage`, `nextPaint`, `bootDone` en el primer `render`, `bootError`; el HTML y el CSS de la
+  pantalla de carga van en `index.html` para que salgan antes de bajar el JS; marca `performance.mark('gruas-listo')`
+  al primer cuadro), `ui/help.ts` (`helpGroups(HelpFlags)` sin DOM, `Help`: panel; abierto, `Input.pause(true)` suelta
+  las teclas e ignora teclas y mando salvo H/Esc; la simulación sigue), `showFps(dev, search)` y `stickyParams` en
+  `settings.ts` (`?fps=` se conserva en `levelUrl`/`homeUrl`). La columna izquierda del HUD es `Hud.left` (flex: fps,
+  grúa, Niveles, Calidad; ya no hay `top` fijos). `.claude/launch.json` tiene `preview` (`vite preview`, puerto 4173).
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
   cut…, de la grúa que se maneja; `units`, todas) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
   dibuja cuadros; así se puede probar desde la consola).
@@ -564,6 +576,10 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   nivel 14 **134 draw calls** (antes 220), ~50.000 triángulos; render ~1–1,4 ms con `gl.finish` (antes ~2); con calidad
   baja 79. Nivel 11 con la AT 650-8 sin montar 78 (antes 138), nivel 9 77, SK 60 libre 58. El pase de sombras era ~2/3
   del render; la física, 0,11 ms por paso con dos grúas. **Pendiente: fps con el panel visible en uso normal.**
+
+- Fase 13: bundle 5.096.697 → 5.104.708 bytes (+8 kB; ~1,89 MB con gzip), CSS 5,0 → 6,0 kB. Con `vite preview` en local
+  (con caché): JS en ~0,1 s y primer cuadro (`gruas-listo`) a ~0,6 s en la LR 3000. **Pendiente**: carga real desde
+  GitHub Pages (la descarga de ~1,9 MB es la que muestra la pantalla de carga) y fps con el panel visible.
 
 ### Pendientes
 - Tándem: Jesús jugó el nivel 14 a mano y le pareció bien (el guion de prueba cambia de grúa ~13 veces al ponerla de
