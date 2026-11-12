@@ -201,7 +201,7 @@ describe('física de la grúa torre', () => {
     expect(tip.y).toBeGreaterThan(39);
     expect(Math.hypot(hk.x - tip.x, hk.z - tip.z)).toBeLessThan(0.5);
     expect(Math.abs(P.tension - T.hookM)).toBeLessThan(0.05);
-  });
+  }, 20_000); // ~0,7 s sola; con toda la batería en paralelo llegó a 6,8 s
 
   it('el montaje se detiene si la pluma va a tocar un obstáculo, y sigue al quitarlo de en medio (girando)', () => {
     const { S, C } = standing();

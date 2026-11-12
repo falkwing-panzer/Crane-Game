@@ -41,8 +41,12 @@ export class Input {
   onHelp: () => void = () => {};
   /** Esc: cerrar la ayuda (fase 13) */
   onEscape: () => void = () => {};
-  /** Con la ayuda abierta las teclas y el mando no mueven la grúa (solo H y Esc) */
-  private paused = false;
+  /**
+   * Motivos por los que las teclas y el mando no mueven la grúa (solo H y Esc): la ayuda abierta (fase 13) o el
+   * juego en pausa (fase 14: pestaña oculta, ventana sin foco, gráfica perdida).
+   */
+  private blocks = new Set<string>();
+  private get paused() { return this.blocks.size > 0; }
 
   constructor() {
     addEventListener('keydown', (e) => {
@@ -76,14 +80,17 @@ export class Input {
   }
 
   /** Suelta todas las teclas pulsadas */
-  private release() {
+  release() {
     for (const a in this.k) this.k[a] = 0;
     this.fine = false;
   }
 
   /** Ayuda abierta: no se aceptan teclas ni mando, y se sueltan las que estaban pulsadas */
-  pause(on: boolean) {
-    this.paused = on;
+  pause(on: boolean) { this.block('ayuda', on); }
+
+  /** Pone o quita un motivo para no aceptar teclas ni mando; siempre suelta las pulsadas */
+  block(reason: string, on: boolean) {
+    if (on) this.blocks.add(reason); else this.blocks.delete(reason);
     this.release();
   }
 
