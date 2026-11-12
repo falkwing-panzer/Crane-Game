@@ -578,8 +578,9 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   del render; la física, 0,11 ms por paso con dos grúas. **Pendiente: fps con el panel visible en uso normal.**
 
 - Fase 13: bundle 5.096.697 → 5.104.708 bytes (+8 kB; ~1,89 MB con gzip), CSS 5,0 → 6,0 kB. Con `vite preview` en local
-  (con caché): JS en ~0,1 s y primer cuadro (`gruas-listo`) a ~0,6 s en la LR 3000. **Pendiente**: carga real desde
-  GitHub Pages (la descarga de ~1,9 MB es la que muestra la pantalla de carga) y fps con el panel visible.
+  (con caché): JS en ~0,1 s y primer cuadro (`gruas-listo`) a ~0,6 s en la LR 3000. **Desde GitHub Pages** (nivel 1, sin
+  caché, conexión de la laptop): JS 1,84 MB comprimido en 1,6 s y primer cuadro a 2,4 s. **Pendiente**: fps con el panel
+  visible. Avisos de la acción (no fallan todavía): las acciones v4 usan Node 20 (obsoleto) y `ubuntu-latest` pasa a Ubuntu 26.
 
 ### Pendientes
 - Tándem: Jesús jugó el nivel 14 a mano y le pareció bien (el guion de prueba cambia de grúa ~13 veces al ponerla de
