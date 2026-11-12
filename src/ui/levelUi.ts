@@ -1,6 +1,7 @@
 import { CRANES, type CraneId } from '../crane/cranes';
 import type { Level } from '../levels/levels';
 import { ALL_LEVELS as LEVELS } from '../levels/tandemSetup';
+import { stickyParams } from './settings';
 
 // Pantallas de los niveles (HTML simple, como el HUD): menú de niveles, ficha de briefing con la elección de
 // grúa (showBrief de la referencia), cartel de nivel completado o fallido (checkWin, fail), reloj y récords
@@ -58,14 +59,22 @@ function tandemCranes(L: Level) {
 
 const starText = (n: number) => `${'★'.repeat(n)}<span class="off">${'★'.repeat(3 - n)}</span>`;
 
-/** URL de un nivel (1…13) con una grúa, o de la prueba libre (nivel 0) */
+/** URL de un nivel (1…13) con una grúa, o de la prueba libre (nivel 0); conserva ?fps= */
 export function levelUrl(n: number, crane?: string) {
   const u = new URL(location.href);
+  const keep = stickyParams(u.search);
   u.search = '';
   if (n > 0) u.searchParams.set('nivel', String(n));
   else u.searchParams.set('libre', '1');
   if (crane) u.searchParams.set('grua', crane);
+  for (const [k, v] of keep) u.searchParams.set(k, v);
   return u.toString();
+}
+
+/** URL del menú de niveles (o con extra, p. ej. tandem=1), conservando ?fps= */
+export function homeUrl(extra: Record<string, string> = {}) {
+  const q = new URLSearchParams([...Object.entries(extra), ...stickyParams(location.search)]).toString();
+  return location.pathname + (q ? `?${q}` : '');
 }
 
 export class LevelUi {
@@ -103,7 +112,7 @@ export class LevelUi {
           <span class="stars">${starText(r?.stars ?? 0)}</span><small>${r ? `récord ${fmt(r.time)}` : `par ${fmt(L.par)}`}</small></a>`;
       }).join('')}
       <a class="lvl free" href="${levelUrl(0)}"><small>Sin objetivo</small><b>Prueba libre</b><small>todas las grúas, obstáculos de prueba</small></a>
-      <a class="lvl free" href="${location.pathname}?tandem=1"><small>Sin objetivo</small><b>Prueba libre en tándem</b><small>LR 3000 y AT 500-8 con una columna</small></a></div>`);
+      <a class="lvl free" href="${homeUrl({ tandem: '1' })}"><small>Sin objetivo</small><b>Prueba libre en tándem</b><small>LR 3000 y AT 500-8 con una columna</small></a></div>`);
   }
 
   /**
@@ -124,7 +133,7 @@ export class LevelUi {
           <small>${c.size}${c.id === L.rec ? ' · recomendada' : ''}</small><b>${c.name}</b>
           <small>${c.structMax} t máx · pluma ${boom}</small><em class="${ok ? '' : 'why'}">${ok ? c.note : why}</em></button>`;
       }).join('')}</div>`}
-      <div class="row"><a class="btn" href="${location.pathname}">Niveles</a><button class="btn primary" id="l-start">Empezar turno</button></div>`);
+      <div class="row"><a class="btn" href="${homeUrl()}">Niveles</a><button class="btn primary" id="l-start">Empezar turno</button></div>`);
     this.card.querySelectorAll<HTMLButtonElement>('.copt').forEach((b) => {
       b.onclick = () => { if (b.dataset.c !== current) onPick(b.dataset.c as CraneId); };
     });
@@ -140,7 +149,7 @@ export class LevelUi {
       <div class="stars big">${starText(n)}</div>${record ? '<p class="rec">¡Nuevo récord!</p>' : ''}
       <div class="stats"><span>Tiempo (par ${fmt(L.par)})</span><b>${fmt(res.t)}</b><span>Aterrizajes duros</span><b>${res.hard}</b>
       <span>Golpes</span><b>${res.bumps}</b><span>Alarmas de línea</span><b>${res.prox}</b><span>LMI máximo</span><b>${Math.round(res.maxLmi * 100)} %</b></div>
-      <div class="row"><a class="btn" href="${location.pathname}">Niveles</a><a class="btn${next ? '' : ' primary'}" href="${levelUrl(i + 1)}">Repetir</a>
+      <div class="row"><a class="btn" href="${homeUrl()}">Niveles</a><a class="btn${next ? '' : ' primary'}" href="${levelUrl(i + 1)}">Repetir</a>
       ${next ? `<a class="btn primary" id="l-next" href="${levelUrl(i + 2)}">Siguiente nivel</a>` : ''}</div>
       ${next ? '' : '<p>Era el último trabajo. Vuelve por las tres estrellas en cada nivel o prueba otras grúas.</p>'}`);
     this.card.querySelector<HTMLElement>('#l-next')?.focus({ preventScroll: true });
@@ -149,7 +158,7 @@ export class LevelUi {
   /** Nivel fallido (fail de la referencia) */
   failed(i: number, crane: string, title: string, text: string) {
     this.show(`<div class="eyebrow">Nivel ${i + 1} fallido · ${crane}</div><h2>${title}</h2><p>${text}</p>
-      <div class="row"><a class="btn" href="${location.pathname}">Niveles</a><a class="btn primary" id="l-retry" href="${location.href}">Repetir</a></div>`, true);
+      <div class="row"><a class="btn" href="${homeUrl()}">Niveles</a><a class="btn primary" id="l-retry" href="${location.href}">Repetir</a></div>`, true);
     this.card.querySelector<HTMLElement>('#l-retry')?.focus({ preventScroll: true });
   }
 

@@ -1,4 +1,4 @@
-# Compila el juego y lo publica en GitHub Pages en cada push a main.
+# Corre las pruebas, compila el juego y lo publica en GitHub Pages en cada push a main.
 # También se puede lanzar a mano desde la pestaña Actions ("Run workflow").
 name: Publicar en GitHub Pages
 
@@ -26,6 +26,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # Si falla una prueba, se detiene aquí y no se publica nada.
+      - name: Pruebas
+        run: npm test
       - run: npm run build
       - uses: actions/upload-pages-artifact@v3
         with:

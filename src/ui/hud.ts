@@ -68,7 +68,7 @@ function assemblyLine(r: Readout) {
 }
 
 export class Hud {
-  private perf: HTMLElement;
+  private perf: HTMLElement | null;
   private data: HTMLElement;
   private msg: HTMLElement;
   private msgT = 0;
@@ -86,32 +86,42 @@ export class Hud {
 
   private otherEl: HTMLElement;
 
+  /** Columna de la izquierda (fps, grúa, niveles, calidad, ayuda): se apilan solos, con o sin el contador de fps */
+  readonly left: HTMLElement;
+  /** Botón "?" de la ayuda */
+  readonly helpBtn: HTMLElement;
+
+  /** perf: mostrar el contador de fps y tiempos (en desarrollo siempre; publicado, solo con ?fps=1) */
   constructor(root: HTMLElement, private title: string, current: string, cranes: { id: string; name: string }[],
-    has: { ballast: boolean; yguy: boolean; outriggers: boolean; tele: boolean; superlift: boolean; jib: boolean; tower?: boolean; tandem?: boolean } =
-    { ballast: false, yguy: false, outriggers: true, tele: true, superlift: false, jib: false }) {
+    has: { tele: boolean; tower?: boolean } = { tele: true }, perf = true) {
     const opts = cranes.map((c) => `<option value="${c.id}"${c.id === current ? ' selected' : ''}>${c.name}</option>`).join('');
     root.innerHTML = `
-      <div class="panel perf" id="perf">— fps</div>
-      <label class="panel pick">Grúa <select id="crane">${opts}</select></label>
+      <div class="left" id="left">
+        ${perf ? '<div class="panel perf" id="perf">— fps</div>' : ''}
+        <label class="panel pick">Grúa <select id="crane">${opts}</select></label>
+      </div>
       <div class="panel data" id="data"></div>
       <div class="panel data other" id="other" hidden></div>
       <div class="msg" id="msg"></div>
       <div class="panel keys">
         <b>Flechas</b> conducir · <b>A/D</b> giro · <b>W/S</b> pluma · ${has.tower ? '<b>Q/E</b> carro · ' : has.tele ? '<b>Q/E</b> telescopio · ' : ''}<b>R/F</b> gancho ·
-        ${has.outriggers ? '<b>O</b> estabilizadores · ' : ''}${has.ballast ? '<b>B</b> lastre · ' : ''}${has.yguy ? '<b>Y</b> arriostramiento · ' : ''}${has.superlift ? '<b>K/L</b> radio superlift · ' : ''}${has.jib ? '<b>M</b> montar plumín · <b>T/G</b> plumín · ' : ''}${has.tower ? '<b>M</b> montar torre · ' : ''}<b>Espacio</b> enganchar/soltar · ${has.tandem ? '<b>Tab</b> cambiar de grúa · ' : ''} <b>X</b> reponer carga · <b>P</b> puentear LMI · <b>Shift</b> fino · <b>V</b> cámara · <b>N</b> sonido
+        <b>Espacio</b> enganchar · <b>V</b> cámara · <b>H</b> todas las teclas
+        <button class="help-btn" id="help-btn" title="Controles (H)" aria-label="Controles (H)">?</button>
       </div>
       <div class="card" id="card" hidden>
         <h2>Grúa volcada</h2>
         <p id="card-text"></p>
         <button id="card-restart">Reiniciar</button>
       </div>`;
+    this.left = root.querySelector('#left')!;
+    this.helpBtn = root.querySelector('#help-btn')!;
     this.card = root.querySelector('#card')!;
     root.querySelector('#card-restart')!.addEventListener('click', () => this.onRestart());
     const sel = root.querySelector('#crane') as HTMLSelectElement;
     sel.addEventListener('change', () => this.onCrane(sel.value));
     // las teclas del juego no deben mover el menú: se suelta el foco al elegir o al pulsar una tecla
     sel.addEventListener('keydown', (e) => { if (e.key !== 'Enter') { e.preventDefault(); sel.blur(); } });
-    this.perf = root.querySelector('#perf')!;
+    this.perf = root.querySelector<HTMLElement>('#perf'); // null sin contador (perf = false)
     this.data = root.querySelector('#data')!;
     this.msg = root.querySelector('#msg')!;
     this.otherEl = root.querySelector('#other')!;
@@ -167,6 +177,7 @@ export class Hud {
     this.renderAcc += renderMs;
     if (this.msgT > 0 && (this.msgT -= dt) <= 0) this.msg.classList.remove('on');
     if (this.acc < 0.5) return;
+    if (!this.perf) { this.frames = 0; this.acc = 0; this.worst = 0; this.physAcc = 0; this.renderAcc = 0; return; }
     const n = this.frames;
     const fps = n / this.acc;
     this.perf.innerHTML =

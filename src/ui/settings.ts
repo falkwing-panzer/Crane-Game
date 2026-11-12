@@ -64,3 +64,18 @@ export function pixelRatio(q: Quality, dpr: number, prOverride?: number) {
   const Q = QUALITY[q];
   return Math.min(dpr, Q.prMax) * Q.prScale;
 }
+
+/**
+ * Contador de fps y tiempos (fase 13): en desarrollo siempre; en la versión publicada solo con ?fps=1
+ * (?fps=0 lo quita también en desarrollo).
+ */
+export function showFps(dev: boolean, search: string) {
+  const v = new URLSearchParams(search).get('fps');
+  return v === null ? dev : v !== '0';
+}
+
+/** Parámetros de la URL que se conservan al cambiar de nivel, de grúa o volver al menú (fase 13: ?fps=) */
+export function stickyParams(search: string) {
+  const v = new URLSearchParams(search).get('fps');
+  return v === null ? [] : [['fps', v] as [string, string]];
+}

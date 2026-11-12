@@ -8,24 +8,26 @@ import { baseConfig, lmiStatic, ratedCap, reach, type CraneConfig } from './cran
 import { dynamicStability, stepTilt, supportMode, toggleOutriggers, TILTED_PHI, type Dyn } from './crane/ops';
 import { apply, carrierFrame, carrierPose, edgeAxis, rotate, worldToCarrier, type Pose } from './crane/pose';
 import { stepDrive, stepSuspension } from './crane/drive';
-import { blockWhileTied } from './crane/tiedown';
+import { blockWhileTied, canTie } from './crane/tiedown';
 import { blockWhileAssembling, jibPhase, towerPhase, outriggersLocked, stepAssembly, teleLimit, toggleBallast, toggleMount, toggleYGuy, yGuyPhase } from './crane/assembly';
 import { CameraRig } from './render/camera';
 import { buildSite, TEST_HEAVY, TEST_OBSTACLES, TEST_SOFT } from './render/site';
 import { createScene } from './render/scene';
 import { Sound } from './ui/audio';
-import { loadSettings, saveSettings, QUALITIES, type Quality } from './ui/settings';
+import { loadSettings, saveSettings, showFps, QUALITIES, type Quality } from './ui/settings';
 import { CraneModel } from './render/craneModel';
 import { CrawlerModel } from './render/crawlerModel';
 import { Rigging } from './render/rigging';
 import { Physics, FIXED_DT } from './physics/world';
 import { Input } from './ui/input';
 import { Hud } from './ui/hud';
+import { bootDone, bootError, bootStage, nextPaint } from './ui/boot';
 import { stepSuperlift } from './crane/superlift';
 import { allPlaced, levelBounds, placeCrane, populate } from './levels/setup';
 import { ALL_LEVELS as LEVELS, OVER_T, ROLL_MAX, SIDE_LOAD, SIDE_MAX, SIDE_T, SIDE_WARN, TANDEM_IDS, TEST_COLUMN, cableAngle, placeTandem, rollOf, tandemColumn } from './levels/tandemSetup';
 import { buildLevelSite } from './render/levelSite';
-import { LevelUi, levelUrl, saveRecord, stars } from './ui/levelUi';
+import { LevelUi, homeUrl, levelUrl, saveRecord, stars } from './ui/levelUi';
+import { Help } from './ui/help';
 import { HARD_LANDING, LANDING_MIN, LINE_WARN, lineMargin, windArea, windForce } from './levels/rules';
 import { boomFoot, headPos } from './crane/kinematics';
 
@@ -73,7 +75,12 @@ const IDLE = { slew: 0, luff: 0, tele: 0, hoist: 0, fine: false, sl: 0, jib: 0 }
 const IDLE_DRIVE = { throttle: 0, steer: 0, fine: false };
 
 async function start() {
+  // el JS ya bajó: quedan la física (wasm), la escena y el primer cuadro
+  bootStage('iniciando la física', 0.55);
+  await nextPaint();
   await RAPIER.init();
+  bootStage('armando la escena', 0.8);
+  await nextPaint();
 
   const settings = loadSettings();
   const ctx = createScene(document.getElementById('c') as HTMLCanvasElement, settings.calidad);
@@ -161,18 +168,27 @@ async function start() {
   const input = new Input();
   const any = (f: (T: CraneSpec, u: Unit) => boolean) => units.some((u) => f(u.T, u));
   const hud = new Hud(document.getElementById('hud')!, act.T.name, act.id, MENU_IDS.map((k) => ({ id: k, name: CRANES[k].name })),
-    { ballast: any((T) => !!T.ballast), yguy: any((T) => !!T.yguy), outriggers: any((T) => !!T.out), tele: any((T) => T.boom.max > T.boom.min),
-      superlift: any((T) => !!T.superlift), jib: any((_, u) => u.jibOk), tower: any((T) => !!T.tower), tandem: multi });
+    { tele: any((T) => T.boom.max > T.boom.min), tower: any((T) => !!T.tower) }, showFps(import.meta.env.DEV, location.search));
+  // Ayuda de controles (fase 13): H o el botón "?"; solo las teclas de las grúas de esta partida
+  const help = new Help(document.getElementById('hud')!, {
+    tele: any((T) => !T.tower && T.boom.max > T.boom.min), tower: any((T) => !!T.tower), outriggers: any((T) => !!T.out),
+    crawler: any((T) => isCrawler(T)), wheels: any((T) => !isCrawler(T)), tie: any((T) => canTie(T)),
+    ballast: any((T) => !!T.ballast), yguy: any((T) => !!T.yguy), jib: any((_, u) => u.jibOk), superlift: any((T) => !!T.superlift),
+    tandem: multi, free: !L,
+  }, hud.helpBtn);
+  help.onToggle = (open) => input.pause(open);
+  input.onHelp = () => help.toggle();
+  input.onEscape = () => help.toggle(false);
   hud.onCrane = (k) => { location.href = levelUrl(0, k); };
 
   // Niveles: menú, ficha, carteles y reloj. El turno empieza en pausa hasta "Empezar turno".
   const hudRoot = document.getElementById('hud')!;
   const lui = new LevelUi(hudRoot);
-  hudRoot.insertAdjacentHTML('beforeend', `<a class="panel menu-btn" href="${location.pathname}" style="top:${L ? 86 : 124}px">☰ Niveles</a>`);
+  hud.left.insertAdjacentHTML('beforeend', `<a class="panel menu-btn" href="${homeUrl()}">☰ Niveles</a>`);
   if (L) hudRoot.querySelector<HTMLElement>('.pick')!.hidden = true;
   // Ajustes (fase 11): calidad gráfica (recarga la página: el antialias no cambia en marcha) y sonido
   const qOpts = QUALITIES.map((q) => `<option value="${q}"${q === settings.calidad ? ' selected' : ''}>${q}</option>`).join('');
-  hudRoot.insertAdjacentHTML('beforeend', `<label class="panel pick prefs" style="top:${L ? 124 : 162}px">Calidad <select id="quality">${qOpts}</select></label>`);
+  hud.left.insertAdjacentHTML('beforeend', `<label class="panel pick prefs">Calidad <select id="quality">${qOpts}</select></label>`);
   const qSel = hudRoot.querySelector('#quality') as HTMLSelectElement;
   qSel.addEventListener('change', () => {
     saveSettings({ ...settings, calidad: qSel.value as Quality });
@@ -544,6 +560,7 @@ async function start() {
     }
     cam.update(dt, act.S, act.pose);
     ctx.renderer.render(ctx.scene, ctx.camera);
+    bootDone(); // primer cuadro dibujado: se quita la pantalla de carga
     const ki = input.state();
     sound.update(dt, {
       speed: act.S.vd,
@@ -630,5 +647,5 @@ async function start() {
 
 start().catch((err) => {
   console.error(err);
-  document.body.insertAdjacentHTML('beforeend', `<pre style="position:fixed;top:40%;left:20px;color:#b00">${String(err)}</pre>`);
+  if (!bootError(err)) document.body.insertAdjacentHTML('beforeend', `<pre style="position:fixed;top:40%;left:20px;color:#b00">${String(err)}</pre>`);
 });

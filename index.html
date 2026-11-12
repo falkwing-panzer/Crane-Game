@@ -4,8 +4,29 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Simulador de grúas 3D</title>
+    <!-- Pantalla de carga (fase 13): va aquí, sin el JS del juego, para que salga mientras se descarga (~1,9 MB). -->
+    <style>
+      #boot { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center;
+        justify-content: center; gap: 14px; background: #1b2026; color: #f2f4f6; font: 15px/1.4 system-ui, 'Segoe UI', sans-serif;
+        transition: opacity 0.4s; }
+      #boot.gone { opacity: 0; pointer-events: none; }
+      #boot h1 { margin: 0; font-size: 22px; color: #f0bb27; letter-spacing: 0.02em; }
+      #boot .bar { position: relative; width: min(320px, calc(100% - 64px)); height: 8px; border-radius: 4px;
+        background: rgba(255, 255, 255, 0.14); overflow: hidden; }
+      #boot .bar u { position: absolute; inset: 0 auto 0 0; width: 0; background: #f0bb27; transition: width 0.3s; }
+      /* descarga: no se sabe cuánto falta, la barra se mueve sola */
+      #boot.wait .bar u { width: 30%; animation: boot-slide 1.1s ease-in-out infinite; transition: none; }
+      @keyframes boot-slide { from { left: -30%; } to { left: 100%; } }
+      #boot p { margin: 0; color: #aab3bc; font-variant-numeric: tabular-nums; }
+      #boot pre { max-width: calc(100% - 48px); white-space: pre-wrap; color: #ff9c8f; margin: 0; }
+    </style>
   </head>
   <body>
+    <div id="boot" class="wait" role="status" aria-live="polite">
+      <h1>Simulador de grúas</h1>
+      <div class="bar"><u></u></div>
+      <p id="boot-text">Cargando… descargando el juego</p>
+    </div>
     <canvas id="c"></canvas>
     <div id="hud"></div>
     <script type="module" src="/src/main.ts"></script>

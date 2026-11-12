@@ -37,9 +37,18 @@ export class Input {
   onSwitch: () => void = () => {};
   /** N: silenciar el sonido (fase 11) */
   onMute: () => void = () => {};
+  /** H: ayuda de controles (fase 13) */
+  onHelp: () => void = () => {};
+  /** Esc: cerrar la ayuda (fase 13) */
+  onEscape: () => void = () => {};
+  /** Con la ayuda abierta las teclas y el mando no mueven la grúa (solo H y Esc) */
+  private paused = false;
 
   constructor() {
     addEventListener('keydown', (e) => {
+      if (e.code === 'KeyH' && !e.repeat) { this.onHelp(); return; }
+      if (e.code === 'Escape' && !e.repeat) { this.onEscape(); return; }
+      if (this.paused) { if (e.code === 'Space' || e.code === 'Tab') e.preventDefault(); return; }
       if (e.key === 'Shift') this.fine = true;
       if (e.code === 'KeyX' && !e.repeat) { this.onReset(); return; }
       if (e.code === 'KeyO' && !e.repeat) { this.onOutriggers(); return; }
@@ -63,10 +72,19 @@ export class Input {
       const a = KEYMAP[e.code];
       if (a) this.k[a] = 0;
     });
-    addEventListener('blur', () => {
-      for (const a in this.k) this.k[a] = 0;
-      this.fine = false;
-    });
+    addEventListener('blur', () => this.release());
+  }
+
+  /** Suelta todas las teclas pulsadas */
+  private release() {
+    for (const a in this.k) this.k[a] = 0;
+    this.fine = false;
+  }
+
+  /** Ayuda abierta: no se aceptan teclas ni mando, y se sueltan las que estaban pulsadas */
+  pause(on: boolean) {
+    this.paused = on;
+    this.release();
   }
 
   /**
@@ -76,6 +94,7 @@ export class Input {
   poll() {
     const gp = typeof navigator !== 'undefined' && navigator.getGamepads ? [...navigator.getGamepads()].find((g) => g && g.connected) : null;
     if (!gp) { this.pad = null; this.padPrev = []; this.padName = ''; return; }
+    if (this.paused) { this.pad = null; this.padPrev = pressedList(gp.buttons); return; }
     if (gp.id !== this.padName) { this.padName = gp.id; this.onPad(gp.id); }
     this.pad = padAxes(gp.axes, gp.buttons);
     const act: Record<PadAction, () => void> = {
