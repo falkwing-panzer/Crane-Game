@@ -151,6 +151,15 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   pantalla de carga; ayuda de controles con H / "?"; contador de fps en desarrollo o con `?fps=1`.
   Pruebas en `ui/help.test.ts`.
 
+- **Fase 14, parte A** (motor: arquitectura y robustez; plan aprobado por Jesús en 3 partes: A = pasos 2 y 5,
+  B = 3 y 4, C = 6–8): `main.ts` (651 líneas) dividido en `game/` y `ui/` con un bus de eventos, sin cambiar el
+  comportamiento; pausa automática (pestaña oculta, ventana sin foco) y recuperación del contexto WebGL. Pruebas en
+  `game/events.test.ts`, `game/loop.test.ts` y `game/session.test.ts` (partida y reglas por el bus en Node).
+  Medidas antes de tocar nada (paso 1, `vite preview` en local con caché): primer cuadro 0,7–1,5 s según la página;
+  el primer dibujo es un cuadro de 220–460 ms (compilación de shaders); heap 21 MB en el menú y 56–64 MB con la
+  LR 3000 o el nivel 14 (modo desarrollo); nivel 14: 57 geometrías (~1,7 MB de vértices), 4 texturas, 18 programas.
+  Rapier ocupa 4,34 de los 5,10 MB del bundle (wasm en base64; aparte serían 3,08 MB, 1,17 MB comprimido).
+
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
   `CraneSpec`, `AT60` (= `CRANES.medium`, tipada `WheeledSpec` para el modelo 3D de la fase 0), `CrawlerSpec`/`isCrawler`.
@@ -243,6 +252,16 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   las teclas e ignora teclas y mando salvo H/Esc; la simulación sigue), `showFps(dev, search)` y `stickyParams` en
   `settings.ts` (`?fps=` se conserva en `levelUrl`/`homeUrl`). La columna izquierda del HUD es `Hud.left` (flex: fps,
   grúa, Niveles, Calidad; ya no hay `top` fijos). `.claude/launch.json` tiene `preview` (`vite preview`, puerto 4173).
+- Fase 14A: `main.ts` solo arranca y conecta. `game/events.ts` (`Bus`, `GameEvents`: say, land, strike, bump, cut,
+  prox, tipping, tipped, end, restart; `unit` = índice de la grúa), `game/session.ts` (`sessionDef(search)` lee la URL,
+  `Session`: grúas `Unit`, obra, `act`, `running`, `bypass`, `run`, `bus`, `restart`, `switchUnit`, `hanging`,
+  `loadOnHook`, `live`), `game/control.ts` (`controlUnit`, `afterUnit`, `IDLE`, `CARD_DELAY`), `game/rules.ts`
+  (`LevelRules`: reloj, victoria, viento, aterrizajes, golpes, líneas, tándem, vuelco → `end` con estrellas y récord),
+  `game/step.ts` (`GameStep.tick`: reglas, mandos, física, eventos de las cargas al bus, estabilidad), `game/loop.ts`
+  (`Loop`: paso fijo, pausa con motivos, `frame(now)` sin DOM), `ui/presenter.ts` (`Presenter`: cámara, HUD, ayuda,
+  menú y fichas, sonido; escucha el bus; `camSize`/`shadowHalf`), `ui/commands.ts` (`bindCommands`: teclas → acciones),
+  `ui/autoPause.ts` (`autoPause`, `pauseText`). `Input.block(motivo, on)` (la ayuda usa `pause(on)` = motivo `ayuda`).
+  `window.__gruas` igual que antes, más `ses`, `game`, `loop`, `view`, `bus`.
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
   cut…, de la grúa que se maneja; `units`, todas) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
   dibuja cuadros; así se puede probar desde la consola).
@@ -513,6 +532,19 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - **Mando**: la tecla manda; sin tecla, el valor del mando (proporcional: `ramp` ya admite mandos parciales). Zona
   muerta 0,15 reescalada. **Táctil no** (decidido con Jesús: en la laptop no hace falta).
 
+- **Bus de eventos (fase 14)**: síncrono, en orden de suscripción. Las reglas no tocan el HUD ni el sonido: emiten
+  `say` y `end`; el `Presenter` pone el nombre de la grúa delante de los mensajes de la que no se maneja (tándem) y
+  hace los carteles; el sonido escucha `land`/`strike` con los mismos umbrales que las reglas. El `run` del turno vive
+  en la `Session` (lo escriben reglas y `afterUnit`, lo leen HUD y sonido). `GameStep` vacía `phys.events` de cada
+  grúa cada paso y los emite (antes se vaciaban en `levelRules` o a mano).
+- **Pausa automática (fase 14)**: motivos `pestaña` (visibilitychange), `foco` (blur; se quita con focus o un clic) y
+  `gráfica` (webglcontextlost/restored). En pausa: no hay pasos de física, se sigue dibujando, las teclas se sueltan y
+  se ignoran (`Input.block`), el sonido se calla; al quitar el último motivo se tira el tiempo acumulado. Aviso solo
+  con el turno en marcha (en el menú y la ficha no corre nada), salvo el de la gráfica. No hay pausa si la página
+  carga ya sin foco (solo con el evento blur): así el panel de la app sigue igual que antes.
+- **Contexto WebGL**: three.js ya hace `preventDefault` y vuelve a subir todo al recuperarlo; comprobado con
+  `WEBGL_lose_context` (nivel 1: vuelve a dibujar, 69 draw calls, sin errores de GL). Si no vuelve en 6 s, botón Recargar.
+
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
   grúas grandes (fases 4–6): cabeza cinemática, izado a velocidad plena, estiramiento máximo del cable.
@@ -582,7 +614,16 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   caché, conexión de la laptop): JS 1,84 MB comprimido en 1,6 s y primer cuadro a 2,4 s. **Pendiente**: fps con el panel
   visible. Avisos de la acción (no fallan todavía): las acciones v4 usan Node 20 (obsoleto) y `ubuntu-latest` pasa a Ubuntu 26.
 
+- Fase 14A: bundle 5.110.160 bytes (+5 kB), CSS 6,4 kB. Draw calls sin cambios (nivel 14: 134; nivel 11: 78; SK 60: 58).
+  Menú, 14 niveles, 11 pruebas libres y tándem sin errores ni avisos en consola (recorrido en iframes con `advance`).
+
 ### Pendientes
+- **Fase 14, partes B y C** (ver `FASES-2.md` y el plan de la parte A arriba): sin recargar al cambiar de nivel o grúa,
+  Rapier con `.wasm` aparte (`@dimforge/rapier3d` + `vite-plugin-wasm`, vitest con el compat), `import()` de modelos,
+  `renderer.compileAsync`; teclas configurables, `i18n/es.ts`, Playwright en la acción. Jesús aprobó el plan; falta su
+  visto bueno a las dependencias nuevas (`vite-plugin-wasm`, `@playwright/test` y la descarga de Chromium).
+- `tower.test.ts` "el gancho sigue a la punta…": 0,7 s sola, pero con toda la batería en paralelo pasó una vez de 5 s;
+  ahora tiene 20 s de margen.
 - Tándem: Jesús jugó el nivel 14 a mano y le pareció bien (el guion de prueba cambia de grúa ~13 veces al ponerla de
   pie). Si algún día resulta muy difícil, lo primero a revisar son la pluma de la cola y los tiempos de `SIDE_T`/`OVER_T`.
   En la prueba libre, girar (A/D) mueve las cabezas a lo largo de la columna; de costado se mueve con la pluma (W/S). Si la principal sigue izando con la cola enganchada, la cola
