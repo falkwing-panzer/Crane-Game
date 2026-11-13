@@ -17,7 +17,8 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:4173/',
     trace: process.env.CI ? 'retain-on-failure' : 'off',
-    viewport: { width: 1280, height: 720 },
+    // pequeña a propósito: con WebGL por software el coste crece con los píxeles
+    viewport: { width: 960, height: 540 },
     launchOptions: {
       // sin gráfica en la acción: WebGL por software, pedido de forma explícita (si no, Chrome avisa en la consola)
       args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader', '--ignore-gpu-blocklist'],
