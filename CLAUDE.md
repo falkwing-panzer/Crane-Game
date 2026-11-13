@@ -159,6 +159,11 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   el primer dibujo es un cuadro de 220–460 ms (compilación de shaders); heap 21 MB en el menú y 56–64 MB con la
   LR 3000 o el nivel 14 (modo desarrollo); nivel 14: 57 geometrías (~1,7 MB de vértices), 4 texturas, 18 programas.
   Rapier ocupa 4,34 de los 5,10 MB del bundle (wasm en base64; aparte serían 3,08 MB, 1,17 MB comprimido).
+- **Fase 14, parte B** (sin recargas y carga más rápida; dependencias aprobadas por Jesús): `App` monta y desmonta la
+  partida sin recargar (física, objetos, memoria de GPU, HUD, oyentes) con la URL en `history`; Rapier sin compat con el
+  `.wasm` aparte; modelos con `import()`; shaders precompilados al montar. 30 cambios de partida seguidos: geometrías,
+  texturas y programas iguales (37 / 5 / 14), heap estable (~61 MB tras el recolector) y, en Node, la memoria del wasm de
+  Rapier igual tras la primera vuelta. Pruebas en `game/dispose.test.ts`.
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -261,7 +266,15 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   (`Loop`: paso fijo, pausa con motivos, `frame(now)` sin DOM), `ui/presenter.ts` (`Presenter`: cámara, HUD, ayuda,
   menú y fichas, sonido; escucha el bus; `camSize`/`shadowHalf`), `ui/commands.ts` (`bindCommands`: teclas → acciones),
   `ui/autoPause.ts` (`autoPause`, `pauseText`). `Input.block(motivo, on)` (la ayuda usa `pause(on)` = motivo `ayuda`).
-  `window.__gruas` igual que antes, más `ses`, `game`, `loop`, `view`, `bus`.
+  `window.__gruas` igual que antes, más `ses`, `game`, `loop`, `view`, `bus` (fase 14B: `app`, `go(search)`; todo lo
+  de la partida son getters de la partida montada).
+- Fase 14B: `main.ts` solo muestra la carga y trae `app.ts` con `import()`. `app.ts`: `App` (renderer, escena base,
+  `Input`, `Sound`, `Loop` y `autoPause` duran toda la visita; `open(search)`/`go(search)` montan la partida; `unmount`;
+  `warmUp` precompila; marca `gruas-partida` con la partida lista), `initPhysics()`. `render/dispose.ts` (`disposeTree`,
+  `SceneMark`: lo que la partida añadió a la escena), `resetView(ctx)` en `scene.ts`, `Physics.dispose()` (libera el
+  mundo si lo creó), `render/models/load.ts` (`loadModels(specs)` → `ModelFactory`, con `import()`),
+  `render/models/allModels.ts` (lo mismo de antemano, para las pruebas). `Session(def, scene, makeModel)`. Cada partida
+  dibuja su HUD en un `div.session` dentro de `#hud` (se quita entero); el aviso de pausa queda fuera.
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
   cut…, de la grúa que se maneja; `units`, todas) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
   dibuja cuadros; así se puede probar desde la consola).
@@ -452,8 +465,8 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 
 - **Niveles (fase 9)**: datos sin tocar (prueba contra el HTML). La planta de la referencia (84 × 56 m, z hacia abajo) cae igual
   en nuestro mundo visto desde arriba: coordenadas sin conversión, rumbo con el signo cambiado (todos empiezan en 0). Los
-  límites de la obra son 0…84 × 0…56 (margen 0,3 m del chasis, como la referencia). Cambiar de nivel o de grúa **recarga la
-  página** (cada grúa arma su modelo y su mundo de Rapier); Repetir vuelve a la ficha. Tras el vuelco, en un nivel sale el
+  límites de la obra son 0…84 × 0…56 (margen 0,3 m del chasis, como la referencia). Cambiar de nivel o de grúa ya **no recarga
+  la página** (fase 14B: se desmonta la partida y se monta la nueva); Repetir vuelve a la ficha. Tras el vuelco, en un nivel sale el
   cartel de nivel fallido.
 - **Cargas sin giro vertical** (`enabledRotations(true, false, true)`, todas las cargas): como la referencia, la carga no gira
   sobre sí misma (como guiada con cuerdas). Sin esto, colgada de un punto, la viga de 22 m del nivel 4 (< 1 m de margen) no se
@@ -545,6 +558,26 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - **Contexto WebGL**: three.js ya hace `preventDefault` y vuelve a subir todo al recuperarlo; comprobado con
   `WEBGL_lose_context` (nivel 1: vuelve a dibujar, 69 draw calls, sin errores de GL). Si no vuelve en 6 s, botón Recargar.
 
+- **Rapier con el `.wasm` aparte (fase 14B)**: en el navegador `vite.config.ts` cambia `@dimforge/rapier3d-compat` por
+  `@dimforge/rapier3d` (alias) con `vite-plugin-wasm`; vitest no (`process.env.VITEST`) y sigue con el compat. Las dos
+  versiones están **fijadas iguales** (0.21.0): al actualizar Rapier, subir las dos. El paquete sin compat no tiene
+  `init()` (llega iniciado al importarlo): `initPhysics()` lo llama solo si existe. En desarrollo, Vite lo empaqueta con
+  el nombre del compat (`.vite/deps/@dimforge_rapier3d-compat.js`), pero es el otro (mirar `_metadata.json`).
+  `build.target` = es2022 (el plugin necesita `await` de nivel superior).
+- **Desmontar sin perder memoria (fase 14B)**: se libera todo lo que cuelga de lo que la partida añadió a la escena,
+  también los materiales y geometrías compartidos (three.js los vuelve a subir si otra partida los usa). El mundo de
+  Rapier se libera con `world.free()` (primero la grúa que lo comparte). **Trampa encontrada**: el material de
+  profundidad compartido del pase de sombras de three.js se queda con la última textura que vio y la volvía a subir
+  después de liberarla (2 texturas más por cada nivel 1); las cargas con etiqueta usan `customDepthMaterial` sin
+  textura (`PLAIN_DEPTH` en `rigging.ts`). Si se añaden mallas con textura que proyecten sombra, hacer lo mismo.
+- **Navegación sin recargar**: los enlaces internos del HUD (`a[href]` a la misma página, sin Ctrl/Mayús/clic medio) y
+  los `go()` del selector de grúa y de la ficha usan `history.pushState`; Atrás/Adelante (`popstate`) montan la partida
+  de la URL. Mientras se arma la nueva, `.switching` tapa la escena. Cambiar la calidad sigue recargando.
+- **Shaders precompilados (`warmUp`)**: antes de hacerla actual, se actualizan los modelos (algunos InstancedMesh crean
+  `instanceColor` al actualizarse, y eso cambia el shader), se ponen la cámara y el sol sobre la grúa, se hace visible
+  todo lo oculto (plumín, torre, lastre, cabina), `compileAsync` y un dibujo con sombras. Comprobado: después no se
+  compila ningún programa al dibujar, al cambiar de cámara ni al montar lastre, Y-guy, plumín o torre.
+
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
   grúas grandes (fases 4–6): cabeza cinemática, izado a velocidad plena, estiramiento máximo del cable.
@@ -617,11 +650,17 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - Fase 14A: bundle 5.110.160 bytes (+5 kB), CSS 6,4 kB. Draw calls sin cambios (nivel 14: 134; nivel 11: 78; SK 60: 58).
   Menú, 14 niveles, 11 pruebas libres y tándem sin errores ni avisos en consola (recorrido en iframes con `advance`).
 
+- Fase 14B (`vite preview` en local, panel oculto: sin cuadros, así que se mide la partida lista, no el primer cuadro):
+  JS 778 kB (182 kB comprimido; antes 5,10 MB / 1,89 MB) + wasm 3,08 MB (1,19 MB comprimido) + modelos aparte (ruedas
+  24 kB, orugas 11 kB). Partida lista con los shaders compilados: menú 0,67 s, nivel 1 0,70 s, LR 3000 0,75 s, nivel 14
+  0,82 s (antes, primer cuadro a 0,71–1,49 s, con un cuadro de 220–460 ms compilando shaders). Cambiar de partida:
+  0,18–0,27 s (modo desarrollo). **Pendiente**: medir el primer cuadro con el panel visible y la carga desde GitHub
+  Pages (ver si sirve el .wasm comprimido).
+
 ### Pendientes
-- **Fase 14, partes B y C** (ver `FASES-2.md` y el plan de la parte A arriba): sin recargar al cambiar de nivel o grúa,
-  Rapier con `.wasm` aparte (`@dimforge/rapier3d` + `vite-plugin-wasm`, vitest con el compat), `import()` de modelos,
-  `renderer.compileAsync`; teclas configurables, `i18n/es.ts`, Playwright en la acción. Jesús aprobó el plan; falta su
-  visto bueno a las dependencias nuevas (`vite-plugin-wasm`, `@playwright/test` y la descarga de Chromium).
+- **Fase 14, parte C** (ver `FASES-2.md`): teclas configurables, `i18n/es.ts`, Playwright en la acción. Jesús ya aprobó
+  `@playwright/test` y la descarga de Chromium. Posible mejora: el `.wasm` empieza a bajar cuando ya llegó `app.js`
+  (no se puede precargar desde `index.html` porque su nombre lleva hash).
 - `tower.test.ts` "el gancho sigue a la punta…": 0,7 s sola, pero con toda la batería en paralelo pasó una vez de 5 s;
   ahora tiene 20 s de margen.
 - Tándem: Jesús jugó el nivel 14 a mano y le pareció bien (el guion de prueba cambia de grúa ~13 veces al ponerla de
@@ -651,4 +690,4 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - **Referencias visuales** de Jesús en `referencia/imagenes/` (ver `NOTAS.md`). Orden acordado: 6B → 7 → 8 → 8B
   remodelado y pulido de los vehículos, con el contrapeso de cada grúa → niveles.
   No pulir modelos antes.
-- Vite avisa que el bundle pasa de 500 kB por el wasm de Rapier embebido: esperado, no es un error.
+- Vite avisaría que `app.js` pasa de 500 kB (three.js y el juego, ~780 kB): `chunkSizeWarningLimit` = 1200.

@@ -82,6 +82,9 @@ export class Rigging {
       const m = new THREE.Mesh(box, mt);
       m.scale.set(l.half.x * 2, l.half.y * 2, l.half.z * 2);
       m.castShadow = m.receiveShadow = true;
+      // sombra sin la textura de la etiqueta (fase 14): el material de profundidad compartido de three.js guarda la
+      // última textura que vio y la volvía a subir a la GPU después de liberarla al cambiar de nivel
+      m.customDepthMaterial = PLAIN_DEPTH;
       scene.add(m);
       this.loadMeshes.set(l, m);
     }
@@ -153,6 +156,9 @@ export class Rigging {
     }
   }
 }
+
+/** Profundidad para las sombras, sin texturas (las cargas son opacas: la etiqueta no cambia la sombra) */
+const PLAIN_DEPTH = new THREE.MeshDepthMaterial();
 
 /** Carga de un nivel: su color, con la etiqueta y las toneladas */
 function labelTexture(label: string, mass: number, color: string) {

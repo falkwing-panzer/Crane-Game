@@ -6,6 +6,7 @@ import { IDLE, IDLE_DRIVE } from './control';
 import type { GameEvents } from './events';
 import { Session, sessionDef } from './session';
 import { GameStep } from './step';
+import { allModels } from '../render/models/allModels';
 
 const still = { state: () => IDLE, drive: () => IDLE_DRIVE };
 
@@ -18,7 +19,7 @@ const KINDS: (keyof GameEvents)[] = ['say', 'land', 'strike', 'bump', 'cut', 'pr
 
 /** Partida desde una URL, con todos los eventos apuntados */
 function play(search: string) {
-  const ses = new Session(sessionDef(search), new THREE.Scene());
+  const ses = new Session(sessionDef(search), new THREE.Scene(), allModels);
   const game = new GameStep(ses, still);
   const log: { k: keyof GameEvents; p: unknown }[] = [];
   for (const k of KINDS) ses.bus.on(k, (p) => log.push({ k, p }));
