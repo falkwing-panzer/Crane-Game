@@ -4,6 +4,9 @@ import type { Session } from '../game/session';
 import type { Presenter } from './presenter';
 import type { Input } from './input';
 import { saveSettings, type Settings } from './settings';
+import { t } from '../i18n';
+
+const m = t.msg;
 
 /**
  * Entrada (fase 14: sacada de main.ts): qué hace cada tecla o botón de un toque. Las acciones sobre la grúa solo
@@ -21,7 +24,7 @@ export function bindCommands(ses: Session, input: Input, view: Presenter, settin
 
   input.onHook = () => { if (live()) say(ses.act.phys.toggleHook()); };
   // X y P son ayudas de prueba: solo en la prueba libre
-  input.onReset = () => { if (live()) say(L ? 'En los niveles no se puede reponer la carga (X): solo en la prueba libre' : ses.act.phys.resetLoads()); };
+  input.onReset = () => { if (live()) say(L ? m.noReset : ses.act.phys.resetLoads()); };
   input.onOutriggers = () => {
     const { T, C, S, phys } = ses.act;
     if (live()) say(toggleOutriggers(T, C, S, { loadHanging: ses.hanging(), padsBlocked: phys.padsBlocked(S), locked: outriggersLocked(S) }), 1.8);
@@ -34,27 +37,27 @@ export function bindCommands(ses: Session, input: Input, view: Presenter, settin
   input.onMount = () => {
     if (!live()) return;
     const { T, S, phys, pose, jibOk } = ses.act;
-    if (phys.tied) { say('Suelta primero el gancho del frente (Espacio)', 2); return; }
-    if (T.jibDef && !jibOk) { say(multi ? 'En el tándem no se monta el plumín' : 'En este trabajo no hace falta el plumín', 2); return; }
+    if (phys.tied) { say(m.untieFirst, 2); return; }
+    if (T.jibDef && !jibOk) { say(multi ? m.noJibTandem : m.noJib, 2); return; }
     say(toggleMount(T, S, { loadAttached: !!phys.attached, groundBlocked: phys.jibGroundBlocked(S, pose) }), 2.4);
   };
   input.onMute = () => {
     settings.sonido = sound.toggle();
     saveSettings(settings);
-    say(settings.sonido ? 'Sonido activado (N)' : 'Sonido apagado (N)', 1.5);
+    say(settings.sonido ? m.soundOn : m.soundOff, 1.5);
   };
-  input.onPad = (id) => say(`Mando conectado: ${id.replace(/\s*\(.*$/, '')}`, 2.5);
+  input.onPad = (id) => say(m.pad(id.replace(/\s*\(.*$/, '')), 2.5);
   input.onView = () => say(cam.cycle(ses.act.S, ses.act.pose), 1.5);
   input.onBypass = () => {
-    if (L) { say('El puenteo del LMI (P) solo está en la prueba libre', 2); return; }
+    if (L) { say(m.noBypass, 2); return; }
     ses.bypass = !ses.bypass;
-    say(ses.bypass ? 'LMI PUENTEADO: sin cortes, la grúa puede volcar' : 'LMI activo de nuevo', 2.5);
+    say(ses.bypass ? m.bypassOn : m.bypassOff, 2.5);
   };
   input.onSwitch = () => {
     if (!multi || !ses.running) return;
     const u = ses.switchUnit();
     view.follow(u);
-    say(`Manejas la ${u.T.name}${ses.tipped() ? ' (volcada)' : ''} · la otra se queda quieta`, 2);
+    say(m.switched(u.T.name, ses.tipped()), 2);
   };
   hud.onRestart = () => ses.restart();
 }

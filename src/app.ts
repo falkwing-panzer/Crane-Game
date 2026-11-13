@@ -15,6 +15,7 @@ import { autoPause } from './ui/autoPause';
 import { Sound } from './ui/audio';
 import { loadModels, type ModelFactory } from './render/models/load';
 import { CRANES } from './crane/cranes';
+import { t } from './i18n';
 
 /** Una partida montada: lo que hay que desmontar al cambiar de nivel o de grúa */
 interface Mounted {
@@ -116,7 +117,7 @@ export class App {
   private loading() {
     const el = document.createElement('div');
     el.className = 'switching';
-    el.textContent = 'Cargando…';
+    el.textContent = t.boot.switching;
     document.body.appendChild(el);
     return el;
   }
@@ -131,7 +132,7 @@ export class App {
     this.root.prepend(el);
     const ses = new Session(def, ctx.scene, make);
     const game = new GameStep(ses, input);
-    const view = new Presenter(ctx, ses, settings, el, sound, (u) => { void this.go(new URL(u, location.href).search); });
+    const view = new Presenter(ctx, ses, settings, el, sound, input, (u) => { void this.go(new URL(u, location.href).search); });
     bindCommands(ses, input, view, settings, () => this.loop.paused);
     return { ses, game, view, el, mark };
   }
@@ -170,7 +171,10 @@ export class App {
     const hidden: THREE.Object3D[] = [];
     scene.traverse((o) => { if (!o.visible) { hidden.push(o); o.visible = true; } });
     try {
-      await renderer.compileAsync(scene, camera);
+      // compileAsync necesita KHR_parallel_shader_compile; sin ella (p. ej. WebGL por software) three avisa en la
+      // consola: se compila de una vez
+      if (renderer.extensions.has('KHR_parallel_shader_compile')) await renderer.compileAsync(scene, camera);
+      else renderer.compile(scene, camera);
       renderer.render(scene, camera);
     } finally {
       for (const o of hidden) o.visible = false;

@@ -1,17 +1,19 @@
 import type { CraneInput } from '../crane/kinematics';
 import type { DriveInput } from '../crane/drive';
 import { padAxes, padEdges, pressedList, type PadAction, type PadAxes } from './gamepad';
-
-// Mismas teclas que la referencia (keymap de crane-v20.html).
-const KEYMAP: Record<string, string> = {
-  KeyA: 'sll', KeyD: 'slr', KeyW: 'lu', KeyS: 'ld', KeyE: 'to', KeyQ: 'ti', KeyR: 'hu', KeyF: 'hd',
-  ArrowUp: 'fw', ArrowDown: 'bk', ArrowLeft: 'stl', ArrowRight: 'str',
-  KeyK: 'sli', KeyL: 'slo', KeyT: 'ju', KeyG: 'jd',
-};
+import { HOLD, codeIndex, loadKeys, normCode, useKeys, type Action, type HoldAction, type KeyMap, type TapAction } from './keys';
 
 export class Input {
-  private k: Record<string, number> = { sll: 0, slr: 0, lu: 0, ld: 0, to: 0, ti: 0, hu: 0, hd: 0, fw: 0, bk: 0, stl: 0, str: 0, sli: 0, slo: 0, ju: 0, jd: 0 };
-  private fine = false;
+  /** mandos que se mantienen: 1 mientras su tecla está pulsada */
+  private k = Object.fromEntries(HOLD.map((a) => [a, 0])) as Record<HoldAction, number>;
+  /** tabla de teclas (fase 14: configurable) y acción de cada tecla */
+  private keys!: KeyMap;
+  private idx = new Map<string, Action>();
+  /**
+   * Panel de teclas (fase 14): mientras está puesto, la siguiente tecla pulsada va aquí (también Esc, para cancelar)
+   * y no hace nada más.
+   */
+  capture: ((code: string) => void) | null = null;
   /** mando (fase 11): ejes del último poll() y botones pulsados entonces */
   private pad: PadAxes | null = null;
   private padPrev: boolean[] = [];
@@ -48,41 +50,59 @@ export class Input {
   private blocks = new Set<string>();
   private get paused() { return this.blocks.size > 0; }
 
-  constructor() {
+  constructor(keys: KeyMap = loadKeys()) {
+    this.setKeys(keys);
+    const tap: Record<Exclude<TapAction, 'help'>, () => void> = {
+      hook: () => this.onHook(), outriggers: () => this.onOutriggers(), ballast: () => this.onBallast(), yguy: () => this.onYGuy(),
+      mount: () => this.onMount(), view: () => this.onView(), switch: () => this.onSwitch(), reset: () => this.onReset(),
+      bypass: () => this.onBypass(), mute: () => this.onMute(),
+    };
     addEventListener('keydown', (e) => {
-      if (e.code === 'KeyH' && !e.repeat) { this.onHelp(); return; }
-      if (e.code === 'Escape' && !e.repeat) { this.onEscape(); return; }
-      if (this.paused) { if (e.code === 'Space' || e.code === 'Tab') e.preventDefault(); return; }
-      if (e.key === 'Shift') this.fine = true;
-      if (e.code === 'KeyX' && !e.repeat) { this.onReset(); return; }
-      if (e.code === 'KeyO' && !e.repeat) { this.onOutriggers(); return; }
-      if (e.code === 'KeyP' && !e.repeat) { this.onBypass(); return; }
-      if (e.code === 'KeyV' && !e.repeat) { this.onView(); return; }
-      if (e.code === 'KeyB' && !e.repeat) { this.onBallast(); return; }
-      if (e.code === 'KeyY' && !e.repeat) { this.onYGuy(); return; }
-      if (e.code === 'KeyM' && !e.repeat) { this.onMount(); return; }
-      if (e.code === 'KeyN' && !e.repeat) { this.onMute(); return; }
-      if (e.code === 'Tab') { e.preventDefault(); if (!e.repeat) this.onSwitch(); return; }
-      if (e.code === 'Space') {
+      const code = normCode(e.code);
+      if (this.capture) {
         e.preventDefault();
-        if (!e.repeat) this.onHook();
+        if (e.repeat) return;
+        const c = this.capture;
+        this.capture = null;
+        c(code);
         return;
       }
-      const a = KEYMAP[e.code];
-      if (a) { this.k[a] = 1; e.preventDefault(); }
+      const a = this.idx.get(code);
+      if (a === 'help' && !e.repeat) { this.onHelp(); return; }
+      if (code === 'Escape' && !e.repeat) { this.onEscape(); return; }
+      // Espacio y Tab no deben desplazar la página ni mover el foco
+      const grab = code === 'Space' || code === 'Tab' || a === 'hook' || a === 'switch';
+      if (this.paused) { if (grab) e.preventDefault(); return; }
+      if (!a) return;
+      if (a in tap) {
+        e.preventDefault();
+        if (!e.repeat) tap[a as keyof typeof tap]();
+        return;
+      }
+      this.k[a as HoldAction] = 1;
+      e.preventDefault();
     });
     addEventListener('keyup', (e) => {
-      if (e.key === 'Shift') this.fine = false;
-      const a = KEYMAP[e.code];
-      if (a) this.k[a] = 0;
+      const a = this.idx.get(normCode(e.code));
+      if (a && a in this.k) this.k[a as HoldAction] = 0;
     });
     addEventListener('blur', () => this.release());
   }
 
+  /** Tabla de teclas en uso */
+  get keyMap(): KeyMap { return this.keys; }
+
+  /** Cambia la tabla de teclas (no la guarda: `saveKeys`) y suelta las pulsadas */
+  setKeys(k: KeyMap) {
+    this.keys = k;
+    this.idx = codeIndex(k);
+    useKeys(k);
+    this.release();
+  }
+
   /** Suelta todas las teclas pulsadas */
   release() {
-    for (const a in this.k) this.k[a] = 0;
-    this.fine = false;
+    for (const a of HOLD) this.k[a] = 0;
   }
 
   /** Ayuda abierta: no se aceptan teclas ni mando, y se sueltan las que estaban pulsadas */
@@ -118,13 +138,13 @@ export class Input {
     const m = (key: number, pad: number | undefined) => (key !== 0 ? key : pad ?? 0);
     return {
       slew: m(k.sll - k.slr, p?.slew), luff: m(k.lu - k.ld, p?.luff), tele: m(k.to - k.ti, p?.tele), hoist: m(k.hd - k.hu, p?.hoist),
-      fine: this.fine || !!p?.fine, sl: m(k.slo - k.sli, p?.sl), jib: m(k.jd - k.ju, p?.jib),
+      fine: !!k.fine || !!p?.fine, sl: m(k.slo - k.sli, p?.sl), jib: m(k.jd - k.ju, p?.jib),
     };
   }
 
   drive(): DriveInput {
     const k = this.k, p = this.pad;
     const m = (key: number, pad: number | undefined) => (key !== 0 ? key : pad ?? 0);
-    return { throttle: m(k.fw - k.bk, p?.throttle), steer: m(k.stl - k.str, p?.steer), fine: this.fine || !!p?.fine };
+    return { throttle: m(k.fw - k.bk, p?.throttle), steer: m(k.stl - k.str, p?.steer), fine: !!k.fine || !!p?.fine };
   }
 }

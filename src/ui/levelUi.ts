@@ -2,6 +2,10 @@ import { CRANES, type CraneId } from '../crane/cranes';
 import type { Level } from '../levels/levels';
 import { ALL_LEVELS as LEVELS } from '../levels/tandemSetup';
 import { stickyParams } from './settings';
+import { t } from '../i18n';
+import { withKeys } from './keys';
+
+const tl = t.levels;
 
 // Pantallas de los niveles (HTML simple, como el HUD): menú de niveles, ficha de briefing con la elección de
 // grúa (showBrief de la referencia), cartel de nivel completado o fallido (checkWin, fail), reloj y récords
@@ -37,24 +41,19 @@ export const fmt = (t: number) => `${String(Math.floor(t / 60)).padStart(2, '0')
  * Textos de la referencia que hablan de sus dos vistas 2D (planta y lateral): en la ficha se muestran adaptados a las
  * cámaras 3D. Los datos de LEVELS no se tocan (la prueba los compara con el HTML).
  */
-export const TEXT_3D: Record<string, string> = {
-  'Mueve los dos contenedores a la zona de descarga. Aprende a usar las dos vistas: la planta para posicionar y la lateral para controlar la altura.':
-    'Mueve los dos contenedores a la zona de descarga. Aprende a usar la cámara: desde arriba para posicionar y de lado para controlar la altura (ratón en la vista orbital, V para cambiar de cámara).',
-  'En planta, la sombra de la carga se separa más cuanto más alta va.': 'Mirando desde arriba, la carga parece más cerca de su sombra cuanto más baja va: úsala para calcular la altura.',
-  'Usa la vista lateral desde el sur o el este para alinear.': 'Gira la cámara orbital para mirar desde el sur o el este al alinear.',
-};
-const text3d = (s: string) => TEXT_3D[s] ?? s;
+export const TEXT_3D: Record<string, string> = tl.text3d;
+const text3d = (s: string) => withKeys(TEXT_3D[s] ?? s);
 
 /** Tándem (fase 10): las dos grúas ya están colocadas y montadas; no se eligen */
 function tandemCranes(L: Level) {
-  const t = L.tandem!;
+  const td = L.tandem!;
   const card = (id: CraneId, role: string, what: string) => {
     const c = CRANES[id];
-    return `<div class="copt" aria-pressed="true"><small>${role}</small><b>${c.name}</b><small>${c.structMax} t máx</small><em>${what}</em></div>`;
+    return `<div class="copt" aria-pressed="true"><small>${role}</small><b>${c.name}</b><small>${tl.maxT(c.structMax)}</small><em>${what}</em></div>`;
   };
-  return `<div class="eyebrow">Las grúas (ya colocadas y montadas · Tab cambia de una a otra)</div><div class="cranes">
-    ${card(t.main.id, 'Principal', 'Engancha la cabeza de la columna, la pone de pie y la lleva a la cimentación.')}
-    ${card(t.tail.id, 'De cola', 'Sostiene el pie hasta que la columna queda vertical; después se suelta.')}</div>`;
+  return `<div class="eyebrow">${withKeys(tl.tandemHead)}</div><div class="cranes">
+    ${card(td.main.id, tl.main, tl.mainText)}
+    ${card(td.tail.id, tl.tail, tl.tailText)}</div>`;
 }
 
 const starText = (n: number) => `${'★'.repeat(n)}<span class="off">${'★'.repeat(3 - n)}</span>`;
@@ -105,14 +104,14 @@ export class LevelUi {
   /** Menú: los 13 niveles de la referencia y el de tándem (fase 10) con su tipo y sus estrellas, más las pruebas libres */
   menu() {
     const rec = loadRecords();
-    this.show(`<div class="eyebrow">Simulador de grúas</div><h2>Elige un trabajo</h2>
+    this.show(`<div class="eyebrow">${tl.eyebrow}</div><h2>${tl.choose}</h2>
       <div class="levels">${LEVELS.map((L, i) => {
         const r = rec[i];
         return `<a class="lvl" href="${levelUrl(i + 1)}"><small>${i + 1} · ${L.type}</small><b>${L.name}</b>
-          <span class="stars">${starText(r?.stars ?? 0)}</span><small>${r ? `récord ${fmt(r.time)}` : `par ${fmt(L.par)}`}</small></a>`;
+          <span class="stars">${starText(r?.stars ?? 0)}</span><small>${r ? tl.record(fmt(r.time)) : tl.par(fmt(L.par))}</small></a>`;
       }).join('')}
-      <a class="lvl free" href="${levelUrl(0)}"><small>Sin objetivo</small><b>Prueba libre</b><small>todas las grúas, obstáculos de prueba</small></a>
-      <a class="lvl free" href="${homeUrl({ tandem: '1' })}"><small>Sin objetivo</small><b>Prueba libre en tándem</b><small>LR 3000 y AT 500-8 con una columna</small></a></div>`);
+      <a class="lvl free" href="${levelUrl(0)}"><small>${tl.noGoal}</small><b>${tl.free}</b><small>${tl.freeText}</small></a>
+      <a class="lvl free" href="${homeUrl({ tandem: '1' })}"><small>${tl.noGoal}</small><b>${tl.freeTandem}</b><small>${tl.freeTandemText}</small></a></div>`);
   }
 
   /**
@@ -122,18 +121,18 @@ export class LevelUi {
   brief(i: number, current: CraneId, onPick: (id: CraneId) => void, onStart: () => void) {
     const L = LEVELS[i], r = loadRecords()[i];
     const list = Object.values(CRANES).sort((a, b) => a.structMax - b.structMax);
-    this.show(`<div class="eyebrow"><span class="tag">${L.type}</span>Nivel ${i + 1} de ${LEVELS.length} · viento ${L.wind[0]} m/s · par ${fmt(L.par)}${L.time ? ` · límite ${fmt(L.time)}` : ''}${r ? ` · récord ${fmt(r.time)} ${starText(r.stars)}` : ''}</div>
+    this.show(`<div class="eyebrow"><span class="tag">${L.type}</span>${tl.briefHead(i + 1, LEVELS.length, L.wind[0], fmt(L.par), L.time ? fmt(L.time) : null, r ? ` · ${tl.record(fmt(r.time))} ${starText(r.stars)}` : '')}</div>
       <h2>${L.name}</h2><p>${text3d(L.brief)}</p><ul>${L.tips.map((t) => `<li>${text3d(t)}</li>`).join('')}</ul>
-      ${L.tandem ? tandemCranes(L) : `<div class="eyebrow">Elige la grúa</div>
+      ${L.tandem ? tandemCranes(L) : `<div class="eyebrow">${tl.pick}</div>
       <div class="cranes">${list.map((c) => {
         const ok = L.cranes.includes(c.id as CraneId);
-        const boom = c.boom.min === c.boom.max ? `${c.boom.min} m fija` : `${c.boom.min}–${c.boom.max} m`;
-        const why = L.why[c.id as CraneId] || (c.structMax >= 300 ? 'Demasiado grande para esta obra' : 'Capacidad o alcance insuficientes');
+        const boom = c.boom.min === c.boom.max ? tl.boomFixed(c.boom.min) : tl.boomRange(c.boom.min, c.boom.max);
+        const why = L.why[c.id as CraneId] || (c.structMax >= 300 ? tl.tooBig : tl.tooSmall);
         return `<button class="copt" data-c="${c.id}" aria-pressed="${c.id === current}" ${ok ? '' : 'disabled'}>
-          <small>${c.size}${c.id === L.rec ? ' · recomendada' : ''}</small><b>${c.name}</b>
-          <small>${c.structMax} t máx · pluma ${boom}</small><em class="${ok ? '' : 'why'}">${ok ? c.note : why}</em></button>`;
+          <small>${c.size}${c.id === L.rec ? tl.recommended : ''}</small><b>${c.name}</b>
+          <small>${tl.craneLine(c.structMax, boom)}</small><em class="${ok ? '' : 'why'}">${ok ? c.note : why}</em></button>`;
       }).join('')}</div>`}
-      <div class="row"><a class="btn" href="${homeUrl()}">Niveles</a><button class="btn primary" id="l-start">Empezar turno</button></div>`);
+      <div class="row"><a class="btn" href="${homeUrl()}">${tl.menuBtn}</a><button class="btn primary" id="l-start">${tl.start}</button></div>`);
     this.card.querySelectorAll<HTMLButtonElement>('.copt').forEach((b) => {
       b.onclick = () => { if (b.dataset.c !== current) onPick(b.dataset.c as CraneId); };
     });
@@ -145,20 +144,20 @@ export class LevelUi {
   /** Nivel completado (checkWin de la referencia) */
   won(i: number, crane: string, res: { t: number; hard: number; bumps: number; prox: number; maxLmi: number }, record: boolean) {
     const L = LEVELS[i], n = stars(L, res), next = i + 1 < LEVELS.length;
-    this.show(`<div class="eyebrow">Nivel ${i + 1} completado · ${crane}</div><h2 class="okh">${L.name}</h2>
-      <div class="stars big">${starText(n)}</div>${record ? '<p class="rec">¡Nuevo récord!</p>' : ''}
-      <div class="stats"><span>Tiempo (par ${fmt(L.par)})</span><b>${fmt(res.t)}</b><span>Aterrizajes duros</span><b>${res.hard}</b>
-      <span>Golpes</span><b>${res.bumps}</b><span>Alarmas de línea</span><b>${res.prox}</b><span>LMI máximo</span><b>${Math.round(res.maxLmi * 100)} %</b></div>
-      <div class="row"><a class="btn" href="${homeUrl()}">Niveles</a><a class="btn${next ? '' : ' primary'}" href="${levelUrl(i + 1)}">Repetir</a>
-      ${next ? `<a class="btn primary" id="l-next" href="${levelUrl(i + 2)}">Siguiente nivel</a>` : ''}</div>
-      ${next ? '' : '<p>Era el último trabajo. Vuelve por las tres estrellas en cada nivel o prueba otras grúas.</p>'}`);
+    this.show(`<div class="eyebrow">${tl.won(i + 1, crane)}</div><h2 class="okh">${L.name}</h2>
+      <div class="stars big">${starText(n)}</div>${record ? `<p class="rec">${tl.newRecord}</p>` : ''}
+      <div class="stats"><span>${tl.time(fmt(L.par))}</span><b>${fmt(res.t)}</b><span>${tl.hard}</span><b>${res.hard}</b>
+      <span>${tl.bumps}</span><b>${res.bumps}</b><span>${tl.prox}</span><b>${res.prox}</b><span>${tl.maxLmi}</span><b>${Math.round(res.maxLmi * 100)} %</b></div>
+      <div class="row"><a class="btn" href="${homeUrl()}">${tl.menuBtn}</a><a class="btn${next ? '' : ' primary'}" href="${levelUrl(i + 1)}">${tl.retry}</a>
+      ${next ? `<a class="btn primary" id="l-next" href="${levelUrl(i + 2)}">${tl.next}</a>` : ''}</div>
+      ${next ? '' : `<p>${tl.last}</p>`}`);
     this.card.querySelector<HTMLElement>('#l-next')?.focus({ preventScroll: true });
   }
 
   /** Nivel fallido (fail de la referencia) */
   failed(i: number, crane: string, title: string, text: string) {
-    this.show(`<div class="eyebrow">Nivel ${i + 1} fallido · ${crane}</div><h2>${title}</h2><p>${text}</p>
-      <div class="row"><a class="btn" href="${homeUrl()}">Niveles</a><a class="btn primary" id="l-retry" href="${location.href}">Repetir</a></div>`, true);
+    this.show(`<div class="eyebrow">${tl.failed(i + 1, crane)}</div><h2>${title}</h2><p>${withKeys(text)}</p>
+      <div class="row"><a class="btn" href="${homeUrl()}">${tl.menuBtn}</a><a class="btn primary" id="l-retry" href="${location.href}">${tl.retry}</a></div>`, true);
     this.card.querySelector<HTMLElement>('#l-retry')?.focus({ preventScroll: true });
   }
 
@@ -173,13 +172,13 @@ export class LevelUi {
     const f = (v: number) => v.toFixed(1).replace('.', ',');
     let extra = '';
     if (info && (L.wind[0] || L.wind[1])) {
-      extra += `<span class="${info.wind > 7 ? 'warn' : ''}">Viento <b>${f(info.wind)} m/s</b> ` +
+      extra += `<span class="${info.wind > 7 ? 'warn' : ''}">${tl.wind(f(info.wind))} ` +
         `<i class="arrow" style="transform:rotate(${info.arrow.toFixed(0)}deg)">↑</i></span>`;
     }
     if (info && L.lines?.length && Number.isFinite(info.lineD)) {
-      extra += `${extra ? ' · ' : ''}<span class="${info.lineD < 0 ? 'bad' : info.lineD < 2 ? 'bad blink' : ''}">Línea a <b>${f(Math.max(0, info.lineD))} m</b> del mínimo</span>`;
+      extra += `${extra ? ' · ' : ''}<span class="${info.lineD < 0 ? 'bad' : info.lineD < 2 ? 'bad blink' : ''}">${tl.line(f(Math.max(0, info.lineD)))}</span>`;
     }
-    this.clock.innerHTML = `<small>Nivel ${n} · ${L.name}</small><br><b class="${L.time && left < 30 ? 'bad' : ''}">${L.time ? `${fmt(left)} restantes` : fmt(t)}</b>` +
-      `<small> · par ${fmt(L.par)}</small>${extra ? `<br>${extra}` : ''}`;
+    this.clock.innerHTML = `<small>${tl.clockHead(n, L.name)}</small><br><b class="${L.time && left < 30 ? 'bad' : ''}">${L.time ? tl.left(fmt(left)) : fmt(t)}</b>` +
+      `<small> · ${tl.par(fmt(L.par))}</small>${extra ? `<br>${extra}` : ''}`;
   }
 }

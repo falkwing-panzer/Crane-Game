@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import inputSrc from './input.ts?raw';
 import { CRANES, isCrawler, type CraneId } from '../crane/cranes';
 import { canTie } from '../crane/tiedown';
-import { helpGroups, helpHtml, type HelpFlags } from './help';
+import { helpGroups, helpHtml, keysHtml, type HelpFlags } from './help';
+import { ACTIONS, DEFAULT_KEYS, keyLabel, rebind } from './keys';
 import { showFps, stickyParams } from './settings';
 
 const ALL: HelpFlags = {
@@ -19,25 +19,32 @@ const flagsOf = (id: CraneId, free = true): HelpFlags => {
   };
 };
 
-/** Todas las teclas que lee input.ts, con el nombre que muestra la ayuda */
-function inputKeys() {
-  const codes = new Set<string>();
-  for (const m of inputSrc.matchAll(/\b(Key[A-Z]|Arrow\w+|Space|Tab|Escape)\b/g)) codes.add(m[1]);
-  const name = (c: string) => c.startsWith('Key') ? c.slice(3)
-    : ({ ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Space: 'Espacio', Tab: 'Tab', Escape: 'Esc' } as Record<string, string>)[c];
-  return [...codes].map(name);
-}
+const reEsc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** Texto de la ayuda, sin el grupo del mando (sus botones A, B, X, Y se confundirían con las teclas) */
 const shown = (g: ReturnType<typeof helpGroups>) => g.filter((x) => x.title !== 'Mando').flatMap((x) => x.keys.map(([k, t]) => `${k} ${t}`)).join('\n');
 
 describe('ayuda de controles (fase 13)', () => {
-  it('con todo activado lista todas las teclas de input.ts', () => {
-    const text = shown(helpGroups(ALL));
-    const keys = inputKeys();
-    expect(keys.length).toBeGreaterThan(20);
-    for (const k of keys) expect(text, `falta ${k}`).toMatch(new RegExp(`(^|[\\s/])${k}([\\s/]|$)`, 'm'));
+  it('con todo activado lista la tecla de cada acción', () => {
+    const text = shown(helpGroups(ALL, DEFAULT_KEYS));
+    expect(ACTIONS.length).toBe(28);
+    for (const a of ACTIONS) {
+      expect(text, `falta ${a}`).toMatch(new RegExp(`(^|[\\s/])${reEsc(keyLabel(DEFAULT_KEYS[a]))}([\\s/]|$)`, 'm'));
+    }
     expect(text).toContain('Shift');
+    expect(text).toMatch(/^Esc /m);
+  });
+
+  it('muestra las teclas que haya elegido el jugador (fase 14)', () => {
+    const k = rebind(DEFAULT_KEYS, 'outriggers', 'KeyU').keys;
+    const text = shown(helpGroups(flagsOf('medium'), k));
+    expect(text).toMatch(/^U sacar \/ recoger estabilizadores/m);
+    expect(text).not.toMatch(/^O /m);
+    // el editor lista todas las acciones, con la que espera tecla marcada
+    const html = keysHtml(k, 'hook');
+    expect(html.match(/class="kbtn/g)!.length).toBe(ACTIONS.length);
+    expect(html).toContain('pulsa una tecla');
+    expect(html).toContain('<kbd>U</kbd>');
   });
 
   it('incluye lo que se fue añadiendo: cámara libre del tándem y amarre del gancho', () => {

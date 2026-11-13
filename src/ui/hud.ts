@@ -1,4 +1,8 @@
 import type * as THREE from 'three';
+import { t } from '../i18n';
+import { withKeys } from './keys';
+
+const h = t.hud;
 
 // HUD en HTML simple: contador de rendimiento, lecturas de la grúa, mensajes y ayuda de teclas.
 
@@ -52,17 +56,17 @@ function assemblyLine(r: Readout) {
   const out: string[] = [];
   if (r.ballast) {
     const b = r.ballast, moving = b.p !== b.target;
-    out.push(`<span class="lamp ${cls(b.p)}">Lastre ${Math.round(b.t)} / ${b.of} t${moving ? (b.target ? ' · montando' : ' · desmontando') : ''}</span>`);
+    out.push(`<span class="lamp ${cls(b.p)}">${h.ballast(Math.round(b.t), b.of, moving ? (b.target ? h.mounting : h.unmounting) : '')}</span>`);
   }
-  if (r.tower) out.push(`<span class="lamp ${cls(r.tower.p)}">Torre ${r.tower.text}</span>`);
-  if (r.yguy) out.push(`<span class="lamp ${cls(r.yguy.p)}">Arriostr. Y ${r.yguy.text}</span>`);
+  if (r.tower) out.push(`<span class="lamp ${cls(r.tower.p)}">${h.tower(r.tower.text)}</span>`);
+  if (r.yguy) out.push(`<span class="lamp ${cls(r.yguy.p)}">${h.yguy(r.yguy.text)}</span>`);
   if (r.jib) {
     const j = r.jib;
-    out.push(`<span class="lamp ${cls(j.p)}">Plumín ${j.p >= 1 ? `${Math.round(j.deg)}° · ${j.len} m` : j.text}</span>`);
+    out.push(`<span class="lamp ${cls(j.p)}">${h.jib(j.p >= 1 ? h.jibUp(Math.round(j.deg), j.len) : j.text)}</span>`);
   }
   if (r.superlift) {
     const s = r.superlift;
-    out.push(`<span class="lamp ok">Superlift r ${s.r.toFixed(1).replace('.', ',')} m (${s.min}–${s.max})</span>`);
+    out.push(`<span class="lamp ok">${h.superlift(s.r.toFixed(1).replace('.', ','), s.min, s.max)}</span>`);
   }
   return out.length ? `<div class="lamps">${out.join('')}</div>` : '';
 }
@@ -97,21 +101,19 @@ export class Hud {
     const opts = cranes.map((c) => `<option value="${c.id}"${c.id === current ? ' selected' : ''}>${c.name}</option>`).join('');
     root.innerHTML = `
       <div class="left" id="left">
-        ${perf ? '<div class="panel perf" id="perf">— fps</div>' : ''}
-        <label class="panel pick">Grúa <select id="crane">${opts}</select></label>
+        ${perf ? `<div class="panel perf" id="perf">${h.fps}</div>` : ''}
+        <label class="panel pick">${h.crane} <select id="crane">${opts}</select></label>
       </div>
       <div class="panel data" id="data"></div>
       <div class="panel data other" id="other" hidden></div>
       <div class="msg" id="msg"></div>
-      <div class="panel keys">
-        <b>Flechas</b> conducir · <b>A/D</b> giro · <b>W/S</b> pluma · ${has.tower ? '<b>Q/E</b> carro · ' : has.tele ? '<b>Q/E</b> telescopio · ' : ''}<b>R/F</b> gancho ·
-        <b>Espacio</b> enganchar · <b>V</b> cámara · <b>H</b> todas las teclas
-        <button class="help-btn" id="help-btn" title="Controles (H)" aria-label="Controles (H)">?</button>
+      <div class="panel keys"><span id="keys-line"></span>
+        <button class="help-btn" id="help-btn">?</button>
       </div>
       <div class="card" id="card" hidden>
-        <h2>Grúa volcada</h2>
+        <h2>${h.tippedTitle}</h2>
         <p id="card-text"></p>
-        <button id="card-restart">Reiniciar</button>
+        <button id="card-restart">${h.restart}</button>
       </div>`;
     this.left = root.querySelector('#left')!;
     this.helpBtn = root.querySelector('#help-btn')!;
@@ -125,6 +127,20 @@ export class Hud {
     this.data = root.querySelector('#data')!;
     this.msg = root.querySelector('#msg')!;
     this.otherEl = root.querySelector('#other')!;
+    this.keysLine = root.querySelector('#keys-line')!;
+    this.has = has;
+    this.setKeys();
+  }
+
+  private keysLine: HTMLElement;
+  private has: { tele: boolean; tower?: boolean };
+
+  /** Línea de teclas de abajo y título del botón "?" con las teclas en uso (fase 14: configurables) */
+  setKeys() {
+    this.keysLine.innerHTML = withKeys(h.keysLine(this.has));
+    const tip = withKeys(h.helpBtn);
+    this.helpBtn.title = tip;
+    this.helpBtn.setAttribute('aria-label', tip);
   }
 
   /** Nombre de la grúa que se maneja (tándem: cambia con Tab) */
@@ -138,25 +154,26 @@ export class Hud {
     if (!o) return;
     const f = (v: number, d = 1) => v.toFixed(d).replace('.', ',');
     const cls = o.lmi >= 1 ? 'bad' : o.lmi >= 0.9 ? 'warn' : 'ok';
-    this.otherEl.innerHTML = `<div class="title">${o.name} <small>(Tab para manejarla)</small></div>` +
-      (o.tipped ? `<div class="cut">GRÚA VOLCADA</div>` :
+    this.otherEl.innerHTML = `<div class="title">${withKeys(h.otherTitle(o.name))}</div>` +
+      (o.tipped ? `<div class="cut">${h.tippedBadge}</div>` :
         `<div class="lmi ${cls}"><span>LMI</span><b>${Math.round(o.lmi * 100)} %</b>` +
         `<i><u style="width:${Math.min(100, (o.lmi / 1.25) * 100).toFixed(1)}%"></u><s></s></i></div>` +
-        (o.tiltDeg > 0.05 ? `<div class="bad">¡Se levanta! ${f(o.tiltDeg)}°</div>` : '') +
-        `Tensión cable <b>${f(o.tension)} t</b>` + (o.share !== null ? ` · lleva <b>${f(o.share)} t</b>` : '') +
-        (o.sideDeg != null ? `<br>Cable a <b class="${o.sideDeg > 6 ? 'bad' : o.sideDeg > 4 ? 'warn' : ''}">${f(o.sideDeg)}°</b> de la vertical` : ''));
+        (o.tiltDeg > 0.05 ? `<div class="bad">${h.lifting(f(o.tiltDeg))}</div>` : '') +
+        `${h.tension} <b>${f(o.tension)} t</b>` + (o.share !== null ? ` · ${h.carries} <b>${f(o.share)} t</b>` : '') +
+        (o.sideDeg != null ? `<br>${h.sideAngle(f(o.sideDeg), o.sideDeg > 6 ? 'bad' : o.sideDeg > 4 ? 'warn' : '')}` : ''));
   }
 
   /** Cartel de vuelco (null = ocultar) */
   showTipped(text: string | null) {
     this.card.hidden = text === null;
     if (text !== null) {
-      this.card.querySelector('#card-text')!.textContent = text;
+      this.card.querySelector('#card-text')!.textContent = withKeys(text);
       (this.card.querySelector('#card-restart') as HTMLButtonElement).focus();
     }
   }
 
   say(text: string, seconds = 2.5) {
+    text = withKeys(text);
     this.msg.textContent = text;
     this.msg.classList.add('on');
     this.msgT = seconds;
@@ -164,7 +181,7 @@ export class Hud {
 
   /** Como say(), pero no reinicia el mensaje si ya se está mostrando (para avisos que se repiten cada paso). */
   sayOnce(text: string, seconds = 1.9) {
-    if (this.msg.textContent === text && this.msgT > 0.5) return;
+    if (this.msg.textContent === withKeys(text) && this.msgT > 0.5) return;
     this.say(text, seconds);
   }
 
@@ -181,10 +198,8 @@ export class Hud {
     const n = this.frames;
     const fps = n / this.acc;
     this.perf.innerHTML =
-      `<b class="${fps < 50 ? 'bad' : fps < 58 ? 'warn' : ''}">${fps.toFixed(0)} fps</b>` +
-      ` · ${(1000 * this.acc / n).toFixed(1)} ms (peor ${(1000 * this.worst).toFixed(1)})<br>` +
-      `física ${(this.physAcc / n).toFixed(2)} ms · render CPU ${(this.renderAcc / n).toFixed(2)} ms<br>` +
-      `draw calls ${info.render.calls} · triángulos ${info.render.triangles}`;
+      h.perf(`<b class="${fps < 50 ? 'bad' : fps < 58 ? 'warn' : ''}">${fps.toFixed(0)} fps</b>`, (1000 * this.acc / n).toFixed(1),
+        (1000 * this.worst).toFixed(1), (this.physAcc / n).toFixed(2), (this.renderAcc / n).toFixed(2), info.render.calls, info.render.triangles);
     this.frames = 0; this.acc = 0; this.worst = 0; this.physAcc = 0; this.renderAcc = 0;
   }
 
@@ -192,25 +207,25 @@ export class Hud {
     const f = (v: number, d = 1) => v.toFixed(d).replace('.', ',');
     const lmiCls = r.lmi >= 1 ? 'bad' : r.lmi >= 0.9 ? 'warn' : 'ok';
     this.data.innerHTML =
-      `<div class="title">${this.title}${r.fine ? ' · <span class="warn">fino</span>' : ''}</div>` +
-      (r.tower ? `Carro <b>${f(r.Lb)} m</b> · pluma <b>${f(r.angDeg)}°</b><br>` : `Pluma <b>${f(r.Lb)} m</b> · <b>${f(r.angDeg)}°</b><br>`) +
-      `Radio <b>${f(r.radius)} m</b> · punta <b>${f(r.headH)} m</b><br>` +
-      `Cable <b>${f(r.cable)} m</b><br>` +
-      `Gancho: <b>${r.load}</b><br>` +
-      `Marcha <b>${f(Math.abs(r.speed) * 3.6)} km/h</b>${r.speed < -0.05 ? ' atrás' : ''}` +
-      (r.steerDeg === null ? '' : ` · dirección <b>${f(r.steerDeg, 0)}°</b>`) +
+      `<div class="title">${this.title}${r.fine ? ` · <span class="warn">${h.fine}</span>` : ''}</div>` +
+      (r.tower ? h.trolley(f(r.Lb), f(r.angDeg)) : h.boom(f(r.Lb), f(r.angDeg))) + '<br>' +
+      h.radius(f(r.radius), f(r.headH)) + '<br>' +
+      h.cable(f(r.cable)) + '<br>' +
+      h.hook(r.load) + '<br>' +
+      h.speed(f(Math.abs(r.speed) * 3.6), r.speed < -0.05) +
+      (r.steerDeg === null ? '' : h.steer(f(r.steerDeg, 0))) +
       `<div class="lmi ${lmiCls}"><span>LMI</span><b>${Math.round(r.lmi * 100)} %</b>` +
       `<i><u style="width:${Math.min(100, (r.lmi / 1.25) * 100).toFixed(1)}%"></u><s></s></i></div>` +
-      (r.bypass && !r.tipped ? `<div class="cut">LMI PUENTEADO (P)</div>` : '') +
-      (r.tipped ? `<div class="cut">GRÚA VOLCADA</div>`
-        : r.cut ? `<div class="cut">CORTE LMI · solo movimientos que lo reducen</div>`
-        : r.lmi >= 1 ? `<div class="bad">LMI por encima del 100 %</div>`
-        : r.lmi >= 0.9 ? `<div class="warn">Aviso LMI: cerca del límite</div>` : '') +
-      (!r.tipped && r.tiltDeg > 0.05 ? `<div class="bad">¡La grúa se levanta! ${f(r.tiltDeg)}°</div>` : '') +
-      `Capacidad <b class="${r.mHook > r.rated ? 'bad' : ''}">${f(r.mHook)} / ${f(r.rated)} t</b><br>` +
-      `Tensión cable <b>${f(r.tension, 2)} t</b><br>` +
-      (r.side ? `Cable a <b class="${r.side.deg > r.side.max ? 'bad' : r.side.deg > (r.side.max * 2) / 3 ? 'warn' : ''}">${f(r.side.deg)}°</b> de la vertical (máx ${r.side.max}°)<br>` : '') +
+      (r.bypass && !r.tipped ? `<div class="cut">${withKeys(h.bypass)}</div>` : '') +
+      (r.tipped ? `<div class="cut">${h.tippedBadge}</div>`
+        : r.cut ? `<div class="cut">${h.cut}</div>`
+        : r.lmi >= 1 ? `<div class="bad">${h.over}</div>`
+        : r.lmi >= 0.9 ? `<div class="warn">${h.near}</div>` : '') +
+      (!r.tipped && r.tiltDeg > 0.05 ? `<div class="bad">${h.craneLifting(f(r.tiltDeg))}</div>` : '') +
+      `${h.capacity} <b class="${r.mHook > r.rated ? 'bad' : ''}">${f(r.mHook)} / ${f(r.rated)} t</b><br>` +
+      `${h.tension} <b>${f(r.tension, 2)} t</b><br>` +
+      (r.side ? h.sideAngleMax(f(r.side.deg), r.side.deg > r.side.max ? 'bad' : r.side.deg > (r.side.max * 2) / 3 ? 'warn' : '', r.side.max) + '<br>' : '') +
       assemblyLine(r) +
-      `<small>Apoyo: ${r.mode} · masa y capacidad con gancho</small>`;
+      `<small>${h.support(r.mode)}</small>`;
   }
 }

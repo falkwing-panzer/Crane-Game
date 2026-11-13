@@ -1,9 +1,12 @@
-# Corre las pruebas, compila el juego y lo publica en GitHub Pages en cada push a main.
+# Corre las pruebas, compila el juego, lo prueba en Chromium y lo publica en GitHub Pages en cada push a main.
 # También se puede lanzar a mano desde la pestaña Actions ("Run workflow").
 name: Publicar en GitHub Pages
 
 on:
   push:
+    branches: [main]
+  # Fase 14: en cada PR a main se corren las pruebas (sin publicar), para verlas antes del merge
+  pull_request:
     branches: [main]
   workflow_dispatch:
 
@@ -13,7 +16,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -30,11 +33,27 @@ jobs:
       - name: Pruebas
         run: npm test
       - run: npm run build
-      - uses: actions/upload-pages-artifact@v3
+      # Fase 14: el juego compilado en Chromium (menú, 14 niveles, pruebas libres, tándem, consola limpia).
+      # Si falla, tampoco se publica; el informe queda como artefacto de la ejecución.
+      - name: Chromium para las pruebas en el navegador
+        run: npx playwright install --with-deps chromium
+      - name: Pruebas en el navegador
+        run: npx playwright test
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: informe-playwright
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
   publicar:
+    if: github.event_name != 'pull_request'
     needs: compilar
     runs-on: ubuntu-latest
     environment:

@@ -7,6 +7,7 @@
 
 import type { CraneSpec } from './cranes';
 import { bodyHalf } from './cranes';
+import { t } from '../i18n';
 
 export type SoftKind = 'mud' | 'water';
 /** Centro (x, z) y medidas totales en x (w) y en z (d), como la referencia. */
@@ -44,8 +45,8 @@ export function footprint(T: CraneSpec, cx: number, cz: number, h: number): [num
 export function terrainBlocked(T: CraneSpec, zones: SoftZone[], cx: number, cz: number, h: number): string | null {
   if (!zones.length) return null;
   for (const [x, z] of footprint(T, cx, cz, h)) {
-    if (softAt(zones, x, z, ['water'])) return 'No se puede entrar al agua';
-    if (!T.crawler && !T.offroad && softAt(zones, x, z, ['mud'])) return 'Terreno blando: las ruedas se hundirían';
+    if (softAt(zones, x, z, ['water'])) return t.ops.water;
+    if (!T.crawler && !T.offroad && softAt(zones, x, z, ['mud'])) return t.ops.mud;
   }
   return null;
 }
@@ -57,7 +58,7 @@ export function padsOnSoft(T: CraneSpec, zones: SoftZone[], cx: number, cz: numb
   for (const [lx, lz] of [[o.xf, o.hw], [o.xf, -o.hw], [o.xr, o.hw], [o.xr, -o.hw]]) {
     const [x, z] = toWorld(lx, lz, cx, cz, h);
     for (const [dx, dz] of [[0, 0], [0.6, 0.6], [-0.6, 0.6], [0.6, -0.6], [-0.6, -0.6]]) {
-      if (softAt(zones, x + dx, z + dz, ['water', 'mud'])) return 'Terreno blando bajo un estabilizador';
+      if (softAt(zones, x + dx, z + dz, ['water', 'mud'])) return t.ops.softPad;
     }
   }
   return null;

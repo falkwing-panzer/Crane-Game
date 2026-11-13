@@ -5,6 +5,9 @@ import type { CraneSpec } from './cranes';
 import type { CraneState } from './kinematics';
 import { MOVING } from './drive';
 import { KF, craneMasses, lmiStatic, structCap, tipEdge, type CraneConfig, type SupportMode } from './stability';
+import { t } from '../i18n';
+
+const o = t.ops;
 
 /** Inclinación (rad) a partir de la cual la grúa vuelca sin remedio (fail de la referencia, ≈ 3,4°). */
 export const TIP_PHI = 0.06;
@@ -31,20 +34,20 @@ export interface OutriggerCtx {
 
 /** Tecla O. Devuelve el mensaje para el operador. */
 export function toggleOutriggers(T: CraneSpec, C: CraneConfig, S: CraneState, ctx: OutriggerCtx): string {
-  if (!T.out) return 'Esta grúa no tiene estabilizadores';
+  if (!T.out) return o.noOutriggers;
   // (no está en la referencia) con la grúa levantándose no se cambia el apoyo: cambiaría la arista de vuelco
-  if (S.phi > 0) return 'La grúa se está levantando: recupérala antes de mover los estabilizadores';
+  if (S.phi > 0) return o.tilting;
   if (S.outT === 0) {
-    if (Math.abs(S.vd) > MOVING) return 'Detén la grúa antes de estabilizar';
+    if (Math.abs(S.vd) > MOVING) return o.stopFirst;
     if (ctx.padsBlocked) return ctx.padsBlocked;
     S.outT = 1;
-    return 'Desplegando estabilizadores';
+    return o.deploying;
   }
-  if (ctx.loadHanging) return 'Apoya la carga antes de recoger los estabilizadores';
+  if (ctx.loadHanging) return o.hanging;
   if (ctx.locked) return ctx.locked;
-  if (lmiStatic(T, C, 'tire', S.Lb, S.ang, S.slew, T.hookM) >= 1) return 'LMI: sobre neumáticos la grúa no es estable así. Gira o retrae la pluma.';
+  if (lmiStatic(T, C, 'tire', S.Lb, S.ang, S.slew, T.hookM) >= 1) return o.tireLmi;
   S.outT = 0;
-  return 'Recogiendo estabilizadores';
+  return o.stowing;
 }
 
 export interface Dyn {

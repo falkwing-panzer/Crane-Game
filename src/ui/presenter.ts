@@ -15,8 +15,11 @@ import { LevelUi, homeUrl, levelUrl } from './levelUi';
 import type { Sound } from './audio';
 import { bootDone } from './boot';
 import { saveSettings, showFps, QUALITIES, type Quality, type Settings } from './settings';
+import type { Input } from './input';
+import { t } from '../i18n';
 
-const MODE_TEXT = { out: 'estabilizadores', tire: 'neumáticos', move: 'en marcha', crawler: 'orugas', crawlMove: 'orugas en marcha' };
+const MODE_TEXT = t.hud.modes;
+const m = t.msg;
 
 const _lat = new THREE.Vector3();
 const _wd = new THREE.Vector3();
@@ -57,7 +60,7 @@ export class Presenter {
    * root = contenedor de esta partida dentro de #hud (se quita entero al desmontarla); sound = el de la app (uno solo);
    * go(url) = ir a otro nivel o grúa sin recargar (fase 14).
    */
-  constructor(private ctx: SceneCtx, private ses: Session, settings: Settings, root: HTMLElement, sound: Sound, go: (url: string) => void) {
+  constructor(private ctx: SceneCtx, private ses: Session, settings: Settings, root: HTMLElement, sound: Sound, input: Input, go: (url: string) => void) {
     const { units, L, def, multi, bus } = ses;
     const act = ses.act;
     const specs = units.map((u) => u.T);
@@ -76,16 +79,18 @@ export class Presenter {
       crawler: any((T) => isCrawler(T)), wheels: any((T) => !isCrawler(T)), tie: any((T) => canTie(T)),
       ballast: any((T) => !!T.ballast), yguy: any((T) => !!T.yguy), jib: any((_, u) => u.jibOk), superlift: any((T) => !!T.superlift),
       tandem: multi, free: !L,
-    }, hud.helpBtn);
+    }, hud.helpBtn, input);
+    // teclas cambiadas en la ayuda: la línea de abajo las muestra
+    this.help.onKeys = () => hud.setKeys();
     hud.onCrane = (k) => go(levelUrl(0, k));
 
     // Niveles: menú, ficha, carteles y reloj. El turno empieza en pausa hasta "Empezar turno".
     const lui = this.lui = new LevelUi(root);
-    hud.left.insertAdjacentHTML('beforeend', `<a class="panel menu-btn" href="${homeUrl()}">☰ Niveles</a>`);
+    hud.left.insertAdjacentHTML('beforeend', `<a class="panel menu-btn" href="${homeUrl()}">${t.hud.menu}</a>`);
     if (L) root.querySelector<HTMLElement>('.pick')!.hidden = true;
     // Ajustes (fase 11): calidad gráfica (recarga la página: el antialias no cambia en marcha) y sonido
-    const qOpts = QUALITIES.map((q) => `<option value="${q}"${q === settings.calidad ? ' selected' : ''}>${q}</option>`).join('');
-    hud.left.insertAdjacentHTML('beforeend', `<label class="panel pick prefs">Calidad <select id="quality">${qOpts}</select></label>`);
+    const qOpts = QUALITIES.map((q) => `<option value="${q}"${q === settings.calidad ? ' selected' : ''}>${t.hud.qualities[q]}</option>`).join('');
+    hud.left.insertAdjacentHTML('beforeend', `<label class="panel pick prefs">${t.hud.quality} <select id="quality">${qOpts}</select></label>`);
     const qSel = root.querySelector('#quality') as HTMLSelectElement;
     qSel.addEventListener('change', () => {
       saveSettings({ ...settings, calidad: qSel.value as Quality });
@@ -100,14 +105,13 @@ export class Presenter {
     this.sound = sound;
 
     // Mensajes: en el tándem, los de la grúa que no se maneja llevan su nombre
-    const name = (unit: number | undefined, text: string) => multi && unit !== undefined && units[unit] !== ses.act ? `${units[unit].T.name}: ${text}` : text;
+    const name = (unit: number | undefined, text: string) => multi && unit !== undefined && units[unit] !== ses.act ? m.named(units[unit].T.name, text) : text;
     this.off.push(
       bus.on('say', (e) => { const t = name(e.unit, e.text); if (e.once) hud.sayOnce(t); else hud.say(t, e.s); }),
-      bus.on('cut', (e) => hud.say(name(e.unit, e.overload ? 'LMI: la carga supera la capacidad en esta posición'
-        : 'LMI: movimiento cortado · solo se permiten los que reducen el momento'))),
-      bus.on('tipping', (e) => hud.say(name(e.unit, '¡La grúa vuelca!'), CARD_DELAY)),
+      bus.on('cut', (e) => hud.say(name(e.unit, e.overload ? m.cutOverload : m.cut))),
+      bus.on('tipping', (e) => hud.say(name(e.unit, m.tipping), CARD_DELAY)),
       // en la prueba libre, el cartel con Reiniciar (en un nivel, el de nivel fallido: lo pide el fin del nivel)
-      bus.on('tipped', (e) => { if (!L) hud.showTipped(multi ? `${units[e.unit].T.name}: ${e.text}` : e.text); }),
+      bus.on('tipped', (e) => { if (!L) hud.showTipped(multi ? m.named(units[e.unit].T.name, e.text) : e.text); }),
       bus.on('end', (e) => {
         if (e.fail) lui.failed(def.li, ses.act.T.name, e.fail.title, e.fail.text);
         else lui.won(def.li, ses.act.T.name, ses.run, !!e.record);
@@ -118,13 +122,10 @@ export class Presenter {
       bus.on('strike', (e) => { if (e.v > 0.25) this.sound.thump(e.v); }),
     );
 
-    if (def.freeTandem) hud.say('Tándem: LR 3000 en la cabeza de la columna y AT 500-8 en el pie · Espacio engancha cada una · Tab cambia de grúa', 5);
+    if (def.freeTandem) hud.say(m.freeTandem, 5);
     else if (!L && !def.showMenu) {
       const T = act.T;
-      hud.say(T.tower ? `${T.name} · O despliega los estabilizadores · M monta la grúa torre · Q/E mueven el carro · V cambia la cámara`
-        : T.superlift ? `${T.name} · K/L acercan o alejan el lastre superlift · la bandeja barre un círculo detrás · V cambia la cámara`
-        : T.crawler ? `${T.name} · flechas para conducir (← → gira en el sitio) · puede llevar la carga colgada · V cambia la cámara`
-        : `${T.name} · flechas para conducir · O despliega los estabilizadores · V cambia la cámara`, 4);
+      hud.say(T.tower ? m.introTower(T.name) : T.superlift ? m.introSuperlift(T.name) : T.crawler ? m.introCrawler(T.name) : m.intro(T.name), 4);
     }
   }
 
@@ -183,13 +184,13 @@ export class Presenter {
       headH: hp.y,
       cable: S.cable,
       // tándem: la parte de la carga que lleva esta grúa
-      load: att ? (share !== null ? `${att.label} ${phys.attachedLug === 0 ? '(cabeza)' : '(pie)'} ${f1(share)} de ${f1(att.mass)} t`
-        : `${att.label} ${f1(att.mass)} t`) : phys.tied ? 'amarrado al frente' : 'libre',
+      load: att ? (share !== null ? t.hud.loadLug(att.label, phys.attachedLug === 0, f1(share), f1(att.mass))
+        : t.hud.load(att.label, f1(att.mass))) : phys.tied ? t.hud.tied : t.hud.free,
       fine: ki.fine,
       lmi: act.dyn.lmi,
       rated: ratedCap(T, C, md, S.Lb, S.ang, S.slew),
       mHook: T.hookM + ses.loadOnHook(act),
-      mode: S.out > 0 && S.out < 1 ? (S.outT ? 'desplegando estabilizadores…' : 'recogiendo estabilizadores…') : MODE_TEXT[md],
+      mode: S.out > 0 && S.out < 1 ? (S.outT ? t.hud.deploying : t.hud.stowing) : MODE_TEXT[md],
       tension: phys.tension,
       cut: act.cut,
       tiltDeg: (S.phi * 180) / Math.PI,

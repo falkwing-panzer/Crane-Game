@@ -10,6 +10,7 @@ import { blockWhileAssembling, stepAssembly, teleLimit } from '../crane/assembly
 import { stepSuperlift } from '../crane/superlift';
 import { cableAngle } from '../levels/tandemSetup';
 import type { Session, Unit } from './session';
+import { t } from '../i18n';
 
 /** Mandos sueltos: la grúa que no se maneja se queda quieta */
 export const IDLE: CraneInput = { slew: 0, luff: 0, tele: 0, hoist: 0, fine: false, sl: 0, jib: 0 };
@@ -54,7 +55,7 @@ export function controlUnit(ses: Session, u: Unit, dt: number, inp: CraneInput, 
   if (tm) sayOnce(tm);
   const teleMax = teleLimit(T, S);
   if (inp.tele > 0 && S.Lb >= teleMax - 1e-6 && teleMax < T.boom.max) {
-    sayOnce(`Sin arriostramiento tensado la pluma solo llega a ${teleMax} m (Y)`);
+    sayOnce(t.msg.teleLimit(teleMax));
   }
   const md = supportMode(S, T);
   // Como la referencia: los cortes usan el LMI estático; la carga cuenta solo si cuelga.
@@ -115,7 +116,7 @@ export function afterUnit(ses: Session, u: Unit, dt: number) {
     }
     return;
   }
-  if (phys.twoBlocked()) bus.emit('say', { text: 'Gancho contra la cabeza de la pluma (doble bloqueo)', once: true, unit: u.i });
+  if (phys.twoBlocked()) bus.emit('say', { text: t.msg.twoBlock, once: true, unit: u.i });
   // ángulo del cable con la vertical (tiro lateral del tándem)
   u.sideAng = cableAngle(phys.headWorld(), phys.hookTop());
   // Estabilidad con la tensión real del cable: un balanceo o un tirón también cuentan.
@@ -129,9 +130,7 @@ export function afterUnit(ses: Session, u: Unit, dt: number) {
     S.vd = 0;
     u.cut = false;
     u.tipClock = 0;
-    u.tipText = `El momento de vuelco superó la estabilidad (${Math.round(u.dyn.u * 100)} %). ` +
-      (md === 'tire' || md === 'move' ? 'Sobre neumáticos la capacidad es mucho menor: despliega los estabilizadores (O). ' : '') +
-      'Reduce el radio y evita que la carga se balancee hacia fuera.';
+    u.tipText = t.msg.tipText(Math.round(u.dyn.u * 100), md === 'tire' || md === 'move');
     bus.emit('tipping', { unit: u.i });
   }
 }

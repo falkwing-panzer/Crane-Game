@@ -1,6 +1,8 @@
 // Pantalla de carga (fase 13). El HTML y el CSS están en index.html para que se vean mientras baja el JS;
 // aquí solo se avanza por etapas reales: descarga (en index.html, sin porcentaje) → física → escena → primer cuadro.
 
+import { t } from '../i18n';
+
 const el = () => document.getElementById('boot');
 
 /** Etapa de la carga: texto y avance 0…1 */
@@ -9,7 +11,7 @@ export function bootStage(text: string, p: number) {
   if (!b) return;
   b.classList.remove('wait');
   b.querySelector<HTMLElement>('.bar u')!.style.width = `${Math.round(p * 100)}%`;
-  b.querySelector('#boot-text')!.textContent = `Cargando… ${text} (${Math.round(p * 100)} %)`;
+  b.querySelector('#boot-text')!.textContent = t.boot.loading(text, Math.round(p * 100));
 }
 
 /** Deja que el navegador pinte la etapa antes de un trabajo largo y síncrono (con la pestaña oculta no hay cuadros: tope de 50 ms). */
@@ -36,7 +38,7 @@ export function bootError(err: unknown) {
   if (!b) return false;
   b.classList.remove('wait', 'gone');
   b.querySelector('.bar')?.remove();
-  b.querySelector('#boot-text')!.textContent = 'No se pudo arrancar el juego.';
+  b.querySelector('#boot-text')!.textContent = t.boot.failed;
   const pre = document.createElement('pre');
   pre.textContent = String(err);
   b.append(pre);
