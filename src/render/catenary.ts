@@ -60,6 +60,29 @@ export function catenary(a: V3, b: V3, len: number, n: number, floor = -Infinity
   return out;
 }
 
+/**
+ * Cable flojo con los extremos casi uno encima del otro (gancho apoyado debajo de la cabeza): la catenaria colgaría
+ * por debajo del extremo bajo. En su lugar el ramal se arquea hacia `side` (horizontal, unitario) en media onda de
+ * seno: largo ≈ d + π²·f²/(4d), así que la flecha es f = (2/π)·√(d·holgura), como mucho `maxF`; lo que sobre se queda
+ * sobre el gancho.
+ */
+export function bow(a: V3, b: V3, len: number, n: number, side: V3, maxF: number, out: V3[] = []): V3[] {
+  while (out.length < n + 1) out.push({ x: 0, y: 0, z: 0 });
+  out.length = n + 1;
+  const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z, d = Math.hypot(dx, dy, dz);
+  const f = Math.min(maxF, (2 / Math.PI) * Math.sqrt(d * Math.max(0, len - d)));
+  for (let i = 0; i <= n; i++) {
+    const k = i / n, s = f * Math.sin(Math.PI * k);
+    out[i].x = a.x + dx * k + side.x * s; out[i].y = a.y + dy * k + side.y * s; out[i].z = a.z + dz * k + side.z * s;
+  }
+  return out;
+}
+
+/** ¿Algún punto quedaría por debajo de `floor`? (la catenaria se recortaría contra el suelo o el gancho) */
+export function dips(p: V3[], floor: number) {
+  return p.some((v) => v.y < floor - 1e-3);
+}
+
 /** Largo de una polilínea (pruebas) */
 export function polyLength(p: V3[]) {
   let s = 0;

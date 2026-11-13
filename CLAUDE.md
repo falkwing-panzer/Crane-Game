@@ -672,10 +672,13 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - **Catenaria (fase 15, parte C)**, solo dibujo (en la física el cable es una distancia máxima): cada ramal del cable
   en 16 tramos (InstancedMesh, `nFalls · 16` instancias) y cada ramal de la eslinga en 8 (LineSegments). Holgura del
   cable = `S.cable` − distancia de la cabeza al gancho (cada ramal mide su recta + la holgura); la de la eslinga =
-  `slingLength` − distancia del fondo del gancho al punto de enganche. Con menos de 3 cm, recta. Lo que sobra no baja
-  del fondo del gancho ni del suelo (cable) ni del punto de enganche (eslinga sin orejetas: queda sobre la carga). Con
-  el gancho justo debajo de la cabeza el sobrante cae sobre el gancho y el cable se ve vertical; con el gancho a un
-  lado se ve la curva. Amarrado, recto.
+  `slingLength` − distancia del fondo del gancho al punto de enganche. **Solo con el gancho o la carga apoyados**
+  (`hookSupported`/`loadSupported`): colgando, al bajar con F el gancho va 2–20 cm detrás del cabrestante (City 25,
+  hasta 1,1 m al rebotar) y el cable parpadeaba entre recto y curvo (visto por Jesús). Con menos de 3 cm, recta. Si
+  la catenaria bajaría del fondo del gancho o del suelo (gancho apoyado debajo de la cabeza: antes quedaba una "L"
+  en el suelo), cada ramal se arquea hacia fuera (`bow`: los de los lados hacia su lado, el del centro hacia delante;
+  flecha ≤ max(0,4 m; 12 % del largo); lo que sobre se queda sobre el gancho). Eslinga sin orejetas: no baja del punto
+  de enganche (queda sobre la carga). Amarrado, recto.
 
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las

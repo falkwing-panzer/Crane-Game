@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { catenary, polyLength } from './catenary';
+import { bow, catenary, dips, polyLength } from './catenary';
 
 // Fase 15, parte C: el cable flojo se dibuja como catenaria; tenso, recto.
 describe('catenaria del cable flojo', () => {
@@ -36,5 +36,16 @@ describe('catenaria del cable flojo', () => {
     const out = catenary(a, { x: 5, y: 10, z: 0 }, 14, 8);
     expect(catenary(a, { x: 5, y: 10, z: 0 }, 16, 8, -Infinity, out)).toBe(out);
     expect(out.length).toBe(9);
+  });
+
+  it('gancho apoyado debajo de la cabeza: el ramal se arquea de lado con el largo del cable (hasta la flecha máxima)', () => {
+    const b = { x: 0, y: 1, z: 0 }, side = { x: 0, y: 0, z: 1 };
+    expect(dips(catenary(a, b, 21, 32), 1)).toBe(true); // la catenaria bajaría del gancho
+    const p = bow(a, b, 21, 64, side, 5);
+    expect(polyLength(p)).toBeCloseTo(21, 0);
+    expect(Math.max(...p.map((v) => v.z))).toBeGreaterThan(1);
+    expect(Math.min(...p.map((v) => v.y))).toBeGreaterThanOrEqual(1);
+    // con mucho cable sobrante, la flecha no pasa del máximo
+    expect(Math.max(...bow(a, b, 80, 64, side, 1.5).map((v) => v.z))).toBeCloseTo(1.5, 6);
   });
 });
