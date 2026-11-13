@@ -5,7 +5,8 @@
 // Método (aproximación barata, no trazado de rayos): para cada vértice se toma un punto un poco por delante de su
 // cara (p + n·OFF) y se mira lo cerca que quedan las otras piezas del grupo (sus cajas envolventes). Cuanto más cerca
 // y más de frente, más oscuro; una pieza detrás de la cara no cuenta. Las piezas delgadas (barandillas, cristales)
-// pesan poco. Una cuadrícula de celdas evita mirar todas las piezas para cada vértice.
+// pesan poco. Para cada pieza se buscan antes las piezas que pueden oscurecerla (cajas cercanas), y los vértices
+// repetidos (misma posición y normal) se calculan una vez.
 
 /** Distancia a la que una pieza deja de oscurecer (m) */
 export const AO_R = 1.8;
@@ -32,47 +33,57 @@ export function bakeAO(pieces: AoPiece[]): Float32Array[] {
     const d = [b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]].sort((x, y) => x - y);
     return Math.min(1, d[1] / FULL);
   });
-  // cuadrícula: cada pieza en las celdas que toca su caja agrandada AO_R
-  const cell = AO_R, grid = new Map<string, number[]>();
-  const key = (x: number, y: number, z: number) => `${x},${y},${z}`;
-  occ.forEach(({ b }, k) => {
-    const lo = b.min.map((v) => Math.floor((v - cell) / cell)), hi = b.max.map((v) => Math.floor((v + cell) / cell));
-    // una pieza enorme (más de 40 celdas por eje) se recorta: nunca pasa en una grúa, pero no se cuelga
-    for (let x = lo[0]; x <= Math.min(hi[0], lo[0] + 400); x++)
-      for (let y = lo[1]; y <= Math.min(hi[1], lo[1] + 400); y++)
-        for (let z = lo[2]; z <= Math.min(hi[2], lo[2] + 400); z++) {
-          const s = key(x, y, z);
-          let l = grid.get(s);
-          if (!l) grid.set(s, (l = []));
-          l.push(k);
-        }
-  });
-  const stamp = new Int32Array(occ.length).fill(-1);
-  let tick = 0;
+  const reach = AO_R + OFF;
   return pieces.map((p, pi) => {
     const n = p.pos.length / 3, out = new Float32Array(n);
+    // caja de la pieza: solo pueden oscurecerla las piezas a menos de AO_R + OFF de ella
+    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (let v = 0; v < n; v++) for (let a = 0; a < 3; a++) {
+      const x = p.pos[3 * v + a];
+      if (x < lo[a]) lo[a] = x;
+      if (x > hi[a]) hi[a] = x;
+    }
+    const near: number[] = [];
+    occ.forEach(({ i, b }, k) => {
+      if (i === pi) return;
+      for (let a = 0; a < 3; a++) if (b.min[a] > hi[a] + reach || b.max[a] < lo[a] - reach) return;
+      near.push(k);
+    });
+    if (!near.length) { out.fill(1); return out; }
+    // los vértices repetidos (misma posición y normal, en triángulos vecinos) se calculan una vez
+    let px0 = NaN, py0 = NaN, pz0 = NaN, nx0 = NaN, ny0 = NaN, nz0 = NaN, f0 = 1;
+    const seen = new Map<number, number>();
     for (let v = 0; v < n; v++) {
       const nx = p.nor[3 * v], ny = p.nor[3 * v + 1], nz = p.nor[3 * v + 2];
-      const px = p.pos[3 * v] + nx * OFF, py = p.pos[3 * v + 1] + ny * OFF, pz = p.pos[3 * v + 2] + nz * OFF;
-      const list = grid.get(key(Math.floor(px / cell), Math.floor(py / cell), Math.floor(pz / cell)));
-      let o = 0;
-      tick++;
-      if (list) for (const k of list) {
-        if (stamp[k] === tick) continue;
-        stamp[k] = tick;
-        const { i, b } = occ[k];
-        if (i === pi) continue;
-        // punto de la caja más cercano al punto de prueba
-        const qx = Math.max(b.min[0], Math.min(px, b.max[0])), qy = Math.max(b.min[1], Math.min(py, b.max[1])), qz = Math.max(b.min[2], Math.min(pz, b.max[2]));
-        const dx = qx - px, dy = qy - py, dz = qz - pz, d = Math.hypot(dx, dy, dz);
-        if (d >= AO_R) continue;
-        // de frente cuenta entera, de costado la mitad, detrás nada (dentro de la caja: de costado)
-        const facing = d < 1e-4 ? 0.5 : 0.5 + (0.5 * (dx * nx + dy * ny + dz * nz)) / d;
-        if (facing <= 0) continue;
-        const f = 1 - d / AO_R;
-        o += 1.6 * weight[k] * f * f * facing;
+      const x = p.pos[3 * v], y = p.pos[3 * v + 1], z = p.pos[3 * v + 2];
+      if (x === px0 && y === py0 && z === pz0 && nx === nx0 && ny === ny0 && nz === nz0) { out[v] = f0; continue; }
+      // clave aproximada (mm y normal redondeada): mismas cuentas, mismo resultado
+      const h = Math.round(x * 1000) * 73856093 ^ Math.round(y * 1000) * 19349663 ^ Math.round(z * 1000) * 83492791 ^
+        Math.round(nx * 8 + 8) * 1000003 ^ Math.round(ny * 8 + 8) * 10007 ^ Math.round(nz * 8 + 8) * 101;
+      const c = seen.get(h);
+      let f: number;
+      if (c !== undefined) f = c;
+      else {
+        const px = x + nx * OFF, py = y + ny * OFF, pz = z + nz * OFF;
+        let o = 0;
+        for (const k of near) {
+          const b = occ[k].b;
+          // punto de la caja más cercano al punto de prueba
+          const qx = Math.max(b.min[0], Math.min(px, b.max[0])), qy = Math.max(b.min[1], Math.min(py, b.max[1])), qz = Math.max(b.min[2], Math.min(pz, b.max[2]));
+          const dx = qx - px, dy = qy - py, dz = qz - pz, d2 = dx * dx + dy * dy + dz * dz;
+          if (d2 >= AO_R * AO_R) continue;
+          const d = Math.sqrt(d2);
+          // de frente cuenta entera, de costado la mitad, detrás nada (dentro de la caja: de costado)
+          const facing = d < 1e-4 ? 0.5 : 0.5 + (0.5 * (dx * nx + dy * ny + dz * nz)) / d;
+          if (facing <= 0) continue;
+          const g = 1 - d / AO_R;
+          o += 1.6 * weight[k] * g * g * facing;
+        }
+        f = 1 - AO_MAX * Math.min(1, o);
+        seen.set(h, f);
       }
-      out[v] = 1 - AO_MAX * Math.min(1, o);
+      out[v] = f;
+      px0 = x; py0 = y; pz0 = z; nx0 = nx; ny0 = ny; nz0 = nz; f0 = f;
     }
     return out;
   });

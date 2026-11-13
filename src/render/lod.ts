@@ -16,7 +16,8 @@ const _c = new THREE.Vector3();
 export class DetailLod {
   private meshes: THREE.Mesh[] = [];
 
-  constructor(roots: THREE.Object3D[]) {
+  /** dist = distancia de corte con 1080 líneas (en calidad baja, la mitad: la calidad baja no dibuja más que antes) */
+  constructor(roots: THREE.Object3D[], private dist = LOD_DIST) {
     for (const r of roots) r.traverse((o) => { if (o.name === DETAIL && (o as THREE.Mesh).isMesh) this.meshes.push(o as THREE.Mesh); });
   }
 
@@ -24,7 +25,7 @@ export class DetailLod {
 
   /** Cada cuadro, antes de dibujar (con las matrices del cuadro anterior: basta) */
   update(camera: THREE.Camera, viewH: number) {
-    const lim = LOD_DIST * Math.max(0.5, viewH / 1080);
+    const lim = this.dist * Math.max(0.5, viewH / 1080);
     for (const m of this.meshes) {
       const s = m.geometry.boundingSphere;
       if (!s) continue;

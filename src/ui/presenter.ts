@@ -6,7 +6,7 @@ import { jibPhase, towerPhase, yGuyPhase } from '../crane/assembly';
 import { canTie } from '../crane/tiedown';
 import { CameraRig } from '../render/camera';
 import { sceneFog, type SceneCtx } from '../render/scene';
-import { DetailLod } from '../render/lod';
+import { DetailLod, LOD_DIST } from '../render/lod';
 import { Effects } from '../render/effects';
 import { updateWater } from '../render/water';
 import { apply } from '../crane/pose';
@@ -86,7 +86,7 @@ export class Presenter {
     // niebla según la obra (fase 16) y detalles que se ocultan de lejos
     const site = L ? levelSize(L) : null;
     sceneFog(ctx, site ? { w: site[0], d: site[1] } : null, camSize(specs));
-    this.lod = new DetailLod(units.map((u) => u.crane.root));
+    this.lod = new DetailLod(units.map((u) => u.crane.root), settings.calidad === 'bajo' ? LOD_DIST / 2 : LOD_DIST);
     this.fx = settings.calidad === 'bajo' ? null : new Effects(ctx.scene);
     this.sunI = ctx.sun.intensity;
     // tándem: cámara libre en el centro de las grúas (V), que no salta al cambiar de grúa con Tab
