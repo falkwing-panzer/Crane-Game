@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { lit } from './models/materials';
+import { waterMaterial } from './water';
 import type { Obstacle } from '../physics/world';
 import type { SoftZone } from '../crane/terrain';
 
@@ -33,7 +34,8 @@ const SOFT_COLOR = { mud: '#54432f', water: '#28465e' };
 
 export function buildSite(scene: THREE.Scene, obstacles: Obstacle[], softs: SoftZone[] = []) {
   for (const s of softs) {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(s.w, s.d), lit({
+    // agua con ondas (fase 16)
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(s.w, s.d), s.kind === 'water' ? waterMaterial(SOFT_COLOR.water) : lit({
       color: SOFT_COLOR[s.kind], polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
     }));
     m.rotation.x = -Math.PI / 2;

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { lit } from './models/materials';
+import { waterMaterial } from './water';
 import { KIND_COL, type Level, type LevelBox } from '../levels/levels';
 import { levelBoxes, levelSize, levelSofts } from '../levels/setup';
 
@@ -25,7 +26,8 @@ export function buildLevelSite(scene: THREE.Scene, L: Level) {
   scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(edge), new THREE.LineBasicMaterial({ color: '#f0bb27' })));
 
   for (const s of levelSofts(L)) {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(s.w, s.d), lit({
+    // agua con ondas (fase 16)
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(s.w, s.d), s.kind === 'water' ? waterMaterial(SOFT_COLOR.water, -2) : lit({
       color: SOFT_COLOR[s.kind], polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
     }));
     m.rotation.x = -Math.PI / 2;

@@ -7,6 +7,9 @@ import { canTie } from '../crane/tiedown';
 import { CameraRig } from '../render/camera';
 import { sceneFog, type SceneCtx } from '../render/scene';
 import { DetailLod } from '../render/lod';
+import { Effects } from '../render/effects';
+import { updateWater } from '../render/water';
+import { apply } from '../crane/pose';
 import { levelSize } from '../levels/setup';
 import { LANDING_MIN } from '../levels/rules';
 import { CARD_DELAY } from '../game/control';
@@ -27,6 +30,7 @@ const m = t.msg;
 
 const _lat = new THREE.Vector3();
 const _wd = new THREE.Vector3();
+const _up = new THREE.Vector3();
 const f1 = (v: number) => v.toFixed(1).replace('.', ',');
 
 /**
@@ -63,6 +67,10 @@ export class Presenter {
   readonly lod: DetailLod;
   /** CPU del HUD en el último cuadro, ms (banco de pruebas, fase 16) */
   hudMs = 0;
+  /** Polvo, humo y lluvia (fase 16); null en calidad baja */
+  readonly fx: Effects | null;
+  /** Intensidad del sol sin lluvia (con lluvia se oscurece; se repone al desmontar) */
+  private sunI: number;
 
   /**
    * root = contenedor de esta partida dentro de #hud (se quita entero al desmontarla); sound = el de la app (uno solo);
@@ -73,10 +81,14 @@ export class Presenter {
     const act = ses.act;
     const specs = units.map((u) => u.T);
     this.cam = new CameraRig(ctx, act.crane.cab, (s) => ses.act.crane.eye(s), camSize(specs), shadowHalf(specs));
+    // la cámara no atraviesa obstáculos, cargas ni grúas (fase 16; el mundo de Rapier es el mismo para las dos del tándem)
+    this.cam.ray = (o, d, max) => ses.act.phys.rayHit(o, d, max);
     // niebla según la obra (fase 16) y detalles que se ocultan de lejos
     const site = L ? levelSize(L) : null;
     sceneFog(ctx, site ? { w: site[0], d: site[1] } : null, camSize(specs));
     this.lod = new DetailLod(units.map((u) => u.crane.root));
+    this.fx = settings.calidad === 'bajo' ? null : new Effects(ctx.scene);
+    this.sunI = ctx.sun.intensity;
     // tándem: cámara libre en el centro de las grúas (V), que no salta al cambiar de grúa con Tab
     if (multi) this.cam.enableFree(() => {
       const n = units.length;
@@ -111,6 +123,12 @@ export class Presenter {
       location.href = u.toString();
     });
     qSel.addEventListener('keydown', (e) => { if (e.key !== 'Enter') { e.preventDefault(); qSel.blur(); } });
+    // lluvia (fase 16): solo en la prueba libre y sin calidad baja (no hay niveles con lluvia en la referencia)
+    if (!L && !def.showMenu && this.fx) {
+      hud.left.insertAdjacentHTML('beforeend', `<label class="panel pick prefs"><input type="checkbox" id="rain"> ${t.hud.rain}</label>`);
+      const rain = root.querySelector('#rain') as HTMLInputElement;
+      rain.addEventListener('change', () => { this.setRain(rain.checked); rain.blur(); });
+    }
     if (def.showMenu) lui.menu();
     else if (L) {
       // partida guardada de este nivel (fase 15): Continuar la monta con su grúa y sigue donde quedó
@@ -139,8 +157,9 @@ export class Presenter {
       // Tab en el tándem (fase 15: llega desde el paso de la simulación)
       bus.on('switch', (e) => this.follow(units[e.unit])),
       // golpe sordo al apoyar o golpear la carga (los mismos umbrales que las reglas de los niveles)
-      bus.on('land', (e) => { if (e.v >= LANDING_MIN) this.sound.thump(e.v); }),
-      bus.on('strike', (e) => { if (e.v > 0.25) this.sound.thump(e.v); }),
+      // fase 16: desde donde está la carga (o el gancho)
+      bus.on('land', (e) => { if (e.v >= LANDING_MIN) this.sound.thump(e.v, this.loadAt(units[e.unit])); }),
+      bus.on('strike', (e) => { if (e.v > 0.25) this.sound.thump(e.v, this.loadAt(units[e.unit])); }),
     );
 
     if (def.freeTandem) hud.say(m.freeTandem, 5);
@@ -148,6 +167,21 @@ export class Presenter {
       const T = act.T;
       hud.say(T.tower ? m.introTower(T.name) : T.superlift ? m.introSuperlift(T.name) : T.crawler ? m.introCrawler(T.name) : m.intro(T.name), 4);
     }
+  }
+
+  /** Dónde está la carga enganchada de una grúa (o su gancho) */
+  private loadAt(u: Unit) {
+    const b = u.phys.attached?.body ?? u.phys.hookBody;
+    return b.translation();
+  }
+
+  /** Lluvia encendida o apagada: el sol se apaga un poco y la niebla se acerca */
+  setRain(on: boolean) {
+    if (!this.fx) return;
+    this.fx.setRain(on);
+    this.ctx.sun.intensity = on ? this.sunI * 0.55 : this.sunI;
+    const fog = this.ctx.scene.fog as THREE.Fog | null;
+    if (fog) { fog.near *= on ? 0.5 : 2; fog.far *= on ? 0.6 : 1 / 0.6; }
   }
 
   /** Tab: la cámara y el título siguen a la grúa que se maneja */
@@ -176,17 +210,31 @@ export class Presenter {
     const fa = f.units[units.indexOf(act)];
     this.cam.update(dt, fa.S, fa.pose);
     this.lod.update(ctx.camera, ctx.renderer.domElement.height);
+    const work = Math.max(Math.abs(ki.slew), Math.abs(ki.luff), Math.abs(ki.tele), Math.abs(ki.jib ?? 0), Math.abs(ki.sl ?? 0),
+      act.S.cw !== act.S.cwT || act.S.yg !== act.S.ygT || act.S.jg !== act.S.jgT || act.S.er !== act.S.erT || (act.S.out > 0 && act.S.out < 1) ? 1 : 0);
+    // efectos (fase 16): en pausa se quedan quietos
+    this.fx?.update(paused || ses.tipped() ? 0 : dt, units.map((u, i) => ({ T: u.T, S: f.units[i].S, pose: f.units[i].pose, work: u === act ? work : 0 })),
+      ctx.camera, ctx.renderer.domElement.height);
+    updateWater(performance.now() / 1000);
     ctx.renderer.render(ctx.scene, ctx.camera);
     bootDone(); // primer cuadro dibujado: se quita la pantalla de carga
+    // sonido 3D (fase 16): el oyente es la cámara; el motor en el chasis y el cabrestante en la superestructura
+    const cam = ctx.camera;
+    cam.getWorldDirection(_wd);
+    this.sound.listen(cam.position, _wd, _up.set(0, 1, 0).applyQuaternion(cam.quaternion));
+    const other = multi ? units.find((u) => u !== act)! : null;
     this.sound.update(dt, {
       speed: act.S.vd,
-      work: Math.max(Math.abs(ki.slew), Math.abs(ki.luff), Math.abs(ki.tele), Math.abs(ki.jib ?? 0), Math.abs(ki.sl ?? 0),
-        act.S.cw !== act.S.cwT || act.S.yg !== act.S.ygT || act.S.jg !== act.S.jgT || act.S.er !== act.S.erT || (act.S.out > 0 && act.S.out < 1) ? 1 : 0),
+      work,
       hoist: Math.abs(ki.hoist),
       lmi: act.dyn.lmi,
       cut: act.cut,
       prox: run.inProx,
       off: !ses.running || ses.tipped() || paused,
+    }, {
+      engine: apply(fa.pose, { x: 0, y: 1.5, z: 0 }),
+      winch: apply(fa.pose, { x: act.T.piv, y: act.T.pivH, z: 0 }),
+      other: other ? apply(other.pose, { x: 0, y: 1.5, z: 0 }) : null,
     });
     const t2 = performance.now();
 
@@ -243,5 +291,7 @@ export class Presenter {
   dispose() {
     for (const f of this.off) f();
     this.off.length = 0;
+    if (this.fx?.raining) this.setRain(false);
+    this.fx?.dispose();
   }
 }
