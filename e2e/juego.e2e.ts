@@ -77,13 +77,14 @@ for (const id of CRANES) {
     await page.goto(`./?grua=${id}`);
     await ready(page);
     await expect(page.locator('#data')).toContainText('LMI');
-    // F baja el gancho: el largo del cable cambia (la SK 60 sin montar no mueve nada: avisa)
+    // R sube el gancho: el largo del cable cambia (la SK 60 sin montar no mueve nada: avisa). No F: el gancho de las
+    // orugas empieza cerca del suelo y el cable no se alarga más allá (falló así en la acción con la LR 3000)
     const cable = async () => /Cable ([\d,]+) m/.exec(await page.locator('#data').innerText())?.[1];
     const before = await cable();
     expect(before).toBeTruthy();
-    await page.keyboard.down('KeyF');
+    await page.keyboard.down('KeyR');
     await page.waitForTimeout(800);
-    await page.keyboard.up('KeyF');
+    await page.keyboard.up('KeyR');
     if (id === 'sk') await expect(page.locator('#msg')).toContainText('Monta la grúa torre primero (M)');
     else await expect.poll(cable).not.toBe(before);
     expect(log).toEqual([]);
