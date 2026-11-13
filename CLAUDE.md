@@ -68,6 +68,7 @@ X lastre, Y cámara, View montaje, Menu Y-guy, clic izq. fino, clic der. cambiar
 Fase 13: **H** (o el botón "?" de la franja de abajo) abre la ayuda con todas las teclas; **Esc** la cierra.
 Fase 14: las teclas se cambian en la ayuda (**Cambiar teclas**); esta tabla es la de por defecto. Esc y el mando son fijos.
 Fase 15: **Retroceso** rebobina 10 s (solo en la prueba libre); botón **Guardar** junto al reloj de un nivel.
+Fase 16: casilla **Lluvia** en el HUD (solo en la prueba libre, no en calidad baja).
 
 ## Estado y decisiones
 Se trabaja por fases (ver `FASES.md`), con `/clear` entre fases. **Al cerrar cada fase, actualizar esta sección**
@@ -183,6 +184,12 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   (`RawImpulseJointSet` solo tiene límites y motores), así que la tensión sigue medida por posiciones (nada que
   comparar). Cable flojo en catenaria y ramales de la eslinga que cuelgan con la carga apoyada y se tensan al izar.
   Pruebas en `render/catenary.test.ts`.
+
+- **Fase 16** (motor III: render, efectos y sonido, de una tanda por pedido de Jesús): GPU por pase en el banco,
+  oclusión ambiental horneada en los colores por vértice, detalles pequeños en mallas aparte que se ocultan de lejos,
+  niebla por obra, material estándar probado y descartado (coste), cámara que no atraviesa nada con transiciones,
+  encuadre de sombras según lo que se ve, polvo, humo, lluvia (prueba libre), agua con ondas y sonido 3D. Pruebas en
+  `render/camera.test.ts`, `render/effects.test.ts` y `render/models/builder.test.ts`.
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -312,6 +319,13 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   `ui/gpuTimer.ts`, `render/catenary.ts` (`catenary(a, b, largo, n, suelo)`, `SLACK_MIN`; parte C), `render/ropeSim.ts`,
   `Physics.slingLength`/`hookSupported`/`loadSupported`, `Rigging.update(…, dt)`. Eventos nuevos del bus: `switch` (Tab llega desde el paso), `restored`. `LevelUi.onSave`/
   `showSave`, `brief(…, cont)`. `LevelRules.winClock`.
+- Fase 16: `render/models/ao.ts` (`bakeAO`, sin three.js), `Parts.detail(fn)` y `DETAIL` en `builder.ts` (cajas y
+  lados largos de las extrusiones partidos en trozos de ≤ 1,5–3 m para la oclusión), `render/lod.ts` (`DetailLod`,
+  capa `LOD_LAYER` = 2), `lit()`/`vcMaterial()`/`surface()`/`useStandard()` en `materials.ts` (todo material
+  iluminado pasa por `lit()`), `sceneFog` y `skyEnvironment` en `scene.ts`, `CameraRig.ray` (`Physics.rayHit`),
+  `shadowStep`, `render/particles.ts` (`Particles`, `Rain`), `render/effects.ts` (`Effects`: polvo, zapatas, humo,
+  lluvia; `Presenter.fx`, `setRain`), `render/water.ts` (`waterMaterial`, `updateWater`), `Sound.listen` y
+  `update(…, at)`/`thump(v, at)` en `audio.ts`. Banco: `GpuTimer.push/pop` (pase de sombras aparte) y `Presenter.hudMs`.
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
   cut…, de la grúa que se maneja; `units`, todas) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
   dibuja cuadros; así se puede probar desde la consola).
@@ -681,6 +695,38 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   quedaba en "L" contra el suelo, y unos arcos hacia fuera, que Jesús vio rígidos). Solo dibujo: no toca el
   determinismo. Eslinga: catenaria (`catenary`), sin bajar del punto de enganche (queda sobre la carga). Amarrado, recto.
 
+- **Oclusión ambiental (fase 16)**: horneada al construir cada grupo (sin coste por cuadro): por vértice, un punto
+  0,35 m por delante de la cara mira lo cerca que están las cajas de las otras piezas del **mismo grupo** (radio
+  1,8 m, hasta −60 %; los cilindros inclinados y los detalles no oscurecen). Entre grupos no hay (la superestructura
+  gira sobre el chasis). Construir una grúa pasó de ~22 a ~37 ms (en Node); montar una partida en desarrollo, +25 ms
+  (nivel 14, +40–70 ms).
+- **Detalles y LOD (fase 16)**: escalerillas, barandillas, rejilla y limpiaparabrisas de las cabinas, pilotos,
+  calderines y faldones del chasis, mangueras del tramo base y anemómetro van en una malla `DETAIL` por grupo, **sin
+  sombra**, que pasa a la capa 2 (la cámara no la ve) a más de 70 m (35 m en calidad baja) con 1080 líneas. No se usa
+  `visible`, que es de la vista de cabina. Suma ~4 draw calls de cerca y quita triángulos al pase de sombras.
+- **Material estándar descartado (fase 16)**: `MeshStandardMaterial` con rugosidad y metal por vértice (atributo `rm`)
+  y el cielo como mapa de entorno (PMREM) costaba +0,5 a +1,5 ms de GPU en la laptop y no se veía mejor (el suelo
+  quedaba gris y el cromo oscuro). Se queda Lambert; `?estandar=1` (calidad alta) lo enciende para comparar.
+- **Cámara (fase 16)**: rayo de Rapier desde 2,5 m por delante del punto de mira hacia la cámara (si sale del mismo
+  punto, la grúa en la que se mira metía la cámara dentro); excluye gancho, suelo, sensores y lo que contiene el
+  origen. Se acerca de golpe y se aleja con ω = 3. OrbitControls trabaja con la posición pedida: antes de cada
+  `update` se repone si nadie movió la cámara. Altura mínima 0,4 m. Transición de 0,6 s (suavizado cúbico) al pulsar V.
+- **Encuadre de sombras (fase 16)**: escalones de 20, 28, 40, 56, 80 y 112 m de medio lado (hasta el máximo de la grúa
+  de siempre, `shadowHalf`): 0,9·distancia de la cámara a lo que mira + 8 (cabina: 15 m), con un 15 % de margen para
+  bajar. Centro en lo que se mira, ajustado a los texels del mapa en el plano de la luz (sin temblor): el sol se mueve
+  cada cuadro (antes, a saltos de 15 m). `far` y la distancia del sol siguen con el máximo.
+- **Efectos (fase 16)**, solo dibujo (Math.random, no tocan el determinismo), apagados en calidad baja: polvo detrás de
+  cada rueda (o de la punta trasera de cada oruga) desde 0,8 m/s; 14 bocanadas por zapata cuando `S.out` pasa por 0,5
+  (cuando apoya); humo del escape de `carrier.ts` al acelerar y algo con la grúa trabajando (las orugas no echan humo:
+  no tienen escape en el modelo). Lluvia: 5.000 trazos en una caja de 60 m que sigue a la cámara, movidos en el
+  sombreador; casilla "Lluvia" en el HUD, **solo en la prueba libre** (la referencia no tiene clima; no se inventó para
+  los niveles); con lluvia el sol baja al 55 % y la niebla se acerca.
+- **Agua (fase 16)**: Phong (brillo del sol, sombras, niebla) con la normal ondulada por 4 trenes de ondas en el
+  sombreador de fragmentos; tiempo de `performance.now()` (sigue en pausa). Río del nivel 4 y agua de la prueba libre.
+- **Sonido 3D (fase 16)**: `PannerNode` 'equalpower', modelo 'inverse'; motor en el chasis (ref. 25 m), cabrestante en
+  el pie de la pluma (18 m), golpes en la carga o el gancho (20 m); oyente = cámara cada cuadro. En el tándem la otra
+  grúa suena al ralentí desde su sitio. Alarmas sin posición.
+
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
   grúas grandes (fases 4–6): cabeza cinemática, izado a velocidad plena, estiramiento máximo del cable.
@@ -771,6 +817,17 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - Fase 15 C (mismo banco): draw calls iguales, 60 fps, GPU 6,7–7,8 ms; triángulos +3.800 a +7.700 (los tramos de
   los ramales, también en el pase de sombras): nivel 14 50.000 → 57.700, LR 3000 28.700 → 32.500.
 
+- Fase 16 (`?bench=1`, Chromium sin ventana sobre la Intel de la laptop, 1920×1080; GPU = sombras + escena; antes →
+  después, calidad alta): nivel 14 7,5–7,6 → 6,5–7,7 ms (sombras 2,1–2,4, escena 5,2); nivel 11 8,7–8,8 → 7,4–8,2;
+  nivel 9 8,7–8,8 → 7,4–8,0; LR 3000 7,7–8,0 → 6,4–7,0; AT 650-8 8,2–8,3 → 6,4–7,5; SK 60 8,5–9,5 → 8,0–8,3. Todos a
+  60 fps. Draw calls: nivel 14 134 (igual), de ruedas +4 (nivel 11 78 → 82, nivel 9 77 → 82, AT 650-8 79 → 83), LR 3000
+  66 y SK 60 58 iguales; triángulos +1.000 a +2.200 (caras partidas para la oclusión). Pase de sombras ~2,7–3,2 ms y
+  escena ~3,5–5,5 ms; HUD (DOM) 0,5–1 ms de CPU por cuadro. Calidad baja: mismas draw calls que antes (79, 46, 46, 39,
+  47, 36), todo a 60 fps. **Ojo**: con poca carga la gráfica integrada baja su frecuencia y los ms de GPU suben (en
+  calidad baja salen más ms que la escena de calidad alta; en la misma página, sin cambiar nada, 7,9 y 10,8 ms): para
+  comparar, mirar draw calls, triángulos y fps, o medir con la GPU cargada. Bundle: `app.js` 790 → 804 kB (192 kB
+  comprimido).
+
 ### Pendientes
 - Rapier: si una versión nueva da las fuerzas de las juntas, cambiar la tensión medida por la real (comparando antes).
 - Posible mejora de carga: el `.wasm` empieza a bajar cuando ya llegó `app.js` (no se puede precargar desde
@@ -811,4 +868,7 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - **Referencias visuales** de Jesús en `referencia/imagenes/` (ver `NOTAS.md`). Orden acordado: 6B → 7 → 8 → 8B
   remodelado y pulido de los vehículos, con el contrapeso de cada grúa → niveles.
   No pulir modelos antes.
+- Fase 16: Jesús no ha visto todavía en la laptop la lluvia, el polvo, el humo, el agua ni el sonido 3D (las capturas
+  son de Chromium sin ventana). Las vistas generales casi no cambian: lo que se nota es de cerca y los efectos. Si se
+  quiere más, lo siguiente sería oclusión entre grupos (chasis bajo la superestructura) o un sol más bajo y de frente.
 - Vite avisaría que `app.js` pasa de 500 kB (three.js y el juego, ~780 kB): `chunkSizeWarningLimit` = 1200.
