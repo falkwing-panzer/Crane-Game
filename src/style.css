@@ -49,6 +49,16 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #cfdde9; }
 .clock { top: 10px; left: 50%; transform: translateX(-50%); text-align: center; font-variant-numeric: tabular-nums; }
 .clock b { font-size: 18px; }
 .clock small { color: #aab3bc; }
+/* fase 15: guardar a mitad del nivel */
+.clock .save-btn { pointer-events: auto; margin-top: 4px; font: inherit; font-size: 12px; padding: 2px 10px; border: 0; border-radius: 4px;
+  background: #3a424b; color: #f2f4f6; cursor: pointer; }
+.clock .save-btn:hover { background: #4a545f; }
+.clock .save-btn[hidden] { display: none; }
+/* fase 15: banco de pruebas (?bench=1) */
+.bench-note { top: 50%; left: 50%; transform: translate(-50%, -50%); font-weight: 700; color: #f0bb27; z-index: 5; }
+.bench-table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; margin: 8px 0 12px; }
+.bench-table th, .bench-table td { padding: 4px 8px; text-align: right; border-bottom: 1px solid #2f363e; }
+.bench-table th:first-child, .bench-table td:first-child { text-align: left; }
 .overlay { position: absolute; inset: 0; background: rgba(12, 15, 19, 0.55); overflow-y: auto; pointer-events: auto;
   display: flex; align-items: flex-start; justify-content: center; padding: 24px 16px; box-sizing: border-box; }
 .overlay[hidden] { display: none; }

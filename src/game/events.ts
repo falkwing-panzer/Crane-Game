@@ -62,6 +62,10 @@ export interface GameEvents {
   end: { fail: Failure; stars?: number; record?: boolean };
   /** Grúas reiniciadas (botón Reiniciar) */
   restart: Record<string, never>;
+  /** Tab (tándem): ahora se maneja esta grúa (fase 15: la acción entra en un paso de la simulación) */
+  switch: { unit: number };
+  /** Se volvió a una instantánea (fase 15): rebobinar o continuar una partida guardada */
+  restored: Record<string, never>;
 }
 
 export type GameBus = Bus<GameEvents>;

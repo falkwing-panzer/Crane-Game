@@ -2,7 +2,9 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { createScene, resetView, type SceneCtx } from './render/scene';
 import { SceneMark } from './render/dispose';
-import { loadSettings, type Settings } from './ui/settings';
+import { loadSettings, pixelRatio, type Settings } from './ui/settings';
+import { AdaptiveScale } from './ui/adaptive';
+import { loadSave } from './ui/savegame';
 import { FIXED_DT } from './physics/world';
 import { Input } from './ui/input';
 import { nextPaint } from './ui/boot';
@@ -55,11 +57,23 @@ export class App {
   private seq = 0;
   /** Cambios de partida hechos (pruebas de memoria) */
   opened = 0;
+  /**
+   * Calidad adaptativa (fase 15): baja la escala de resolución si los cuadros van lentos, sin pasar de la de la
+   * calidad elegida. null con ?pr= (escala fija, para comparar) o con el banco de pruebas.
+   */
+  adaptive: AdaptiveScale | null;
+  /** Escala de píxel de la calidad elegida (el tope de la adaptativa) */
+  readonly basePr: number;
+  /** Cada cuadro dibujado (banco de pruebas) */
+  probe: ((dt: number, physMs: number, steps: number) => void) | null = null;
 
   constructor(canvas: HTMLCanvasElement, root: HTMLElement) {
     this.root = root;
     this.settings = loadSettings();
     this.ctx = createScene(canvas, this.settings.calidad);
+    const params = new URLSearchParams(location.search);
+    this.basePr = pixelRatio(this.settings.calidad, devicePixelRatio);
+    this.adaptive = params.has('pr') || params.has('bench') ? null : new AdaptiveScale();
     this.sound = new Sound(this.settings.sonido, this.settings.volumen);
     this.loop = new Loop((dt) => this.cur?.game.tick(dt), (dt, physMs) => this.draw(dt, physMs), FIXED_DT);
     this.loop.onFrame = () => this.input.poll(); // mando (fase 11)
@@ -79,7 +93,18 @@ export class App {
 
   private draw(dt: number, physMs: number) {
     const c = this.cur;
-    if (c) c.view.draw(dt, physMs, this.input.state(), this.loop.paused);
+    if (!c) return;
+    const { loop } = this;
+    c.view.draw(dt, physMs, this.input.state(), loop.paused, c.game.interp.frame(c.ses.units, loop.alpha));
+    this.probe?.(dt, physMs, loop.steps);
+    // calidad adaptativa: solo con la partida en marcha (en el menú o en pausa no se juzga)
+    if (this.adaptive && c.ses.running && !loop.paused) {
+      const s = this.adaptive.update(dt);
+      if (s !== null) {
+        this.ctx.renderer.setPixelRatio(this.basePr * s);
+        c.view.hud.setScale(s);
+      }
+    }
   }
 
   /** Ir a otra partida (?nivel=…, ?grua=…, menú): la añade al historial y la monta */
@@ -106,11 +131,37 @@ export class App {
       if (my !== this.seq) { this.release(m); return; }
       this.cur = m;
       this.opened++;
+      this.resume(m, search);
       // partida lista (antes del primer cuadro): performance.getEntriesByName('gruas-partida')
       performance.mark('gruas-partida');
     } finally {
       note?.remove();
     }
+  }
+
+  /**
+   * ?continuar=1 (fase 15): la partida guardada de este nivel, si es con esta grúa; el turno sigue donde quedó. El
+   * parámetro se quita de la URL (al recargar se vería la ficha, con Continuar).
+   */
+  private resume(m: Mounted, search: string) {
+    const p = new URLSearchParams(search);
+    if (!p.has('continuar')) return;
+    p.delete('continuar');
+    const q = p.toString();
+    history.replaceState(null, '', location.pathname + (q ? `?${q}` : ''));
+    const { ses, game, view } = m;
+    const sv = ses.def.nivel ? loadSave(ses.def.nivel) : null;
+    if (!sv || sv.crane !== ses.units[0].id) return;
+    try {
+      game.restore(sv.snap);
+    } catch (e) {
+      console.warn('No se pudo recuperar la partida guardada', e);
+      return;
+    }
+    ses.running = true;
+    view.lui.close();
+    view.follow(ses.act);
+    ses.bus.emit('say', { text: t.msg.continued, s: 2 });
   }
 
   /** Aviso mientras se arma la partida nueva (tapa la escena vacía) */
@@ -133,7 +184,7 @@ export class App {
     const ses = new Session(def, ctx.scene, make);
     const game = new GameStep(ses, input);
     const view = new Presenter(ctx, ses, settings, el, sound, input, (u) => { void this.go(new URL(u, location.href).search); });
-    bindCommands(ses, input, view, settings, () => this.loop.paused);
+    bindCommands(ses, game, input, view, settings, () => this.loop.paused);
     return { ses, game, view, el, mark };
   }
 

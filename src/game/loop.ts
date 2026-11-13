@@ -20,6 +20,13 @@ export class Loop {
   ) {}
 
   get paused() { return this.reasons.size > 0; }
+  /**
+   * Fracción del paso que ya pasó desde el último paso de física (0…1): el dibujo mezcla los dos últimos pasos con
+   * ella (fase 15). En pausa, 1 (el último paso tal cual).
+   */
+  get alpha() { return this.paused ? 1 : Math.min(1, this.acc / this.step); }
+  /** Pasos dados en el último cuadro */
+  steps = 0;
   get why() { return [...this.reasons]; }
 
   /** Pone o quita un motivo de pausa */
@@ -51,6 +58,7 @@ export class Loop {
       }
       if (n === this.maxSteps) this.acc = 0; // si la máquina no da abasto, se ralentiza en vez de acumular
     }
+    this.steps = n;
     this.draw(dt, performance.now() - t0);
     return n;
   }

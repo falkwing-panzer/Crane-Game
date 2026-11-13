@@ -80,14 +80,21 @@ export class LevelUi {
   private overlay: HTMLElement;
   private card: HTMLElement;
   private clock: HTMLElement;
+  private clockText: HTMLElement;
+  private saveBtn: HTMLButtonElement;
+  /** Botón Guardar (fase 15): guardar a mitad del nivel */
+  onSave: () => void = () => {};
 
   constructor(root: HTMLElement) {
     root.insertAdjacentHTML('beforeend', `
-      <div class="panel clock" id="clock" hidden></div>
+      <div class="panel clock" id="clock" hidden><div class="clock-text"></div><button class="save-btn" id="l-save">${tl.save}</button></div>
       <div class="overlay" id="overlay" hidden><div class="lcard" id="lcard"></div></div>`);
     this.overlay = root.querySelector('#overlay')!;
     this.card = root.querySelector('#lcard')!;
     this.clock = root.querySelector('#clock')!;
+    this.clockText = this.clock.querySelector('.clock-text')!;
+    const sv = this.saveBtn = this.clock.querySelector<HTMLButtonElement>('#l-save')!;
+    sv.addEventListener('click', () => { this.onSave(); sv.blur(); });
   }
 
   get open() { return !this.overlay.hidden; }
@@ -118,7 +125,7 @@ export class LevelUi {
    * Ficha del nivel (showBrief de la referencia): tipo, viento, par, límite, texto, consejos y grúas (las que no
    * sirven, desactivadas con el motivo). onPick recarga con otra grúa; onStart empieza el turno.
    */
-  brief(i: number, current: CraneId, onPick: (id: CraneId) => void, onStart: () => void) {
+  brief(i: number, current: CraneId, onPick: (id: CraneId) => void, onStart: () => void, cont?: { t: number; crane: string; go: () => void }) {
     const L = LEVELS[i], r = loadRecords()[i];
     const list = Object.values(CRANES).sort((a, b) => a.structMax - b.structMax);
     this.show(`<div class="eyebrow"><span class="tag">${L.type}</span>${tl.briefHead(i + 1, LEVELS.length, L.wind[0], fmt(L.par), L.time ? fmt(L.time) : null, r ? ` · ${tl.record(fmt(r.time))} ${starText(r.stars)}` : '')}</div>
@@ -132,7 +139,9 @@ export class LevelUi {
           <small>${c.size}${c.id === L.rec ? tl.recommended : ''}</small><b>${c.name}</b>
           <small>${tl.craneLine(c.structMax, boom)}</small><em class="${ok ? '' : 'why'}">${ok ? c.note : why}</em></button>`;
       }).join('')}</div>`}
-      <div class="row"><a class="btn" href="${homeUrl()}">${tl.menuBtn}</a><button class="btn primary" id="l-start">${tl.start}</button></div>`);
+      <div class="row"><a class="btn" href="${homeUrl()}">${tl.menuBtn}</a>${cont ? `<button class="btn" id="l-cont">${tl.cont(fmt(cont.t), cont.crane)}</button>` : ''}<button class="btn primary" id="l-start">${tl.start}</button></div>`);
+    const cb = this.card.querySelector<HTMLButtonElement>('#l-cont');
+    if (cb && cont) cb.onclick = () => { this.close(); cont.go(); };
     this.card.querySelectorAll<HTMLButtonElement>('.copt').forEach((b) => {
       b.onclick = () => { if (b.dataset.c !== current) onPick(b.dataset.c as CraneId); };
     });
@@ -165,6 +174,11 @@ export class LevelUi {
    * Reloj (tiempo transcurrido, o el que queda en el contrarreloj), viento con una flecha hacia donde sopla vista desde
    * la cámara (arrow = ángulo en pantalla, 0 = hacia arriba, horario) y distancia libre a la línea eléctrica más cercana.
    */
+  /** Guardar solo con el turno en marcha */
+  showSave(on: boolean) {
+    if (this.saveBtn.hidden === on) this.saveBtn.hidden = !on;
+  }
+
   setClock(L: Level | null, t: number, n = 0, info?: { wind: number; arrow: number; lineD: number }) {
     this.clock.hidden = !L;
     if (!L) return;
@@ -178,7 +192,7 @@ export class LevelUi {
     if (info && L.lines?.length && Number.isFinite(info.lineD)) {
       extra += `${extra ? ' · ' : ''}<span class="${info.lineD < 0 ? 'bad' : info.lineD < 2 ? 'bad blink' : ''}">${tl.line(f(Math.max(0, info.lineD)))}</span>`;
     }
-    this.clock.innerHTML = `<small>${tl.clockHead(n, L.name)}</small><br><b class="${L.time && left < 30 ? 'bad' : ''}">${L.time ? tl.left(fmt(left)) : fmt(t)}</b>` +
+    this.clockText.innerHTML = `<small>${tl.clockHead(n, L.name)}</small><br><b class="${L.time && left < 30 ? 'bad' : ''}">${L.time ? tl.left(fmt(left)) : fmt(t)}</b>` +
       `<small> · ${tl.par(fmt(L.par))}</small>${extra ? `<br>${extra}` : ''}`;
   }
 }

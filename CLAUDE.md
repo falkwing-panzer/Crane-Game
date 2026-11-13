@@ -67,6 +67,7 @@ marcha/dirección y giro/pluma, LT/RT cable, LB/RB telescopio, cruceta plumín/s
 X lastre, Y cámara, View montaje, Menu Y-guy, clic izq. fino, clic der. cambiar de grúa.
 Fase 13: **H** (o el botón "?" de la franja de abajo) abre la ayuda con todas las teclas; **Esc** la cierra.
 Fase 14: las teclas se cambian en la ayuda (**Cambiar teclas**); esta tabla es la de por defecto. Esc y el mando son fijos.
+Fase 15: **Retroceso** rebobina 10 s (solo en la prueba libre); botón **Guardar** junto al reloj de un nivel.
 
 ## Estado y decisiones
 Se trabaja por fases (ver `FASES.md`), con `/clear` entre fases. **Al cerrar cada fase, actualizar esta sección**
@@ -171,6 +172,13 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   avisos muestran la tecla que tenga el jugador) y Playwright en la acción de GitHub, que ahora también corre en cada
   PR (sin publicar; después, solo ahí: ver "Acción de GitHub y merges"). Pruebas en `ui/keys.test.ts`,
   `ui/help.test.ts` y `e2e/juego.e2e.ts` (30 casos).
+
+- **Fase 15, partes A y B** (motor II; la parte C, cable, va en otro PR): banco de pruebas `?bench=1`, interpolación
+  del dibujo entre pasos, calidad adaptativa, entradas por paso con grabación (determinismo), instantáneas de Rapier +
+  estado de la partida (reiniciar al instante, rebobinar 10 s en la prueba libre, guardar a mitad de un nivel y
+  "Continuar" en la ficha). Pruebas en `game/determinism.test.ts` (60 s del nivel 1, LR 3000 y tándem: la grabación
+  y la instantánea, también guardada como texto en una partida nueva, dan el mismo estado exacto), `game/interp.test.ts`
+  y dos casos nuevos en `e2e/juego.e2e.ts` (32).
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -288,6 +296,17 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   `Help(root, flags, button, host)`: vista de controles o editor (`keysHtml`, `KEY_GROUPS`), `onKeys` →
   `Hud.setKeys()`. `Presenter(…, sound, input, go)`. `i18n/es.ts` (`es`, tipo `Lang`) e `i18n/index.ts` (`t`).
   `playwright.config.ts` + `e2e/*.e2e.ts` (`npm run e2e` compila y prueba; vitest no los toma).
+- Fase 15: `game/record.ts` (`Cmd`, `StepInput`, `InputSource`, `Recording`: tramos con las mismas entradas,
+  `player(desde)`, `truncate`, JSON), `game/commands.ts` (`runCommand`: las acciones de un toque, antes en
+  `ui/commands.ts`), `GameStep` (`push(cmd)` encola para el paso siguiente, `source` = grabación o guion, `rec`,
+  `steps`, `snapshot()`/`restore()` → `GameSnap`, `restart()`, `rewind()`, `interp`), `Physics.snapshot()`/`restore()`
+  (`PhysSnap`: `world.takeSnapshot()` + `CrewState` de cada grúa por handles + `dyn` de las cargas), `game/interp.ts`
+  (`Interp.capture` tras cada paso con dos búferes, `frame(units, alpha)` → `Frame`; `Presenter.draw(…, frame)`,
+  `Rigging.update(lat, unitFrame, loads)`), `Loop.alpha`/`steps`, `ui/adaptive.ts` (`AdaptiveScale`), `App.adaptive`/
+  `basePr`/`probe`/`resume` (`?continuar=1`), `ui/savegame.ts` (`saveGame`, `loadSave`, `clearSave`, `encodeSnap`/
+  `decodeSnap`; clave `gruas-guardado-<nivel>`), `ui/bench.ts` (`BENCH_CASES`, `runBench` → `window.__benchReport`),
+  `ui/gpuTimer.ts`. Eventos nuevos del bus: `switch` (Tab llega desde el paso), `restored`. `LevelUi.onSave`/
+  `showSave`, `brief(…, cont)`. `LevelRules.winClock`.
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
   cut…, de la grúa que se maneja; `units`, todas) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
   dibuja cuadros; así se puede probar desde la consola).
@@ -613,6 +632,38 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   porque el PR ya prueba el código tal como queda tras el merge. Forma de trabajar: abrir el PR, esperar a que su
   acción pase y entonces hacer el merge (con el permiso de Jesús); después comprobar que la publicación terminó bien.
 
+- **Entradas por paso (fase 15)**: el estado depende solo del estado anterior y de `StepInput` (mandos de la grúa
+  que se maneja, conducción y acciones de un toque). Las acciones (Espacio, O, B, Y, M, X, P, Tab) ya no se aplican
+  al pulsar: se encolan y entran al principio del paso siguiente (≤ 16 ms después), así quedan en la grabación. La
+  cámara, el sonido, la ayuda, rebobinar y guardar no son entradas. Nada de la simulación lee la hora ni números al
+  azar (el viento es una función del reloj del turno). Es determinista en la misma máquina y versión de Rapier;
+  entre máquinas distintas no está garantizado (haría falta `@dimforge/rapier3d-deterministic`): tenerlo en cuenta
+  para el reto diario y el editor.
+- **Instantáneas (fase 15)**: `World.restoreSnapshot` crea un mundo nuevo; se libera el viejo y cada grúa vuelve a
+  enlazar sus cuerpos, colisionadores y juntas **por handle** (los handles se conservan), y las cargas también. Todo
+  lo que la física guarda en JavaScript entra en `CrewState` (filtros e historia de la tensión, amortiguadores, carga
+  enganchada, amarre, vuelco…): **si se añade un campo con estado a `Physics`, añadirlo ahí** (la prueba de
+  determinismo lo detecta). Los parámetros del solucionador se vuelven a poner al restaurar. En JSON, NaN e ±Infinity
+  van como `{"$n": …}` (`lineD` es Infinity sin líneas). Tamaño: 10–13 kB; 0,05–0,15 ms por instantánea.
+- **Reiniciar** (Reiniciar del cartel de vuelco) restaura la instantánea del principio del turno, sin reconstruir.
+  **Rebobinar**: una instantánea por segundo (11 guardadas), vuelve a la que queda 10 s atrás; recorta la grabación.
+  Solo prueba libre (en los niveles avisa). **Guardar** (decidido con Jesús): una partida por nivel en localStorage
+  con la grúa con la que se jugaba; cuenta para los récords (el reloj sigue donde estaba); se borra al terminar el
+  nivel. "Continuar" monta `?nivel=n&grua=…&continuar=1` y quita el parámetro de la URL.
+- **Interpolación (fase 15)**: se dibuja la mezcla del paso anterior y el último con `alpha` = tiempo sobrante / paso
+  (un paso de retraso, 16 ms). Se mezclan `S` (salvo los objetivos `edge`, `outT`, `cwT`, `ygT`, `jgT`, `erT`), la pose,
+  el gancho, el ancla del cable y las cargas; el HUD y la estabilidad usan el último paso. Captura 0,004–0,008 ms por
+  paso, mezcla 0,005–0,014 ms por cuadro.
+- **Calidad adaptativa (fase 15)**: lento = media > 1/52 s y el cuadro también; 1,5 s lento → escala × 0,85 (mínimo
+  0,5); los cuadros buenos descuentan (a 60 Hz sincronizado, 40 fps son cuadros de 16 y 33 ms alternados). Para subir
+  prueba un escalón tras 8 s bien; si no aguanta, espera el doble (hasta 120 s). Nunca pasa de la escala de la calidad
+  elegida. Solo con el turno en marcha. Apagada con `?pr=` y con `?bench=1`. El contador de fps muestra la resolución
+  si es < 100 %.
+- **Banco de pruebas** (`?bench=1`, también en la versión publicada): nivel 14, nivel 11 con la AT 650-8, nivel 9,
+  LR 3000, AT 650-8 y SK 60 libres; 1,5 s de calentamiento y 6 s medidos girando la superestructura (guion por
+  `GameStep.source`). Para medir desde aquí con la GPU de la laptop sin ver el panel: Playwright sin ventana con
+  `--use-angle=d3d11 --enable-gpu --ignore-gpu-blocklist` (da la Intel real, 1920×1080, y el tiempo de GPU).
+
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
   grúas grandes (fases 4–6): cabeza cinemática, izado a velocidad plena, estiramiento máximo del cable.
@@ -692,7 +743,19 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   0,18–0,27 s (modo desarrollo). **Pendiente**: medir el primer cuadro con el panel visible y la carga desde GitHub
   Pages (ver si sirve el .wasm comprimido).
 
+- Fase 15 A+B (`?bench=1` con Chromium sin ventana sobre la Intel Graphics de la laptop por ANGLE/D3D11, 1920×1080,
+  calidad alta; antes = `main` con solo el banco añadido). Los 6 casos a 60 fps, peor cuadro 16,8 ms, draw calls
+  iguales (nivel 14: 134; nivel 11 AT 650-8: 78; nivel 9: 77; LR 3000: 66; AT 650-8: 79; SK 60: 58). GPU por cuadro,
+  antes → después: nivel 14 8,8–9,0 → 8,7–9,0 ms; nivel 11 7,7–8,2 → 7,8–7,9; nivel 9 7,9–8,1 → 7,7–8,1; LR 3000
+  7,4–7,6 → 7,4–7,8; AT 650-8 7,4–7,5 → 6,8–7,4; SK 60 8,0–8,2 → 8,2. Render CPU 2,1–4,4 ms en los dos. Física por
+  paso (todo el `tick`, sin ventana) 0,48–0,87 → 0,56–0,93 ms: dentro del ruido entre pasadas de la misma versión
+  (±0,1). Bundle: `app.js` 778 → 787 kB (185,6 kB comprimido); el banco va en un trozo aparte.
+  **Pendiente**: `?bench=1` con el panel visible en uso normal y mirar la interpolación en una pantalla de 120/144 Hz.
+
 ### Pendientes
+- **Fase 15, parte C** (cable): Rapier 0.21.0 es la última versión en npm y su API JS no da impulsos ni fuerzas de
+  las juntas (`RawImpulseJointSet` solo tiene límites y motores): la tensión sigue medida por posiciones. Falta la
+  catenaria del cable flojo y los ramales que se tensan al izar.
 - Posible mejora de carga: el `.wasm` empieza a bajar cuando ya llegó `app.js` (no se puede precargar desde
   `index.html` porque su nombre lleva hash).
 - Textos de datos con teclas fijas ("(B)", "T sube el plumín…") en `LEVELS`, el nivel de tándem y las notas de las

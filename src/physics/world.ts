@@ -69,7 +69,8 @@ export const SITE_HALF = 150;
 const CLEARANCE = 0.35;
 
 export class Physics {
-  readonly world: RAPIER.World;
+  /** Mundo de Rapier (fase 15: cambia al volver a una instantánea, que crea un mundo nuevo) */
+  world: RAPIER.World;
   /** Grúas que comparten este mundo (fase 10, tándem): la primera es la que creó el mundo */
   readonly crew: Physics[];
   /** Orejeta de la carga enganchada (−1 = centro de la cara superior) */
@@ -82,8 +83,8 @@ export class Physics {
   private blocked = false;
   /** Largo de la eslinga enganchada (fondo del gancho a la orejeta) */
   private slingLen = SLING - HOOK_HALF_H;
-  readonly hookBody: RAPIER.RigidBody;
-  readonly hookCollider: RAPIER.Collider;
+  hookBody: RAPIER.RigidBody;
+  hookCollider: RAPIER.Collider;
   readonly loads: Load[];
   readonly obstacles: Obstacle[];
   /** Terreno blando (barro, agua): no es un colisionador, solo impide entrar o apoyar zapatas */
@@ -1080,6 +1081,110 @@ export class Physics {
     return new Map(crew.map((k, i) => [k, T[i]]));
   }
 
+  /**
+   * Instantánea (fase 15): el mundo de Rapier entero (lo comparten las grúas del tándem) y lo que cada grúa guarda en
+   * JavaScript (cuerpos por su handle, carga enganchada, filtros e historia de la tensión, amortiguadores). Llamar en
+   * la grúa que creó el mundo, entre dos pasos.
+   */
+  snapshot(): PhysSnap {
+    const crew = this.crew;
+    return {
+      world: this.world.takeSnapshot(),
+      crew: crew.map((c) => c.exportState()),
+      loads: this.loads.map((l) => ({
+        body: l.body.handle, collider: l.collider.handle,
+        dyn: l.dyn ? {
+          p: l.dyn.p.map((v) => ({ ...v })), w: l.dyn.w.map((v) => ({ ...v })), step: l.dyn.step,
+          T: [...l.dyn.T].map(([k, v]) => [crew.indexOf(k), v] as [number, number]),
+          hook: [...l.dyn.hook].map(([k, v]) => [crew.indexOf(k), { ...v }] as [number, V3]),
+        } : null,
+      })),
+      ground: this.groundCol.handle,
+    };
+  }
+
+  /**
+   * Vuelve a una instantánea de `snapshot()`: crea el mundo nuevo, suelta el viejo y vuelve a enlazar los cuerpos de
+   * todas las grúas y las cargas. Las cargas y grúas tienen que ser las mismas (misma partida).
+   */
+  restore(s: PhysSnap) {
+    const crew = this.crew;
+    if (s.crew.length !== crew.length || s.loads.length !== this.loads.length) throw new Error('instantánea de otra partida');
+    const old = this.world;
+    const w = RAPIER.World.restoreSnapshot(s.world);
+    w.timestep = FIXED_DT;
+    w.numSolverIterations = 8;
+    w.numInternalPgsIterations = 16;
+    for (const c of crew) c.world = w;
+    old.free();
+    const ground = w.getCollider(s.ground);
+    this.loads.forEach((l, i) => {
+      const x = s.loads[i];
+      l.body = w.getRigidBody(x.body);
+      l.collider = w.getCollider(x.collider);
+      if (x.dyn && l.dyn) {
+        l.dyn.p = x.dyn.p.map((v) => ({ ...v }));
+        l.dyn.w = x.dyn.w.map((v) => ({ ...v }));
+        l.dyn.step = x.dyn.step;
+        l.dyn.T = new Map(x.dyn.T.map(([k, v]) => [crew[k], v]));
+        l.dyn.hook = new Map(x.dyn.hook.map(([k, v]) => [crew[k], { ...v }]));
+      }
+    });
+    crew.forEach((c, i) => { c.groundCol = ground; c.importState(s.crew[i]); });
+  }
+
+  private exportState(): CrewState {
+    const h = (b: { handle: number } | null) => (b ? b.handle : -1);
+    return {
+      hook: this.hookBody.handle, hookCol: this.hookCollider.handle,
+      chassis: this.tipped ? -1 : this.chassisBody.handle, sup: this.tipped ? -1 : this.supBody.handle,
+      headB: this.tipped ? -1 : this.headBody.handle, tray: h(this.trayCol), towers: this.towerCols.map((c) => c.handle),
+      cable: this.cableJoint.handle, sling: h(this.slingJoint), tipped: h(this.tipped),
+      attached: this.attached ? this.loads.indexOf(this.attached) : -1, attachedLug: this.attachedLug,
+      stepNo: this.stepNo, share: this.share, blocked: this.blocked, slingLen: this.slingLen, tied: this.tied,
+      lastPose: this.lastPose ? clonePose(this.lastPose) : null, tension: this.tension, gp: { ...this.gp },
+      slR: this.slR, slew: this.slew, trayAt: this.trayAt, towerAt: this.towerAt, headLocal: { ...this.headLocal },
+      head: { ...this.head }, trHook: cloneTrack(this.trHook), headPrev: this.headPrev ? { ...this.headPrev } : null,
+      cablePrev: this.cablePrev, trLoad: cloneTrack(this.trLoad), wind: { ...this.wind },
+    };
+  }
+
+  private importState(s: CrewState) {
+    const w = this.world;
+    this.hookBody = w.getRigidBody(s.hook);
+    this.hookCollider = w.getCollider(s.hookCol);
+    if (s.chassis >= 0) this.chassisBody = w.getRigidBody(s.chassis);
+    if (s.sup >= 0) this.supBody = w.getRigidBody(s.sup);
+    if (s.headB >= 0) this.headBody = w.getRigidBody(s.headB);
+    this.trayCol = s.tray >= 0 ? w.getCollider(s.tray) : null;
+    this.towerCols = s.towers.map((k) => w.getCollider(k));
+    this.cableJoint = w.getImpulseJoint(s.cable);
+    this.slingJoint = s.sling >= 0 ? w.getImpulseJoint(s.sling) : null;
+    this.tipped = s.tipped >= 0 ? w.getRigidBody(s.tipped) : null;
+    this.attached = s.attached >= 0 ? this.loads[s.attached] : null;
+    this.attachedLug = s.attachedLug;
+    this.stepNo = s.stepNo;
+    this.share = s.share;
+    this.blocked = s.blocked;
+    this.slingLen = s.slingLen;
+    this.tied = s.tied;
+    this.lastPose = s.lastPose ? clonePose(s.lastPose) : null;
+    this.tension = s.tension;
+    this.gp = { ...s.gp };
+    this.slR = s.slR;
+    this.slew = s.slew;
+    this.trayAt = s.trayAt;
+    this.towerAt = s.towerAt;
+    this.headLocal = { ...s.headLocal };
+    this.head = { ...s.head };
+    this.trHook = cloneTrack(s.trHook);
+    this.headPrev = s.headPrev ? { ...s.headPrev } : null;
+    this.cablePrev = s.cablePrev;
+    this.trLoad = cloneTrack(s.trLoad);
+    this.wind = { ...s.wind };
+    this.events.length = 0;
+  }
+
   /** Parte de la carga que lleva esta grúa (t, sin el gancho) si es una carga con orejetas; si no, null */
   slingShare(): number | null {
     return this.attached?.dyn ? this.share : null;
@@ -1097,6 +1202,25 @@ const cross3 = (a: V3, b: V3): V3 => ({ x: a.y * b.z - a.z * b.y, y: a.z * b.x -
 /** Seguimiento de posición para derivar velocidad y aceleración */
 interface Track { hist: V3[] }
 const newTrack = (): Track => ({ hist: [] });
+const cloneTrack = (k: Track): Track => ({ hist: k.hist.map((v) => ({ ...v })) });
+const clonePose = (p: Pose): Pose => ({ t: { ...p.t }, q: { ...p.q } });
+
+/** Lo que una grúa guarda en JavaScript, para la instantánea (los cuerpos y juntas, por su handle) */
+interface CrewState {
+  hook: number; hookCol: number; chassis: number; sup: number; headB: number; tray: number; towers: number[];
+  cable: number; sling: number; tipped: number; attached: number; attachedLug: number; stepNo: number; share: number;
+  blocked: boolean; slingLen: number; tied: boolean; lastPose: Pose | null; tension: number; gp: { x: number; z: number };
+  slR: number; slew: number; trayAt: number; towerAt: number; headLocal: V3; head: V3; trHook: Track; headPrev: V3 | null;
+  cablePrev: number; trLoad: Track; wind: { x: number; z: number };
+}
+
+/** Instantánea de la física (fase 15): el mundo de Rapier serializado y el estado de cada grúa y carga */
+export interface PhysSnap {
+  world: Uint8Array;
+  crew: CrewState[];
+  loads: { body: number; collider: number; dyn: { p: V3[]; w: V3[]; step: number; T: [number, number][]; hook: [number, V3][] } | null }[];
+  ground: number;
+}
 /** Paso de la segunda diferencia de la tensión (6 pasos = 0,1 s) */
 const ACC_STEPS = 6;
 /** Constante de tiempo del filtro de la tensión (s) */

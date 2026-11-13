@@ -7,7 +7,7 @@ import { t } from '../i18n';
 /** Mandos que se mantienen pulsados */
 export const HOLD = ['fw', 'bk', 'stl', 'str', 'sll', 'slr', 'lu', 'ld', 'ti', 'to', 'hu', 'hd', 'ju', 'jd', 'sli', 'slo', 'fine'] as const;
 /** Acciones de un toque */
-export const TAP = ['hook', 'outriggers', 'ballast', 'yguy', 'mount', 'view', 'switch', 'reset', 'bypass', 'mute', 'help'] as const;
+export const TAP = ['hook', 'outriggers', 'ballast', 'yguy', 'mount', 'view', 'switch', 'reset', 'bypass', 'rewind', 'mute', 'help'] as const;
 export type HoldAction = (typeof HOLD)[number];
 export type TapAction = (typeof TAP)[number];
 export type Action = HoldAction | TapAction;
@@ -19,7 +19,7 @@ export const DEFAULT_KEYS: Readonly<KeyMap> = Object.freeze({
   sll: 'KeyA', slr: 'KeyD', lu: 'KeyW', ld: 'KeyS', ti: 'KeyQ', to: 'KeyE', hu: 'KeyR', hd: 'KeyF',
   ju: 'KeyT', jd: 'KeyG', sli: 'KeyK', slo: 'KeyL', fine: 'Shift',
   hook: 'Space', outriggers: 'KeyO', ballast: 'KeyB', yguy: 'KeyY', mount: 'KeyM', view: 'KeyV', switch: 'Tab',
-  reset: 'KeyX', bypass: 'KeyP', mute: 'KeyN', help: 'KeyH',
+  reset: 'KeyX', bypass: 'KeyP', rewind: 'Backspace', mute: 'KeyN', help: 'KeyH',
 });
 
 export const ACTIONS = [...HOLD, ...TAP] as Action[];
