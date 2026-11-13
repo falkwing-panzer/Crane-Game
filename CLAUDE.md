@@ -764,11 +764,11 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   paso (todo el `tick`, sin ventana) 0,48–0,87 → 0,56–0,93 ms: dentro del ruido entre pasadas de la misma versión
   (±0,1). Bundle: `app.js` 778 → 787 kB (185,6 kB comprimido); el banco va en un trozo aparte.
   **Pendiente**: `?bench=1` con el panel visible en uso normal y mirar la interpolación en una pantalla de 120/144 Hz.
+- Fase 15 C (mismo banco): draw calls iguales, 60 fps, GPU 6,7–7,8 ms; triángulos +3.800 a +7.700 (los tramos de
+  los ramales, también en el pase de sombras): nivel 14 50.000 → 57.700, LR 3000 28.700 → 32.500.
 
 ### Pendientes
-- **Fase 15, parte C** (cable): Rapier 0.21.0 es la última versión en npm y su API JS no da impulsos ni fuerzas de
-  las juntas (`RawImpulseJointSet` solo tiene límites y motores): la tensión sigue medida por posiciones. Falta la
-  catenaria del cable flojo y los ramales que se tensan al izar.
+- Rapier: si una versión nueva da las fuerzas de las juntas, cambiar la tensión medida por la real (comparando antes).
 - Posible mejora de carga: el `.wasm` empieza a bajar cuando ya llegó `app.js` (no se puede precargar desde
   `index.html` porque su nombre lleva hash).
 - Textos de datos con teclas fijas ("(B)", "T sube el plumín…") en `LEVELS`, el nivel de tándem y las notas de las
