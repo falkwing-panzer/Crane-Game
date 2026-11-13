@@ -161,7 +161,7 @@ export class Presenter {
     units.forEach((u, i) => {
       const fu = f.units[i];
       u.crane.update(fu.S, fu.pose, u.C.slR);
-      u.rig.update(u.crane.lateral(_lat), fu, f.loads);
+      u.rig.update(u.crane.lateral(_lat), fu, f.loads, dt);
     });
     const fa = f.units[units.indexOf(act)];
     this.cam.update(dt, fa.S, fa.pose);

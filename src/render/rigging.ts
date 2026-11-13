@@ -6,13 +6,13 @@ import { apply, rotate } from '../crane/pose';
 import { tieLug } from '../crane/tiedown';
 import type { BodyT, UnitFrame } from '../game/interp';
 import type { V3 } from '../crane/pose';
-import { bow, catenary, dips, SLACK_MIN } from './catenary';
+import { catenary, SLACK_MIN } from './catenary';
+import { RopeSim } from './ropeSim';
 
 /** Tramos de cada ramal del cable y de cada ramal de la eslinga (rectos cuando están tensos) */
 const FALL_SEG = 16;
 const SLING_SEG = 8;
 const _pts: V3[] = [];
-const _side: V3 = { x: 0, y: 0, z: 0 };
 
 /** Punto (x, y, z) del cuerpo en el mundo */
 const pt = (b: BodyT, x: number, y: number, z: number) => {
@@ -40,6 +40,8 @@ export class Rigging {
   /** Ramales del cable entre la cabeza y el bloque del gancho */
   private falls: THREE.InstancedMesh;
   private nFalls: number;
+  /** Cada ramal del cable, simulado como cadena de puntos cuando está flojo (fase 15 C) */
+  private ropes: RopeSim[];
   private hb: number;
   private loadMeshes = new Map<Load, THREE.Mesh>();
   private sling: THREE.LineSegments;
@@ -52,6 +54,7 @@ export class Rigging {
     const dark = new THREE.MeshLambertMaterial({ color: '#2a2e33' });
     const hb = (this.hb = hookScale(T));
     this.nFalls = hookFalls(T);
+    this.ropes = Array.from({ length: this.nFalls }, () => new RopeSim(FALL_SEG));
 
     // Gancho: bloque de poleas (de −0,05 a +0,5, como el cuerpo de Rapier) + vástago + gancho. Origen = centro del cuerpo.
     const parts: [THREE.Material, THREE.BufferGeometry, number, number, number, number, number, number][] = [
@@ -120,7 +123,7 @@ export class Rigging {
    * lat = eje lateral de la superestructura en el mundo (los ramales salen de las poleas de la cabeza). f y loads: lo
    * que se dibuja de esta grúa y de las cargas (fase 15: interpolado entre pasos; las cargas en el orden de phys.loads).
    */
-  update(lat: THREE.Vector3, f: UnitFrame, loads: BodyT[]) {
+  update(lat: THREE.Vector3, f: UnitFrame, loads: BodyT[], dt = 0) {
     const p = this.phys;
     const hk = f.hook, t = hk.t, r = hk.q;
     this.hook.position.set(t.x, t.y, t.z);
@@ -132,24 +135,16 @@ export class Rigging {
     _hx.set(1, 0, 0).applyQuaternion(this.hook.quaternion);
     const n = this.nFalls;
     // cable flojo: solo con el gancho o su carga apoyados (colgando, el gancho va unos cm por detrás del cabrestante al
-    // bajar y eso no es cable flojo). Lo que sobra cuelga en catenaria; si se recortaría contra el suelo o el gancho
-    // (gancho debajo de la cabeza), los ramales se arquean hacia fuera. Amarrado o tenso, recto.
+    // bajar y eso no es cable flojo). Lo que sobra cae por su peso (RopeSim) y se amontona donde está apoyado el gancho
+    // (no baja de su fondo ni del suelo). Amarrado o tenso, recto.
     const slack = p.hookSupported() ? f.S.cable - Math.hypot(top.x - h.x, top.y - h.y, top.z - h.z) : 0;
     const floor = Math.max(0.03, top.y - 2 * HOOK_HALF_H);
-    // hacia dónde se arquea cada ramal: los de los lados hacia su lado; el del centro, hacia delante de la pluma
-    const fx = -_lat.z, fz = _lat.x, fl = Math.hypot(fx, fz) || 1;
     for (let i = 0; i < n; i++) {
       const o = (i - (n - 1) / 2);
       _a.set(h.x, h.y, h.z).addScaledVector(_lat, o * 0.13);
       _b.set(top.x, top.y, top.z).addScaledVector(_hx, o * 0.3 * this.hb);
       const len = _a.distanceTo(_b) + (slack > SLACK_MIN ? slack : 0);
-      let pts = catenary(_a, _b, len, FALL_SEG, -Infinity, _pts);
-      if (dips(pts, floor)) {
-        if (o) { const l = Math.hypot(_lat.x, _lat.z) || 1; _side.x = Math.sign(o) * _lat.x / l; _side.z = Math.sign(o) * _lat.z / l; }
-        else { _side.x = fx / fl; _side.z = fz / fl; }
-        _side.y = 0;
-        pts = bow(_a, _b, len, FALL_SEG, _side, Math.max(0.4, 0.12 * _a.distanceTo(_b)), _pts);
-      }
+      const pts = this.ropes[i].update(_a, _b, len, floor, dt, SLACK_MIN);
       for (let k = 0; k < FALL_SEG; k++) {
         _a.set(pts[k].x, pts[k].y, pts[k].z);
         _d.set(pts[k + 1].x - _a.x, pts[k + 1].y - _a.y, pts[k + 1].z - _a.z);

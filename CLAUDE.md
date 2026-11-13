@@ -309,8 +309,8 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   `Rigging.update(lat, unitFrame, loads)`), `Loop.alpha`/`steps`, `ui/adaptive.ts` (`AdaptiveScale`), `App.adaptive`/
   `basePr`/`probe`/`resume` (`?continuar=1`), `ui/savegame.ts` (`saveGame`, `loadSave`, `clearSave`, `encodeSnap`/
   `decodeSnap`; clave `gruas-guardado-<nivel>`), `ui/bench.ts` (`BENCH_CASES`, `runBench` → `window.__benchReport`),
-  `ui/gpuTimer.ts`, `render/catenary.ts` (`catenary(a, b, largo, n, suelo)`, `SLACK_MIN`; parte C),
-  `Physics.slingLength`. Eventos nuevos del bus: `switch` (Tab llega desde el paso), `restored`. `LevelUi.onSave`/
+  `ui/gpuTimer.ts`, `render/catenary.ts` (`catenary(a, b, largo, n, suelo)`, `SLACK_MIN`; parte C), `render/ropeSim.ts`,
+  `Physics.slingLength`/`hookSupported`/`loadSupported`, `Rigging.update(…, dt)`. Eventos nuevos del bus: `switch` (Tab llega desde el paso), `restored`. `LevelUi.onSave`/
   `showSave`, `brief(…, cont)`. `LevelRules.winClock`.
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
   cut…, de la grúa que se maneja; `units`, todas) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
@@ -674,11 +674,12 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   cable = `S.cable` − distancia de la cabeza al gancho (cada ramal mide su recta + la holgura); la de la eslinga =
   `slingLength` − distancia del fondo del gancho al punto de enganche. **Solo con el gancho o la carga apoyados**
   (`hookSupported`/`loadSupported`): colgando, al bajar con F el gancho va 2–20 cm detrás del cabrestante (City 25,
-  hasta 1,1 m al rebotar) y el cable parpadeaba entre recto y curvo (visto por Jesús). Con menos de 3 cm, recta. Si
-  la catenaria bajaría del fondo del gancho o del suelo (gancho apoyado debajo de la cabeza: antes quedaba una "L"
-  en el suelo), cada ramal se arquea hacia fuera (`bow`: los de los lados hacia su lado, el del centro hacia delante;
-  flecha ≤ max(0,4 m; 12 % del largo); lo que sobre se queda sobre el gancho). Eslinga sin orejetas: no baja del punto
-  de enganche (queda sobre la carga). Amarrado, recto.
+  hasta 1,1 m al rebotar) y el cable parpadeaba entre recto y curvo (visto por Jesús). Con menos de 3 cm, recta.
+  Cable flojo **simulado** (`render/ropeSim.ts`, `RopeSim`): cada ramal es una cadena de 17 puntos (Verlet a 120 Hz,
+  24 pasadas, tramos que no se estiran, suelo = fondo del gancho o 3 cm), así cae por su peso, se amontona donde está
+  apoyado el gancho y se mueve al girar (se probaron antes una catenaria fija, que con el gancho debajo de la cabeza
+  quedaba en "L" contra el suelo, y unos arcos hacia fuera, que Jesús vio rígidos). Solo dibujo: no toca el
+  determinismo. Eslinga: catenaria (`catenary`), sin bajar del punto de enganche (queda sobre la carga). Amarrado, recto.
 
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las

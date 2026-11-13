@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { bow, catenary, dips, polyLength } from './catenary';
+import { catenary, polyLength } from './catenary';
+import { RopeSim } from './ropeSim';
 
 // Fase 15, parte C: el cable flojo se dibuja como catenaria; tenso, recto.
 describe('catenaria del cable flojo', () => {
@@ -38,14 +39,17 @@ describe('catenaria del cable flojo', () => {
     expect(out.length).toBe(9);
   });
 
-  it('gancho apoyado debajo de la cabeza: el ramal se arquea de lado con el largo del cable (hasta la flecha máxima)', () => {
-    const b = { x: 0, y: 1, z: 0 }, side = { x: 0, y: 0, z: 1 };
-    expect(dips(catenary(a, b, 21, 32), 1)).toBe(true); // la catenaria bajaría del gancho
-    const p = bow(a, b, 21, 64, side, 5);
-    expect(polyLength(p)).toBeCloseTo(21, 0);
-    expect(Math.max(...p.map((v) => v.z))).toBeGreaterThan(1);
-    expect(Math.min(...p.map((v) => v.y))).toBeGreaterThanOrEqual(1);
-    // con mucho cable sobrante, la flecha no pasa del máximo
-    expect(Math.max(...bow(a, b, 80, 64, side, 1.5).map((v) => v.z))).toBeCloseTo(1.5, 6);
+  it('cable flojo simulado: cae por su peso, se apoya en el suelo, no se estira y tenso queda recto', () => {
+    const r = new RopeSim(16), head = { x: 0, y: 10, z: 0 }, hook = { x: 0.3, y: 1, z: 0 };
+    let p = r.update(head, hook, 9.2, 0.5, 0.016);
+    for (let i = 0; i < 300; i++) p = r.update(head, hook, 20, 0.5, 1 / 60);
+    expect(p[0]).toEqual(head);
+    expect(p[16]).toEqual(hook);
+    expect(Math.min(...p.map((v) => v.y))).toBeGreaterThanOrEqual(0.5); // no atraviesa el suelo
+    expect(p.filter((v) => v.y < 0.55).length).toBeGreaterThan(3); // lo que sobra queda en el suelo
+    expect(polyLength(p)).toBeLessThanOrEqual(20 + 1e-3); // no se estira
+    // tenso: la recta
+    p = r.update(head, hook, Math.hypot(0.3, 9), 0.5, 1 / 60);
+    expect(p[8].y).toBeCloseTo(5.5, 6);
   });
 });
