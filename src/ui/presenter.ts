@@ -57,6 +57,8 @@ export class Presenter {
   readonly lui: LevelUi;
   readonly sound: Sound;
   private readonly off: (() => void)[] = [];
+  /** CPU del HUD en el último cuadro, ms (banco de pruebas, fase 16) */
+  hudMs = 0;
 
   /**
    * root = contenedor de esta partida dentro de #hud (se quita entero al desmontarla); sound = el de la app (uno solo);
@@ -225,6 +227,7 @@ export class Presenter {
     const o = multi ? units.find((u) => u !== act)! : null;
     hud.other(o ? { name: o.T.name, lmi: o.dyn.lmi, tension: o.phys.tension, share: o.phys.slingShare(), tiltDeg: (o.S.phi * 180) / Math.PI, tipped: ses.tipped(o),
       sideDeg: o.phys.slingShare() !== null ? (o.sideAng * 180) / Math.PI : null } : null);
+    this.hudMs = performance.now() - t2;
   }
 
   /** Quita los oyentes del bus y deja la cámara sin piezas ocultas de esta partida */
