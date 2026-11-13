@@ -123,7 +123,7 @@ export function buildCarrier(T: WheeledSpec, L: Layout, P: Parts, cabP: Parts) {
   P.box('chrome', L0 - 0.04, L0, dLo + 0.8, dLo + 0.95, -0.28, 0.28);
   P.box('black', L0 - 0.14, L0 + 0.1, dLo + 0.02, dLo + 0.22, -0.18, 0.18);
   P.cyl('chrome', [L0 - 0.1, dLo + 0.12, -0.08], [L0 - 0.1, dLo + 0.12, 0.08], 0.06, 8);
-  detailCarrier(T, L, P);
+  P.detail(() => detailCarrier(T, L, P)); // fase 16: detalle pequeño, oculto de lejos
   // escalerilla trasera a la derecha, para subir a la cubierta (fase 8B)
   const lz = hf - 0.75;
   ladder(P, 'greyDeep', [L0 - 0.1, lz], [L0 - 0.1, lz + 0.4], dLo - 0.2, dHi + 0.02);
@@ -176,11 +176,13 @@ function buildCab(T: WheeledSpec, L: Layout, P: Parts) {
   // limpiaparabrisas (sobre el cristal) y visera encima (fase 8B)
   const nx = (wb[1] - wa[1]) / Math.hypot(wb[0] - wa[0], wb[1] - wa[1]), ny = -(wb[0] - wa[0]) / Math.hypot(wb[0] - wa[0], wb[1] - wa[1]);
   const onGlass = (u: number, z: number): [number, number, number] => { const q = wt(u); return [q[0] + nx * 0.045, q[1] + ny * 0.045, z]; };
-  for (const z of [cw0 + 0.3, zm + 0.15]) P.cyl('black', onGlass(0.1, z), onGlass(0.6, z + 0.35), 0.014, 4);
+  P.detail(() => {
+    for (const z of [cw0 + 0.3, zm + 0.15]) P.cyl('black', onGlass(0.1, z), onGlass(0.6, z + 0.35), 0.014, 4);
+    // asidero junto a la puerta
+    P.cyl('black', [dX - 0.06, cabLow + 0.35, cw0 - 0.07], [dX - 0.06, cabTop - 0.45, cw0 - 0.07], 0.022, 5);
+  });
   P.box('dark', L1 - 0.36, L1 - 0.14, cabTop - 0.09, cabTop - 0.04, cw0 + 0.05, cw1 - 0.05);
   P.box('yellowDark', cabX0 + 0.05, L1 - 0.45, cabTop, cabTop + 0.06, cw0 + 0.05, cw1 - 0.05);
-  // asidero junto a la puerta
-  P.cyl('black', [dX - 0.06, cabLow + 0.35, cw0 - 0.07], [dX - 0.06, cabTop - 0.45, cw0 - 0.07], 0.022, 5);
   // retrovisores tipo autobús delante de la cabina
   const mirrors = L.fullCab ? [-1, 1] : [-1];
   for (const s of mirrors) {

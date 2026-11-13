@@ -32,18 +32,69 @@ const EMISSIVE: Partial<Record<MatKey, [string, string]>> = {
   beacon: ['#e67e22', '#7a3c00'],
 };
 
-const cache = new Map<string, THREE.MeshLambertMaterial>();
-function mat(color: string, emissive?: string) {
-  const k = color + (emissive ?? '');
-  let m = cache.get(k);
+/**
+ * Fase 16: material estándar (metal y rugosidad) en calidad alta, en vez de Lambert. Se elige una vez al arrancar
+ * (cambiar la calidad recarga la página), antes de crear la escena y los modelos.
+ */
+let standard = false;
+export function useStandard(on: boolean) { standard = on; }
+export function isStandard() { return standard; }
+
+/** Material iluminado (Lambert o estándar según la calidad): todo lo de la escena que no es especial */
+export type LitMat = THREE.MeshLambertMaterial | THREE.MeshStandardMaterial;
+export function lit(p: THREE.MeshStandardMaterialParameters = {}): LitMat {
+  if (standard) return new THREE.MeshStandardMaterial({ roughness: 0.75, metalness: 0, ...p });
+  const { roughness: _r, metalness: _m, ...rest } = p;
+  return new THREE.MeshLambertMaterial(rest as THREE.MeshLambertMaterialParameters);
+}
+
+/** [rugosidad, metal] de cada clave (solo con el material estándar; aproximación visual) */
+export function surface(k: MatKey): [number, number] {
+  switch (k) {
+    case 'chrome': case 'pendant': return [0.22, 0.9];
+    case 'steel': case 'mast': return [0.38, 0.7];
+    case 'rim': return [0.4, 0.55];
+    case 'tire': case 'black': case 'roller': case 'idler': case 'undercarriage': return [0.92, 0];
+    case 'dark': case 'drum': return [0.7, 0.15];
+    case 'glass': return [0.08, 0.3];
+    case 'grey': case 'greyDark': case 'greyDeep': return [0.55, 0.25];
+    default: return [0.42, 0.12]; // pintura de la grúa
+  }
+}
+
+const cache = new Map<string, LitMat>();
+function mat(color: string, emissive?: string, k?: MatKey) {
+  const key = color + (emissive ?? '') + (k === 'glass' ? 'g' : '');
+  let m = cache.get(key);
   if (!m) {
-    m = new THREE.MeshLambertMaterial({ color, emissive: emissive ?? '#000000' });
-    cache.set(k, m);
+    const [roughness, metalness] = surface(k ?? 'yellow');
+    m = lit({ color, emissive: emissive ?? '#000000', roughness, metalness });
+    cache.set(key, m);
   }
   return m;
 }
 
-export type Palette = Record<MatKey, THREE.MeshLambertMaterial>;
+/**
+ * Material de los colores lisos fusionados (`Parts.build`): el color va en cada vértice (el de la paleta, en espacio
+ * lineal, con la oclusión ambiental). Con el material estándar, la rugosidad y el metal también van por vértice
+ * (atributo `rm`), así cada grupo sigue siendo una sola malla.
+ */
+let vcMat: LitMat | null = null;
+export function vcMaterial(): LitMat {
+  if (vcMat && (vcMat instanceof THREE.MeshStandardMaterial) === standard) return vcMat;
+  if (!standard) return (vcMat = new THREE.MeshLambertMaterial({ vertexColors: true }));
+  const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 1 });
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = 'attribute vec2 rm;\nvarying vec2 vRM;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvRM = rm;');
+    sh.fragmentShader = 'varying vec2 vRM;\n' + sh.fragmentShader
+      .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = roughness * vRM.x;')
+      .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = metalness * vRM.y;');
+  };
+  m.customProgramCacheKey = () => 'vc-rm';
+  return (vcMat = m);
+}
+
+export type Palette = Record<MatKey, LitMat>;
 
 /** Colores de la grúa: el amarillo y la llanta salen de los datos (color, rim); lo demás es fijo. */
 export function colorOf(T: CraneSpec, k: MatKey): string {
@@ -67,7 +118,7 @@ export function palette(T: CraneSpec): Palette {
     'lattice', 'latticeDiag', 'latticeFoot', 'mast', 'pendant', 'roller', 'idler', 'undercarriage'];
   for (const k of keys) {
     const e = EMISSIVE[k];
-    out[k] = e ? mat(e[0], e[1]) : mat(colorOf(T, k));
+    out[k] = e ? mat(e[0], e[1], k) : mat(colorOf(T, k), undefined, k);
   }
   return out;
 }

@@ -5,7 +5,9 @@ import { supportMode } from '../crane/ops';
 import { jibPhase, towerPhase, yGuyPhase } from '../crane/assembly';
 import { canTie } from '../crane/tiedown';
 import { CameraRig } from '../render/camera';
-import type { SceneCtx } from '../render/scene';
+import { sceneFog, type SceneCtx } from '../render/scene';
+import { DetailLod } from '../render/lod';
+import { levelSize } from '../levels/setup';
 import { LANDING_MIN } from '../levels/rules';
 import { CARD_DELAY } from '../game/control';
 import { MENU_IDS, type Session, type Unit } from '../game/session';
@@ -57,6 +59,8 @@ export class Presenter {
   readonly lui: LevelUi;
   readonly sound: Sound;
   private readonly off: (() => void)[] = [];
+  /** Detalles de las grúas que se ocultan de lejos (fase 16) */
+  readonly lod: DetailLod;
   /** CPU del HUD en el último cuadro, ms (banco de pruebas, fase 16) */
   hudMs = 0;
 
@@ -69,6 +73,10 @@ export class Presenter {
     const act = ses.act;
     const specs = units.map((u) => u.T);
     this.cam = new CameraRig(ctx, act.crane.cab, (s) => ses.act.crane.eye(s), camSize(specs), shadowHalf(specs));
+    // niebla según la obra (fase 16) y detalles que se ocultan de lejos
+    const site = L ? levelSize(L) : null;
+    sceneFog(ctx, site ? { w: site[0], d: site[1] } : null, camSize(specs));
+    this.lod = new DetailLod(units.map((u) => u.crane.root));
     // tándem: cámara libre en el centro de las grúas (V), que no salta al cambiar de grúa con Tab
     if (multi) this.cam.enableFree(() => {
       const n = units.length;
@@ -167,6 +175,7 @@ export class Presenter {
     });
     const fa = f.units[units.indexOf(act)];
     this.cam.update(dt, fa.S, fa.pose);
+    this.lod.update(ctx.camera, ctx.renderer.domElement.height);
     ctx.renderer.render(ctx.scene, ctx.camera);
     bootDone(); // primer cuadro dibujado: se quita la pantalla de carga
     this.sound.update(dt, {

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { lit } from './models/materials';
 import type { Obstacle } from '../physics/world';
 import type { SoftZone } from '../crane/terrain';
 
@@ -32,7 +33,7 @@ const SOFT_COLOR = { mud: '#54432f', water: '#28465e' };
 
 export function buildSite(scene: THREE.Scene, obstacles: Obstacle[], softs: SoftZone[] = []) {
   for (const s of softs) {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(s.w, s.d), new THREE.MeshLambertMaterial({
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(s.w, s.d), lit({
       color: SOFT_COLOR[s.kind], polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
     }));
     m.rotation.x = -Math.PI / 2;
@@ -40,7 +41,7 @@ export function buildSite(scene: THREE.Scene, obstacles: Obstacle[], softs: Soft
     m.receiveShadow = true;
     scene.add(m);
   }
-  const concrete = new THREE.MeshLambertMaterial({ color: '#a7a39a' });
+  const concrete = lit({ color: '#a7a39a' });
   const blocks = obstacles.filter((o) => o.kind === 'block');
   const inst = new THREE.InstancedMesh(box, concrete, Math.max(1, blocks.length));
   inst.count = blocks.length;
@@ -54,7 +55,7 @@ export function buildSite(scene: THREE.Scene, obstacles: Obstacle[], softs: Soft
   scene.add(inst);
   for (const o of obstacles) {
     if (o.kind !== 'container') continue;
-    const m = new THREE.Mesh(box, new THREE.MeshLambertMaterial({ color: o.color ?? '#3d6f8f' }));
+    const m = new THREE.Mesh(box, lit({ color: o.color ?? '#3d6f8f' }));
     m.position.set(o.pos.x, o.pos.y, o.pos.z);
     m.rotation.y = o.rotY;
     m.scale.set(2 * o.half.x, 2 * o.half.y, 2 * o.half.z);

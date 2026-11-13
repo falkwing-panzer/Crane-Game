@@ -4,7 +4,7 @@ import { carrierLift, type CraneState } from '../crane/kinematics';
 import { suspensionPose, type Pose } from '../crane/pose';
 import { axleSteer } from '../crane/drive';
 import { Parts } from './models/builder';
-import { palette } from './models/materials';
+import { lit, palette, type LitMat } from './models/materials';
 import { cwPieces, layout, type Layout } from './models/layout';
 import { PlateMeshes, plateColors } from './models/plates';
 import { buildYGuyBase, YGuyView } from './models/yguy';
@@ -59,7 +59,7 @@ export class CraneModel {
   private outJack: THREE.InstancedMesh;
   private outRod: THREE.InstancedMesh;
   private outPad: THREE.InstancedMesh;
-  private padMat: THREE.MeshLambertMaterial;
+  private padMat: LitMat;
   // Llantas: en un grupo que deshace la suspensión (el chasis se balancea, las ruedas no)
   private wheelGroup = new THREE.Group();
   private tires: THREE.InstancedMesh;
@@ -88,7 +88,7 @@ export class CraneModel {
     const cabMeshes = cabP.build(this.root, pal);
 
     // estabilizadores (se colocan en update)
-    this.padMat = new THREE.MeshLambertMaterial({ color: '#7d858f' });
+    this.padMat = lit({ color: '#7d858f' });
     this.outBeam = new THREE.InstancedMesh(box, pal.grey, 4);
     this.outJack = new THREE.InstancedMesh(cyl, pal.greyDeep, 4);
     this.outRod = new THREE.InstancedMesh(cyl, pal.chrome, 4);

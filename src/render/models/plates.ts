@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { CraneSpec } from '../../crane/cranes';
+import { lit } from './materials';
 import { CHAMFER_X, CHAMFER_Z, type FramePart, type Plate } from './layout';
 
 // Placas de contrapeso instanciadas (fase 7, generalizado en la fase 8B): 2 InstancedMesh por grupo, uno de placas
@@ -43,8 +44,8 @@ export class PlateMeshes {
   readonly boxes: THREE.InstancedMesh;
 
   constructor(parent: THREE.Object3D, nPlates: number, nBoxes: number, private colors: Record<PieceColor, string>) {
-    this.plates = new THREE.InstancedMesh(plateGeo, new THREE.MeshLambertMaterial({ color: '#ffffff' }), Math.max(1, nPlates));
-    this.boxes = new THREE.InstancedMesh(boxGeo, new THREE.MeshLambertMaterial({ color: '#ffffff' }), Math.max(1, nBoxes));
+    this.plates = new THREE.InstancedMesh(plateGeo, lit({ color: '#ffffff' }), Math.max(1, nPlates));
+    this.boxes = new THREE.InstancedMesh(boxGeo, lit({ color: '#ffffff' }), Math.max(1, nBoxes));
     for (const m of [this.plates, this.boxes]) {
       m.castShadow = m.receiveShadow = true;
       m.frustumCulled = false;

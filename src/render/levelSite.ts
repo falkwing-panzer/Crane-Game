@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { lit } from './models/materials';
 import { KIND_COL, type Level, type LevelBox } from '../levels/levels';
 import { levelBoxes, levelSize, levelSofts } from '../levels/setup';
 
@@ -13,7 +14,7 @@ const ZONE_COLOR = '#4cc38a';
 export function buildLevelSite(scene: THREE.Scene, L: Level) {
   // suelo de la obra, encima del terreno general, con un borde (fase 10: el nivel de tándem es más grande)
   const [WW, WD] = levelSize(L);
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(WW, WD), new THREE.MeshLambertMaterial({
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(WW, WD), lit({
     color: lighten(L.ground), polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
   }));
   ground.rotation.x = -Math.PI / 2;
@@ -24,7 +25,7 @@ export function buildLevelSite(scene: THREE.Scene, L: Level) {
   scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(edge), new THREE.LineBasicMaterial({ color: '#f0bb27' })));
 
   for (const s of levelSofts(L)) {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(s.w, s.d), new THREE.MeshLambertMaterial({
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(s.w, s.d), lit({
       color: SOFT_COLOR[s.kind], polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
     }));
     m.rotation.x = -Math.PI / 2;
@@ -83,7 +84,7 @@ export function buildLevelSite(scene: THREE.Scene, L: Level) {
 }
 
 function instanced(geo: THREE.BufferGeometry, list: LevelBox[]) {
-  const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial(), list.length);
+  const mesh = new THREE.InstancedMesh(geo, lit(), list.length);
   const m4 = new THREE.Matrix4(), col = new THREE.Color();
   list.forEach((b, i) => {
     mesh.setMatrixAt(i, m4.makeScale(b.w, b.h, b.d).setPosition(b.x, b.h / 2, b.z));

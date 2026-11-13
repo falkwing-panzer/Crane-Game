@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Parts, P3 } from './builder';
 import type { Layout } from './layout';
-import type { Palette } from './materials';
+import { lit, type Palette } from './materials';
 
 // Arriostramiento en Y (yGuyModel() de la referencia), en el marco de la pluma: x a lo largo de la pluma desde el
 // pie, y normal hacia arriba, z lateral. Va montado sobre el tramo base: soporte y mástil fijos; dos brazos que se
@@ -95,7 +95,7 @@ export class YGuyView {
   constructor(parent: THREE.Object3D, private L: Layout, pal: Palette) {
     this.arms = new THREE.InstancedMesh(cyl, pal.yellowDark, 2);
     this.braces = new THREE.InstancedMesh(cyl, pal.chrome, 4);
-    this.ropes = new THREE.InstancedMesh(cyl, new THREE.MeshLambertMaterial({ color: '#ffffff' }), MAX_ROPES);
+    this.ropes = new THREE.InstancedMesh(cyl, lit({ color: '#ffffff' }), MAX_ROPES);
     this.winches = new THREE.InstancedMesh(box, pal.greyDeep, 2);
     for (const m of [this.arms, this.braces, this.ropes, this.winches]) {
       m.castShadow = true;
