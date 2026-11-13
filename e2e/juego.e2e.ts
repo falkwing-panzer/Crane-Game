@@ -21,6 +21,12 @@ function watchConsole(page: Page) {
   return out;
 }
 
+/**
+ * Abre una página del juego con calidad baja (sin sombras ni antialias, a 3/4 de resolución): con WebGL por software
+ * el dibujo es casi todo el tiempo de las pruebas, y aquí no se mira la imagen.
+ */
+const open = (page: Page, q = '') => page.goto(`./?${q ? `${q}&` : ''}calidad=bajo`);
+
 /** Espera a la partida montada y a que se hayan dibujado cuadros (la pantalla de carga se quita al primero) */
 async function ready(page: Page) {
   await page.waitForFunction(() => performance.getEntriesByName('gruas-partida').length > 0);
@@ -32,7 +38,7 @@ async function ready(page: Page) {
 
 test('menú: los 14 trabajos y las dos pruebas libres', async ({ page }) => {
   const log = watchConsole(page);
-  await page.goto('./');
+  await open(page);
   await ready(page);
   await expect(page.locator('a.lvl')).toHaveCount(16);
   await expect(page.locator('#lcard h2')).toHaveText('Elige un trabajo');
@@ -41,7 +47,7 @@ test('menú: los 14 trabajos y las dos pruebas libres', async ({ page }) => {
 
 test('ir a un nivel desde el menú no recarga la página', async ({ page }) => {
   const log = watchConsole(page);
-  await page.goto('./');
+  await open(page);
   await ready(page);
   await page.evaluate(() => { (window as unknown as { marca: number }).marca = 1; });
   await page.locator('a.lvl').first().click();
@@ -56,7 +62,7 @@ test('ir a un nivel desde el menú no recarga la página', async ({ page }) => {
 for (const n of LEVELS) {
   test(`nivel ${n}: ficha, turno y consola limpia`, async ({ page }) => {
     const log = watchConsole(page);
-    await page.goto(`./?nivel=${n}`);
+    await open(page, `nivel=${n}`);
     await ready(page);
     const start = page.locator('#l-start');
     await expect(start).toBeVisible();
@@ -74,7 +80,7 @@ for (const n of LEVELS) {
 for (const id of CRANES) {
   test(`prueba libre ${id}: dibuja y responde a las teclas`, async ({ page }) => {
     const log = watchConsole(page);
-    await page.goto(`./?grua=${id}`);
+    await open(page, `grua=${id}`);
     await ready(page);
     await expect(page.locator('#data')).toContainText('LMI');
     // R sube el gancho: el largo del cable cambia (la SK 60 sin montar no mueve nada: avisa). No F: el gancho de las
@@ -82,18 +88,18 @@ for (const id of CRANES) {
     const cable = async () => /Cable ([\d,]+) m/.exec(await page.locator('#data').innerText())?.[1];
     const before = await cable();
     expect(before).toBeTruthy();
+    // se mantiene pulsada hasta que cambie: con pocos cuadros por segundo la simulación avanza despacio
     await page.keyboard.down('KeyR');
-    await page.waitForTimeout(800);
-    await page.keyboard.up('KeyR');
     if (id === 'sk') await expect(page.locator('#msg')).toContainText('Monta la grúa torre primero (M)');
-    else await expect.poll(cable).not.toBe(before);
+    else await expect.poll(cable, { timeout: 60_000 }).not.toBe(before);
+    await page.keyboard.up('KeyR');
     expect(log).toEqual([]);
   });
 }
 
 test('prueba libre en tándem: dos grúas y Tab cambia de grúa', async ({ page }) => {
   const log = watchConsole(page);
-  await page.goto('./?tandem=1');
+  await open(page, 'tandem=1');
   await ready(page);
   await expect(page.locator('#other')).toBeVisible();
   const title = await page.locator('#data .title').innerText();
@@ -104,7 +110,7 @@ test('prueba libre en tándem: dos grúas y Tab cambia de grúa', async ({ page 
 
 test('teclas configurables: se cambian en la ayuda, se guardan y la grúa las obedece', async ({ page }) => {
   const log = watchConsole(page);
-  await page.goto('./?grua=medium');
+  await open(page, 'grua=medium');
   await ready(page);
   await page.keyboard.press('KeyH');
   await page.locator('#help-edit').click();
@@ -127,7 +133,7 @@ test('teclas configurables: se cambian en la ayuda, se guardan y la grúa las ob
 
 test('pausa al perder el foco: no se acumulan pasos de física', async ({ page }) => {
   const log = watchConsole(page);
-  await page.goto('./?grua=medium');
+  await open(page, 'grua=medium');
   await ready(page);
   await page.evaluate(() => dispatchEvent(new Event('blur')));
   await expect(page.locator('.pause-card')).toBeVisible();

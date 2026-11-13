@@ -10,13 +10,15 @@ export default defineConfig({
   timeout: 120_000,
   expect: { timeout: 20_000 },
   fullyParallel: true,
-  workers: process.env.CI ? 2 : undefined,
+  // las máquinas de GitHub tienen 4 núcleos (con 2 tardaba ~4 min)
+  workers: process.env.CI ? 4 : undefined,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['list'], ['github']] : 'list',
   use: {
     baseURL: 'http://localhost:4173/',
     trace: process.env.CI ? 'retain-on-failure' : 'off',
-    viewport: { width: 1280, height: 720 },
+    // pequeña a propósito: con WebGL por software el coste crece con los píxeles
+    viewport: { width: 960, height: 540 },
     launchOptions: {
       // sin gráfica en la acción: WebGL por software, pedido de forma explícita (si no, Chrome avisa en la consola)
       args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader', '--ignore-gpu-blocklist'],
