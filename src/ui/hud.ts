@@ -185,6 +185,10 @@ export class Hud {
     this.say(text, seconds);
   }
 
+  /** Escala de resolución de la calidad adaptativa (fase 15; 1 = la de la calidad elegida) */
+  private scale = 1;
+  setScale(s: number) { this.scale = s; }
+
   /** dt real del cuadro (s), tiempos de física y render (ms CPU) */
   frame(dt: number, physMs: number, renderMs: number, info: THREE.WebGLInfo) {
     this.frames++;
@@ -199,7 +203,8 @@ export class Hud {
     const fps = n / this.acc;
     this.perf.innerHTML =
       h.perf(`<b class="${fps < 50 ? 'bad' : fps < 58 ? 'warn' : ''}">${fps.toFixed(0)} fps</b>`, (1000 * this.acc / n).toFixed(1),
-        (1000 * this.worst).toFixed(1), (this.physAcc / n).toFixed(2), (this.renderAcc / n).toFixed(2), info.render.calls, info.render.triangles);
+        (1000 * this.worst).toFixed(1), (this.physAcc / n).toFixed(2), (this.renderAcc / n).toFixed(2), info.render.calls, info.render.triangles)
+      + (this.scale < 0.999 ? h.scale(Math.round(this.scale * 100)) : '');
     this.frames = 0; this.acc = 0; this.worst = 0; this.physAcc = 0; this.renderAcc = 0;
   }
 

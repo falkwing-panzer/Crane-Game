@@ -27,7 +27,7 @@ const shown = (g: ReturnType<typeof helpGroups>) => g.filter((x) => x.title !== 
 describe('ayuda de controles (fase 13)', () => {
   it('con todo activado lista la tecla de cada acción', () => {
     const text = shown(helpGroups(ALL, DEFAULT_KEYS));
-    expect(ACTIONS.length).toBe(28);
+    expect(ACTIONS.length).toBe(29); // fase 15: rebobinar
     for (const a of ACTIONS) {
       expect(text, `falta ${a}`).toMatch(new RegExp(`(^|[\\s/])${reEsc(keyLabel(DEFAULT_KEYS[a]))}([\\s/]|$)`, 'm'));
     }

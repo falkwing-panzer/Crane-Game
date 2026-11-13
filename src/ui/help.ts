@@ -68,7 +68,7 @@ export function helpGroups(f: HelpFlags, k: KeyMap = activeKeys()): HelpGroup[] 
   if (f.tandem) cam.push([K('switch'), h.switch]);
   g.push({ title: f.tandem ? h.camTitleTandem : h.camTitle, keys: cam });
 
-  if (f.free) g.push({ title: h.free, keys: [[K('reset'), h.reset], [K('bypass'), h.bypass]] });
+  if (f.free) g.push({ title: h.free, keys: [[K('reset'), h.reset], [K('bypass'), h.bypass], [K('rewind'), h.rewind]] });
 
   g.push({ title: h.game, keys: [[K('help'), h.help], [keyLabel('Escape'), h.esc], [K('mute'), h.mute]] });
 
@@ -100,7 +100,7 @@ export const KEY_GROUPS: [keyof typeof t.keys.groups, Action[]][] = [
   ['drive', ['fw', 'bk', 'stl', 'str', 'outriggers']],
   ['crane', ['sll', 'slr', 'lu', 'ld', 'ti', 'to', 'hu', 'hd', 'ju', 'jd', 'sli', 'slo', 'fine', 'hook']],
   ['mount', ['ballast', 'yguy', 'mount']],
-  ['game', ['view', 'switch', 'reset', 'bypass', 'mute', 'help']],
+  ['game', ['view', 'switch', 'reset', 'bypass', 'rewind', 'mute', 'help']],
 ];
 
 /** HTML del editor: un botón con la tecla de cada acción */

@@ -43,6 +43,10 @@ export class LevelRules {
     );
   }
 
+  /** Reloj de la comprobación de victoria (instantáneas, fase 15) */
+  get winClock() { return this.winCheck; }
+  set winClock(v: number) { this.winCheck = v; }
+
   /** Quita los oyentes */
   dispose() { for (const f of this.off) f(); }
 

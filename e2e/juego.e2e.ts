@@ -71,8 +71,8 @@ for (const n of LEVELS) {
     await expect(page.locator('#clock')).toBeVisible();
     await expect(page.locator('#data')).toContainText('LMI');
     // el reloj corre (con WebGL por software, despacio: el bucle da como mucho 4 pasos por cuadro)
-    const t0 = await page.locator('#clock > b').textContent();
-    await expect(page.locator('#clock > b')).not.toHaveText(t0!, { timeout: 30_000 });
+    const t0 = await page.locator('#clock .clock-text > b').textContent();
+    await expect(page.locator('#clock .clock-text > b')).not.toHaveText(t0!, { timeout: 30_000 });
     expect(log).toEqual([]);
   });
 }
@@ -139,5 +139,45 @@ test('pausa al perder el foco: no se acumulan pasos de física', async ({ page }
   await expect(page.locator('.pause-card')).toBeVisible();
   await page.evaluate(() => dispatchEvent(new Event('focus')));
   await expect(page.locator('.pause-card')).toBeHidden();
+  expect(log).toEqual([]);
+});
+
+// Fase 15: rebobinar (prueba libre) y guardar a mitad de un nivel
+test('prueba libre: rebobinar con Retroceso', async ({ page }) => {
+  const log = watchConsole(page);
+  await open(page, 'grua=medium');
+  await ready(page);
+  // instantánea al empezar y una por segundo: se vuelve a la de hace 10 s o, si no hay, a la primera
+  await page.keyboard.down('KeyA');
+  await page.waitForTimeout(1500);
+  await page.keyboard.up('KeyA');
+  await page.keyboard.press('Backspace');
+  await expect(page.locator('#msg')).toContainText('Rebobinado');
+  expect(log).toEqual([]);
+});
+
+test('nivel: guardar a mitad y continuar desde la ficha', async ({ page }) => {
+  const log = watchConsole(page);
+  await open(page, 'nivel=1');
+  await ready(page);
+  await page.locator('#l-start').click();
+  const clock = page.locator('#clock .clock-text > b');
+  const t0 = await clock.textContent();
+  await expect(clock).not.toHaveText(t0!, { timeout: 30_000 });
+  await page.locator('#l-save').click();
+  await expect(page.locator('#msg')).toContainText('Partida guardada');
+  const saved = await clock.textContent();
+  // al volver a abrir el nivel, la ficha ofrece continuar, y continuar sigue con el reloj donde quedó
+  await page.reload();
+  await ready(page);
+  await expect(page.locator('#l-cont')).toBeVisible();
+  await page.locator('#l-cont').click();
+  await expect(page.locator('#msg')).toContainText('recuperada', { timeout: 30_000 });
+  await expect(page.locator('#overlay')).toBeHidden();
+  const [mm, ss] = saved!.split(':').map(Number);
+  const now = await clock.textContent();
+  const [m2, s2] = now!.split(':').map(Number);
+  expect(m2 * 60 + s2).toBeGreaterThanOrEqual(mm * 60 + ss);
+  await expect(page).not.toHaveURL(/continuar/);
   expect(log).toEqual([]);
 });

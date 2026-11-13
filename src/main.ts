@@ -20,8 +20,11 @@ async function start() {
   bootStage(t.boot.scene, 0.8);
   await nextPaint();
   const app = new App(document.getElementById('c') as HTMLCanvasElement, document.getElementById('hud')!);
-  await app.open(location.search);
+  // banco de pruebas de rendimiento (fase 15): recorre las partidas más pesadas y saca un informe
+  const bench = new URLSearchParams(location.search).has('bench');
+  await app.open(bench ? '' : location.search);
   app.loop.start();
+  if (bench) void import('./ui/bench').then((b) => b.runBench(app));
 
   // Acceso para depurar desde la consola del navegador
   // advance(s): avanza la simulación s segundos sin depender de requestAnimationFrame (pruebas con la pestaña oculta)

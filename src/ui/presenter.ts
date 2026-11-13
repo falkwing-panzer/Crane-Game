@@ -14,6 +14,8 @@ import { Help } from './help';
 import { LevelUi, homeUrl, levelUrl } from './levelUi';
 import type { Sound } from './audio';
 import { bootDone } from './boot';
+import { clearSave, loadSave } from './savegame';
+import { readFrame, type Frame } from '../game/interp';
 import { saveSettings, showFps, QUALITIES, type Quality, type Settings } from './settings';
 import type { Input } from './input';
 import { t } from '../i18n';
@@ -100,7 +102,12 @@ export class Presenter {
     });
     qSel.addEventListener('keydown', (e) => { if (e.key !== 'Enter') { e.preventDefault(); qSel.blur(); } });
     if (def.showMenu) lui.menu();
-    else if (L) lui.brief(def.li, def.ids[0], (k) => go(levelUrl(def.nivel, k)), () => { ses.running = true; });
+    else if (L) {
+      // partida guardada de este nivel (fase 15): Continuar la monta con su grúa y sigue donde quedó
+      const sv = loadSave(def.nivel);
+      lui.brief(def.li, def.ids[0], (k) => go(levelUrl(def.nivel, k)), () => { ses.running = true; },
+        sv ? { t: sv.t, crane: CRANES[sv.crane].name, go: () => go(`${levelUrl(def.nivel, L.tandem ? undefined : sv.crane)}&continuar=1`) } : undefined);
+    }
 
     this.sound = sound;
 
@@ -113,10 +120,14 @@ export class Presenter {
       // en la prueba libre, el cartel con Reiniciar (en un nivel, el de nivel fallido: lo pide el fin del nivel)
       bus.on('tipped', (e) => { if (!L) hud.showTipped(multi ? m.named(units[e.unit].T.name, e.text) : e.text); }),
       bus.on('end', (e) => {
+        clearSave(def.nivel);
         if (e.fail) lui.failed(def.li, ses.act.T.name, e.fail.title, e.fail.text);
         else lui.won(def.li, ses.act.T.name, ses.run, !!e.record);
       }),
       bus.on('restart', () => hud.showTipped(null)),
+      bus.on('restored', () => hud.showTipped(null)),
+      // Tab en el tándem (fase 15: llega desde el paso de la simulación)
+      bus.on('switch', (e) => this.follow(units[e.unit])),
       // golpe sordo al apoyar o golpear la carga (los mismos umbrales que las reglas de los niveles)
       bus.on('land', (e) => { if (e.v >= LANDING_MIN) this.sound.thump(e.v); }),
       bus.on('strike', (e) => { if (e.v > 0.25) this.sound.thump(e.v); }),
@@ -139,16 +150,21 @@ export class Presenter {
    * Dibuja el cuadro y actualiza el HUD y el sonido (physMs = tiempo de física de este cuadro; ki = mandos de la grúa
    * que se maneja; paused = juego en pausa).
    */
-  draw(dt: number, physMs: number, ki: { slew: number; luff: number; tele: number; hoist: number; fine: boolean; jib?: number; sl?: number }, paused = false) {
+  draw(dt: number, physMs: number, ki: { slew: number; luff: number; tele: number; hoist: number; fine: boolean; jib?: number; sl?: number }, paused = false,
+    frame?: Frame) {
     const { ctx, ses, hud } = this;
     const { units, L, run, multi } = ses;
     const act = ses.act;
     const t1 = performance.now();
-    for (const u of units) {
-      u.crane.update(u.S, u.pose, u.C.slR);
-      u.rig.update(u.crane.lateral(_lat));
-    }
-    this.cam.update(dt, act.S, act.pose);
+    // fase 15: se dibuja la mezcla de los dos últimos pasos (frame); sin frame, el último paso tal cual
+    const f = frame ?? readFrame(units);
+    units.forEach((u, i) => {
+      const fu = f.units[i];
+      u.crane.update(fu.S, fu.pose, u.C.slR);
+      u.rig.update(u.crane.lateral(_lat), fu, f.loads);
+    });
+    const fa = f.units[units.indexOf(act)];
+    this.cam.update(dt, fa.S, fa.pose);
     ctx.renderer.render(ctx.scene, ctx.camera);
     bootDone(); // primer cuadro dibujado: se quita la pantalla de carga
     this.sound.update(dt, {
@@ -176,6 +192,7 @@ export class Presenter {
       const a = (L.wind[2] * Math.PI) / 180, dx = Math.cos(a), dz = Math.sin(a);
       const arrow = (Math.atan2(dx * -fz + dz * fx, dx * fx + dz * fz) * 180) / Math.PI;
       this.lui.setClock(L, run.t, ses.def.nivel, { wind: run.wind, arrow, lineD: run.lineD });
+      this.lui.showSave(ses.running && !run.done && !ses.tipped());
     } else this.lui.setClock(null, 0);
     hud.readout({
       Lb: S.Lb,

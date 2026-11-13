@@ -2,6 +2,15 @@ import * as THREE from 'three';
 import type { CraneSpec } from '../crane/cranes';
 import { HOOK_HALF_H, type Load, type Physics } from '../physics/world';
 import { hookFalls, hookScale } from './models/layout';
+import { apply, rotate } from '../crane/pose';
+import { tieLug } from '../crane/tiedown';
+import type { BodyT, UnitFrame } from '../game/interp';
+
+/** Punto (x, y, z) del cuerpo en el mundo */
+const pt = (b: BodyT, x: number, y: number, z: number) => {
+  const p = rotate(b.q, { x, y, z });
+  return { x: b.t.x + p.x, y: b.t.y + p.y, z: b.t.z + p.z };
+};
 
 // Gancho, cable, eslingas y cargas: se dibujan a partir de los cuerpos de Rapier.
 // El aparejo se escala con la grúa (hookScale y ramales de la referencia); el alto sigue al cuerpo de Rapier.
@@ -29,7 +38,7 @@ export class Rigging {
   private slingPos: Float32Array;
 
   /** drawLoads: dibujar las cargas (en el tándem las dibuja solo el aparejo de la primera grúa) */
-  constructor(scene: THREE.Scene, private phys: Physics, T: CraneSpec, drawLoads = true) {
+  constructor(scene: THREE.Scene, private phys: Physics, private T: CraneSpec, drawLoads = true) {
     const steel = new THREE.MeshLambertMaterial({ color: '#7c8389' });
     const block = new THREE.MeshLambertMaterial({ color: '#f2b632' });
     const dark = new THREE.MeshLambertMaterial({ color: '#2a2e33' });
@@ -97,15 +106,18 @@ export class Rigging {
     scene.add(this.sling);
   }
 
-  /** lat = eje lateral de la superestructura en el mundo (los ramales salen de las poleas de la cabeza) */
-  update(lat: THREE.Vector3) {
+  /**
+   * lat = eje lateral de la superestructura en el mundo (los ramales salen de las poleas de la cabeza). f y loads: lo
+   * que se dibuja de esta grúa y de las cargas (fase 15: interpolado entre pasos; las cargas en el orden de phys.loads).
+   */
+  update(lat: THREE.Vector3, f: UnitFrame, loads: BodyT[]) {
     const p = this.phys;
-    const t = p.hookBody.translation(), r = p.hookBody.rotation();
+    const hk = f.hook, t = hk.t, r = hk.q;
     this.hook.position.set(t.x, t.y, t.z);
     this.hook.quaternion.set(r.x, r.y, r.z, r.w);
 
     // Ramales del cable de la cabeza a la parte superior del gancho
-    const h = p.headWorld(), top = p.hookTop();
+    const h = f.head, top = pt(hk, 0, HOOK_HALF_H, 0);
     _lat.copy(lat);
     _hx.set(1, 0, 0).applyQuaternion(this.hook.quaternion);
     const n = this.nFalls;
@@ -121,19 +133,20 @@ export class Rigging {
     }
     this.falls.instanceMatrix.needsUpdate = true;
 
+    const lb = (l: Load) => loads[p.loads.indexOf(l)];
     for (const [l, m] of this.loadMeshes) {
-      const lt = l.body.translation(), lr = l.body.rotation();
+      const b = lb(l), lt = b.t, lr = b.q;
       m.position.set(lt.x, lt.y, lt.z);
       m.quaternion.set(lr.x, lr.y, lr.z, lr.w);
     }
 
     // Eslinga de 4 ramales (solo visual; en física es un punto)
     const L = p.attached;
-    const tie = L ? null : p.tieWorld();
+    const tie = L || !p.tied ? null : apply(f.pose, tieLug(this.T));
     this.sling.visible = !!L || !!tie;
     if (tie) {
       // amarre al frente: cuatro ramales cortos del fondo del gancho al gancho de remolque
-      const hb = p.bodyPoint(p.hookBody, 0, -HOOK_HALF_H, 0);
+      const hb = pt(hk, 0, -HOOK_HALF_H, 0);
       let i = 0;
       for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
         this.slingPos.set([hb.x, hb.y, hb.z, tie.x + sx * 0.05, tie.y, tie.z + sz * 0.12], i);
@@ -142,13 +155,13 @@ export class Rigging {
       (this.sling.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
     }
     if (L) {
-      const hb = p.bodyPoint(p.hookBody, 0, -HOOK_HALF_H, 0);
+      const hb = pt(hk, 0, -HOOK_HALF_H, 0), lbt = lb(L);
       let i = 0;
       const lug = p.attachedLug >= 0 ? L.lugs![p.attachedLug] : null;
       for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
         // orejeta (tándem): los ramales van a la orejeta, algo abiertos
-        const c = lug ? p.bodyPoint(L.body, lug.x + sx * 0.15, lug.y, lug.z + sz * 0.15)
-          : p.bodyPoint(L.body, sx * (L.half.x - 0.08), L.half.y, sz * (L.half.z - 0.08));
+        const c = lug ? pt(lbt, lug.x + sx * 0.15, lug.y, lug.z + sz * 0.15)
+          : pt(lbt, sx * (L.half.x - 0.08), L.half.y, sz * (L.half.z - 0.08));
         this.slingPos.set([hb.x, hb.y, hb.z, c.x, c.y, c.z], i);
         i += 6;
       }

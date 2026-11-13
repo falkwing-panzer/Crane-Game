@@ -37,6 +37,8 @@ export class Input {
   onMount: () => void = () => {};
   /** Tab: cambiar de grúa en el tándem (fase 10) */
   onSwitch: () => void = () => {};
+  /** Retroceso: rebobinar 10 s (fase 15, prueba libre) */
+  onRewind: () => void = () => {};
   /** N: silenciar el sonido (fase 11) */
   onMute: () => void = () => {};
   /** H: ayuda de controles (fase 13) */
@@ -55,7 +57,7 @@ export class Input {
     const tap: Record<Exclude<TapAction, 'help'>, () => void> = {
       hook: () => this.onHook(), outriggers: () => this.onOutriggers(), ballast: () => this.onBallast(), yguy: () => this.onYGuy(),
       mount: () => this.onMount(), view: () => this.onView(), switch: () => this.onSwitch(), reset: () => this.onReset(),
-      bypass: () => this.onBypass(), mute: () => this.onMute(),
+      bypass: () => this.onBypass(), rewind: () => this.onRewind(), mute: () => this.onMute(),
     };
     addEventListener('keydown', (e) => {
       const code = normCode(e.code);
