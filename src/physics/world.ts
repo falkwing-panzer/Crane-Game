@@ -1185,6 +1185,9 @@ export class Physics {
     this.events.length = 0;
   }
 
+  /** Largo de la eslinga enganchada (fondo del gancho al punto de la carga; dibujo de los ramales) */
+  get slingLength() { return this.slingLen; }
+
   /** Parte de la carga que lleva esta grúa (t, sin el gancho) si es una carga con orejetas; si no, null */
   slingShare(): number | null {
     return this.attached?.dyn ? this.share : null;

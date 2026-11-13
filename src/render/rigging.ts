@@ -5,6 +5,13 @@ import { hookFalls, hookScale } from './models/layout';
 import { apply, rotate } from '../crane/pose';
 import { tieLug } from '../crane/tiedown';
 import type { BodyT, UnitFrame } from '../game/interp';
+import type { V3 } from '../crane/pose';
+import { catenary, SLACK_MIN } from './catenary';
+
+/** Tramos de cada ramal del cable y de cada ramal de la eslinga (rectos cuando están tensos) */
+const FALL_SEG = 16;
+const SLING_SEG = 8;
+const _pts: V3[] = [];
 
 /** Punto (x, y, z) del cuerpo en el mundo */
 const pt = (b: BodyT, x: number, y: number, z: number) => {
@@ -76,7 +83,8 @@ export class Rigging {
     for (const m of [shank, hk]) { m.castShadow = true; this.hook.add(m); }
     scene.add(this.hook);
 
-    this.falls = new THREE.InstancedMesh(cyl, new THREE.MeshLambertMaterial({ color: '#2a2c2e' }), this.nFalls);
+    // fase 15: cada ramal en FALL_SEG tramos, para dibujarlo en catenaria cuando el cable está flojo
+    this.falls = new THREE.InstancedMesh(cyl, new THREE.MeshLambertMaterial({ color: '#2a2c2e' }), this.nFalls * FALL_SEG);
     this.falls.castShadow = true;
     this.falls.frustumCulled = false;
     scene.add(this.falls);
@@ -98,7 +106,8 @@ export class Rigging {
       this.loadMeshes.set(l, m);
     }
 
-    this.slingPos = new Float32Array(8 * 3);
+    // 4 ramales de SLING_SEG tramos (dos vértices por tramo)
+    this.slingPos = new Float32Array(4 * SLING_SEG * 2 * 3);
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(this.slingPos, 3));
     this.sling = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: '#1a1a1a' }));
@@ -121,15 +130,24 @@ export class Rigging {
     _lat.copy(lat);
     _hx.set(1, 0, 0).applyQuaternion(this.hook.quaternion);
     const n = this.nFalls;
+    // cable flojo (gancho apoyado y se sigue soltando cable): lo que sobra cuelga en catenaria; sin bajar del suelo
+    // ni del fondo del gancho (se queda apoyado ahí). Amarrado o tenso, recto.
+    const slack = p.tied ? 0 : f.S.cable - Math.hypot(top.x - h.x, top.y - h.y, top.z - h.z);
+    const floor = Math.max(0.03, top.y - 2 * HOOK_HALF_H);
     for (let i = 0; i < n; i++) {
       const o = (i - (n - 1) / 2);
       _a.set(h.x, h.y, h.z).addScaledVector(_lat, o * 0.13);
       _b.set(top.x, top.y, top.z).addScaledVector(_hx, o * 0.3 * this.hb);
-      _d.subVectors(_b, _a);
-      const len = _d.length();
-      _q.setFromUnitVectors(_up, _d.normalize());
-      _m4.compose(_a.addScaledVector(_d, len / 2), _q, _s.set(0.025, len, 0.025));
-      this.falls.setMatrixAt(i, _m4);
+      const pts = catenary(_a, _b, _a.distanceTo(_b) + (slack > SLACK_MIN ? slack : 0), FALL_SEG, floor, _pts);
+      for (let k = 0; k < FALL_SEG; k++) {
+        _a.set(pts[k].x, pts[k].y, pts[k].z);
+        _d.set(pts[k + 1].x - _a.x, pts[k + 1].y - _a.y, pts[k + 1].z - _a.z);
+        const len = _d.length();
+        if (len > 1e-6) _q.setFromUnitVectors(_up, _d.normalize());
+        // un poco más largo que el tramo: sin huecos en los quiebres de la curva
+        _m4.compose(_a.addScaledVector(_d, len / 2), _q, _s.set(0.025, len + 0.02, 0.025));
+        this.falls.setMatrixAt(i * FALL_SEG + k, _m4);
+      }
     }
     this.falls.instanceMatrix.needsUpdate = true;
 
@@ -147,25 +165,40 @@ export class Rigging {
     if (tie) {
       // amarre al frente: cuatro ramales cortos del fondo del gancho al gancho de remolque
       const hb = pt(hk, 0, -HOOK_HALF_H, 0);
-      let i = 0;
+      let leg = 0;
       for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-        this.slingPos.set([hb.x, hb.y, hb.z, tie.x + sx * 0.05, tie.y, tie.z + sz * 0.12], i);
-        i += 6;
+        this.leg(leg++, hb, { x: tie.x + sx * 0.05, y: tie.y, z: tie.z + sz * 0.12 }, 0, -Infinity);
       }
       (this.sling.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
     }
     if (L) {
       const hb = pt(hk, 0, -HOOK_HALF_H, 0), lbt = lb(L);
-      let i = 0;
       const lug = p.attachedLug >= 0 ? L.lugs![p.attachedLug] : null;
+      // holgura de la eslinga (fase 15): con la carga apoyada y el gancho bajado, los ramales cuelgan sobre la carga;
+      // al izar se tensan y quedan rectos. La eslinga física va al centro de la cara de arriba (o a la orejeta).
+      const an = lug ? pt(lbt, lug.x, lug.y, lug.z) : pt(lbt, 0, L.half.y, 0);
+      const slack = p.slingLength - Math.hypot(an.x - hb.x, an.y - hb.y, an.z - hb.z);
+      let leg = 0;
       for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
         // orejeta (tándem): los ramales van a la orejeta, algo abiertos
         const c = lug ? pt(lbt, lug.x + sx * 0.15, lug.y, lug.z + sz * 0.15)
           : pt(lbt, sx * (L.half.x - 0.08), L.half.y, sz * (L.half.z - 0.08));
-        this.slingPos.set([hb.x, hb.y, hb.z, c.x, c.y, c.z], i);
-        i += 6;
+        // lo que sobra se queda sobre la carga (no baja del punto de enganche)
+        this.leg(leg++, hb, c, slack, lug ? -Infinity : Math.min(c.y, hb.y));
       }
       (this.sling.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+    }
+  }
+
+  /** Ramal `i` de la eslinga de `a` a `b`, con `slack` m de más (catenaria si sobra); `floor` = no baja de ahí */
+  private leg(i: number, a: V3, b: V3, slack: number, floor: number) {
+    const len = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) + (slack > SLACK_MIN ? slack : 0);
+    const pts = catenary(a, b, len, SLING_SEG, floor, _pts);
+    const P = this.slingPos;
+    let j = i * SLING_SEG * 6;
+    for (let k = 0; k < SLING_SEG; k++) {
+      const u = pts[k], v = pts[k + 1];
+      P[j++] = u.x; P[j++] = u.y; P[j++] = u.z; P[j++] = v.x; P[j++] = v.y; P[j++] = v.z;
     }
   }
 }
