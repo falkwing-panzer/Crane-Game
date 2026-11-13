@@ -3,6 +3,7 @@ import type { CraneState } from '../crane/kinematics';
 import { apply, type Pose } from '../crane/pose';
 import type { SceneCtx } from './scene';
 import type { Eye } from './craneModel';
+import { t } from '../i18n';
 
 // Cámaras (tecla V): orbital libre que acompaña a la grúa, seguimiento por detrás y cabina del conductor.
 // En el tándem hay una cuarta: cámara libre fija en la obra, que no sigue a ninguna grúa ni salta con Tab.
@@ -10,12 +11,7 @@ import type { Eye } from './craneModel';
 
 export type CamMode = 'orbita' | 'seguir' | 'cabina' | 'libre';
 const ORDER: CamMode[] = ['orbita', 'seguir', 'cabina', 'libre'];
-const TEXT: Record<CamMode, string> = {
-  orbita: 'Cámara orbital libre (ratón)',
-  seguir: 'Cámara de seguimiento',
-  cabina: 'Vista desde la cabina del conductor',
-  libre: 'Cámara libre: no sigue a ninguna grúa ni cambia con Tab (ratón; botón derecho para desplazarla)',
-};
+const TEXT: Record<CamMode, string> = t.camera;
 /** Distancia a la que se vuelve a centrar la luz: a saltos, para que la sombra no tiemble al moverse */
 const SUN_RECENTER = 15;
 const SUN_OFFSET = new THREE.Vector3(30, 50, 20);

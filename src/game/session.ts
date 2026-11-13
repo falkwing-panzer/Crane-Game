@@ -14,6 +14,7 @@ import { levelBounds, placeCrane, populate } from '../levels/setup';
 import { ALL_LEVELS as LEVELS, TANDEM_IDS, TEST_COLUMN, placeTandem, tandemColumn } from '../levels/tandemSetup';
 import type { Level } from '../levels/levels';
 import { Bus, type GameEvents } from './events';
+import { t } from '../i18n';
 
 /** Grúas del menú: las de ruedas (fase 4), la grúa torre sobre camión (fase 8) y las de orugas (fase 6) */
 export const MENU_IDS: CraneId[] = [...TRUCK_IDS, 'crawler', 'lr'];
@@ -208,6 +209,6 @@ export class Session {
     }
     this.bypass = false;
     this.bus.emit('restart', {});
-    this.bus.emit('say', { text: 'Grúa reiniciada', s: 1.5 });
+    this.bus.emit('say', { text: t.msg.restarted, s: 1.5 });
   }
 }

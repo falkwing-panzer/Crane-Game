@@ -66,6 +66,7 @@ Fase 11: **N** silencia el sonido (se guarda). **Mando** (API Gamepad, mapeo sta
 marcha/dirección y giro/pluma, LT/RT cable, LB/RB telescopio, cruceta plumín/superlift, A gancho, B estabilizadores,
 X lastre, Y cámara, View montaje, Menu Y-guy, clic izq. fino, clic der. cambiar de grúa.
 Fase 13: **H** (o el botón "?" de la franja de abajo) abre la ayuda con todas las teclas; **Esc** la cierra.
+Fase 14: las teclas se cambian en la ayuda (**Cambiar teclas**); esta tabla es la de por defecto. Esc y el mando son fijos.
 
 ## Estado y decisiones
 Se trabaja por fases (ver `FASES.md`), con `/clear` entre fases. **Al cerrar cada fase, actualizar esta sección**
@@ -164,6 +165,11 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   `.wasm` aparte; modelos con `import()`; shaders precompilados al montar. 30 cambios de partida seguidos: geometrías,
   texturas y programas iguales (37 / 5 / 14), heap estable (~61 MB tras el recolector) y, en Node, la memoria del wasm de
   Rapier igual tras la primera vuelta. Pruebas en `game/dispose.test.ts`.
+
+- **Fase 14, parte C** (teclas, textos y pruebas en el navegador): teclas configurables en la ayuda (guardadas en
+  `localStorage`, la tabla de siempre por defecto, botón Restaurar), textos de la interfaz en `i18n/es.ts` (los
+  avisos muestran la tecla que tenga el jugador) y Playwright en la acción de GitHub, que ahora también corre en cada
+  PR (sin publicar). Pruebas en `ui/keys.test.ts`, `ui/help.test.ts` y `e2e/juego.e2e.ts` (30 casos).
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -275,6 +281,12 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   mundo si lo creó), `render/models/load.ts` (`loadModels(specs)` → `ModelFactory`, con `import()`),
   `render/models/allModels.ts` (lo mismo de antemano, para las pruebas). `Session(def, scene, makeModel)`. Cada partida
   dibuja su HUD en un `div.session` dentro de `#hud` (se quita entero); el aviso de pausa queda fuera.
+- Fase 14C: `ui/keys.ts` sin DOM (`HOLD`/`TAP`/`ACTIONS`, `DEFAULT_KEYS`, `parseKeys`/`loadKeys`/`saveKeys`, clave
+  `gruas-teclas` con solo lo que cambia; `rebind` intercambia; `normCode`; `keyLabel`; `withKeys(texto)` cambia cada
+  `{acción}` por su tecla). `Input(keys)`: `keyMap`, `setKeys`, `capture` (el editor recibe la siguiente tecla).
+  `Help(root, flags, button, host)`: vista de controles o editor (`keysHtml`, `KEY_GROUPS`), `onKeys` →
+  `Hud.setKeys()`. `Presenter(…, sound, input, go)`. `i18n/es.ts` (`es`, tipo `Lang`) e `i18n/index.ts` (`t`).
+  `playwright.config.ts` + `e2e/*.e2e.ts` (`npm run e2e` compila y prueba; vitest no los toma).
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
   cut…, de la grúa que se maneja; `units`, todas) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
   dibuja cuadros; así se puede probar desde la consola).
@@ -578,6 +590,22 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   todo lo oculto (plumín, torre, lastre, cabina), `compileAsync` y un dibujo con sombras. Comprobado: después no se
   compila ningún programa al dibujar, al cambiar de cámara ni al montar lastre, Y-guy, plumín o torre.
 
+- **Teclas configurables (fase 14)**: por `KeyboardEvent.code` (posición física; con un teclado AZERTY la W sigue
+  donde está). Shift/Ctrl/Alt de los dos lados son la misma tecla. Una tecla por acción; asignar una ocupada
+  **intercambia** las dos (nunca hay dos en la misma ni una sin tecla). Esc no se asigna (cierra la ayuda y cancela).
+  El mando no se configura. Se guarda solo lo que difiere de la tabla por defecto; lo guardado roto o repetido vuelve
+  a la tecla por defecto.
+- **Textos (fase 14)**: `es.ts` es un objeto con textos y funciones (para números y nombres); otro idioma = otro
+  objeto con el tipo `Lang`. `{acción}` dentro de un texto se cambia por la tecla al mostrarlo (`Hud.say`,
+  `showTipped`, carteles de nivel, línea de teclas). Los módulos de la grúa devuelven el texto con `{…}`; el HUD lo
+  resuelve. **No se movieron** los datos copiados de la referencia (nombres y notas de las grúas, textos de los
+  niveles, también el de tándem): tienen teclas fijas como "(B)" y se traducirán con sus datos.
+- **Playwright (fase 14)**: prueba el juego compilado con `vite preview` en Chromium con WebGL por software
+  (SwiftShader, pedido con `--enable-unsafe-swiftshader`). Los avisos de rendimiento del driver ("GPU stall due to
+  ReadPixels") se filtran: son del entorno. Con SwiftShader va a pocos fps: el reloj de un nivel tarda segundos en
+  avanzar. `warmUp` usa `compile` (no `compileAsync`) si no hay `KHR_parallel_shader_compile`, porque three avisaba
+  en la consola. La acción corre también en cada PR a main (sin publicar), para ver las pruebas antes del merge.
+
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
   grúas grandes (fases 4–6): cabeza cinemática, izado a velocidad plena, estiramiento máximo del cable.
@@ -658,9 +686,12 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   Pages (ver si sirve el .wasm comprimido).
 
 ### Pendientes
-- **Fase 14, parte C** (ver `FASES-2.md`): teclas configurables, `i18n/es.ts`, Playwright en la acción. Jesús ya aprobó
-  `@playwright/test` y la descarga de Chromium. Posible mejora: el `.wasm` empieza a bajar cuando ya llegó `app.js`
-  (no se puede precargar desde `index.html` porque su nombre lleva hash).
+- Posible mejora de carga: el `.wasm` empieza a bajar cuando ya llegó `app.js` (no se puede precargar desde
+  `index.html` porque su nombre lleva hash).
+- Textos de datos con teclas fijas ("(B)", "T sube el plumín…") en `LEVELS`, el nivel de tándem y las notas de las
+  grúas: si el jugador cambia una tecla, la ficha sigue diciendo la de por defecto. Se resolverá al traducir esos datos.
+- Playwright: en local una prueba falló una vez y no se repitió (3 vueltas); en la acción hay 1 reintento. Local:
+  `npm run e2e` (~2 min).
 - `tower.test.ts` "el gancho sigue a la punta…": 0,7 s sola, pero con toda la batería en paralelo pasó una vez de 5 s;
   ahora tiene 20 s de margen.
 - Tándem: Jesús jugó el nivel 14 a mano y le pareció bien (el guion de prueba cambia de grúa ~13 veces al ponerla de

@@ -1,5 +1,6 @@
 import './style.css';
 import { bootError, bootStage, nextPaint } from './ui/boot';
+import { t } from './i18n';
 
 /**
  * Arranque. Este archivo es pequeño a propósito (fase 14): sale enseguida, muestra las etapas de la carga y trae el
@@ -11,12 +12,12 @@ import { bootError, bootStage, nextPaint } from './ui/boot';
  * se pausa solo (`autoPause`).
  */
 async function start() {
-  bootStage('cargando el motor y la física', 0.3);
+  bootStage(t.boot.engine, 0.3);
   const { App, initPhysics } = await import('./app');
-  bootStage('iniciando la física', 0.55);
+  bootStage(t.boot.physics, 0.55);
   await nextPaint();
   await initPhysics();
-  bootStage('armando la escena', 0.8);
+  bootStage(t.boot.scene, 0.8);
   await nextPaint();
   const app = new App(document.getElementById('c') as HTMLCanvasElement, document.getElementById('hud')!);
   await app.open(location.search);

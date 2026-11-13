@@ -5,18 +5,16 @@
  * mientras tanto y, si no vuelve, se ofrece recargar.
  */
 
+import { t } from '../i18n';
+
 /** Motivos de pausa y su texto */
-export const PAUSE_TEXT: Record<string, string> = {
-  pestaña: 'Juego en pausa: la pestaña está oculta',
-  foco: 'Juego en pausa · haz clic en el juego para seguir',
-  gráfica: 'Se perdió la gráfica: recuperando…',
-};
+export const PAUSE_TEXT: Record<string, string> = { pestaña: t.pause.tab, foco: t.pause.focus, gráfica: t.pause.gl };
 
 /** Texto del aviso para una lista de motivos ('' = sin aviso). La gráfica manda. */
 export function pauseText(reasons: string[]) {
   if (reasons.includes('gráfica')) return PAUSE_TEXT['gráfica'];
   if (reasons.includes('pestaña')) return PAUSE_TEXT['pestaña'];
-  return reasons.length ? PAUSE_TEXT[reasons[0]] ?? 'Juego en pausa' : '';
+  return reasons.length ? PAUSE_TEXT[reasons[0]] ?? t.pause.generic : '';
 }
 
 /** Segundos de espera antes de ofrecer recargar si la gráfica no vuelve */
@@ -56,7 +54,7 @@ export function autoPause(loop: Pausable, canvas: HTMLCanvasElement, root: HTMLE
     loop.pause('gráfica', true);
     clearTimeout(giveUp);
     giveUp = window.setTimeout(() => {
-      el.innerHTML = 'No se pudo recuperar la gráfica. <button type="button">Recargar</button>';
+      el.innerHTML = `${t.pause.glGiveUp} <button type="button">${t.pause.reload}</button>`;
       el.querySelector('button')!.addEventListener('click', () => location.reload());
     }, GL_GIVE_UP * 1000);
   }, opt);

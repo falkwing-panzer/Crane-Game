@@ -5,6 +5,7 @@
 
 import type { CraneSpec } from './cranes';
 import type { CraneState } from './kinematics';
+import { t } from '../i18n';
 
 export interface DriveInput {
   /** +1 adelante (↑), −1 atrás (↓) */
@@ -65,11 +66,11 @@ export function stepDrive(T: CraneSpec, S: CraneState, inp: DriveInput, dt: numb
   if (!T.wheelbase || !T.steerMax) return res;
   const fk = inp.fine ? FINE : 1;
   let thr = inp.throttle, str = inp.steer;
-  if (thr && S.out > 0) { thr = 0; str = 0; res.msg = 'Recoge los estabilizadores para conducir (O)'; }
+  if (thr && S.out > 0) { thr = 0; str = 0; res.msg = t.ops.stowToDrive; }
   if (ctx.tilted) thr = 0;
   if (thr && ctx.loadHanging && !ctx.bypass && ctx.lmiMove >= 1) {
     thr = 0; res.lmiCut = true;
-    res.msg = 'LMI: con esta carga no puedes desplazarte. Acerca la carga (más ángulo).';
+    res.msg = t.ops.noTravel;
   }
   const vmax = T.spd.drive * fk * (ctx.loadHanging ? CARRY_SPEED : 1);
   const acc = thr ? 1.2 : 2.4;
@@ -81,7 +82,7 @@ export function stepDrive(T: CraneSpec, S: CraneState, inp: DriveInput, dt: numb
     const nx = S.x + Math.cos(nh) * S.vd * dt, nz = S.z - Math.sin(nh) * S.vd * dt;
     const why = ctx.blocked?.(nx, nz, nh) ?? null;
     if (why) {
-      if (Math.abs(S.vd) > 1.2 && why.includes('obstáculo')) { res.hit = true; res.msg = 'El chasis chocó con un obstáculo'; }
+      if (Math.abs(S.vd) > 1.2 && why.includes('obstáculo')) { res.hit = true; res.msg = t.ops.chassisHit; }
       else res.msg = why;
       S.vd = 0;
     } else { S.x = nx; S.z = nz; S.h = nh; }
@@ -103,7 +104,7 @@ function stepCrawl(T: CraneSpec, S: CraneState, inp: DriveInput, dt: number, ctx
   if (ctx.tilted) { thr = 0; str = 0; }
   if ((thr || str) && ctx.loadHanging && !ctx.bypass && ctx.lmiMove >= 1) {
     thr = 0; str = 0; res.lmiCut = true;
-    res.msg = 'LMI: con esta carga no puedes desplazarte. Acerca la carga (más ángulo).';
+    res.msg = t.ops.noTravel;
   }
   const vmax = T.spd.drive * fk * (ctx.loadHanging ? CRAWL_CARRY_SPEED : 1);
   const acc = thr ? 1.2 : 2.4;
@@ -114,7 +115,7 @@ function stepCrawl(T: CraneSpec, S: CraneState, inp: DriveInput, dt: number, ctx
     const nx = S.x + Math.cos(nh) * S.vd * dt, nz = S.z - Math.sin(nh) * S.vd * dt;
     const why = ctx.blocked?.(nx, nz, nh) ?? null;
     if (why) {
-      if (Math.abs(S.vd) > 1.2 && why.includes('obstáculo')) { res.hit = true; res.msg = 'El chasis chocó con un obstáculo'; }
+      if (Math.abs(S.vd) > 1.2 && why.includes('obstáculo')) { res.hit = true; res.msg = t.ops.chassisHit; }
       else res.msg = why;
       S.vd = 0;
     } else {

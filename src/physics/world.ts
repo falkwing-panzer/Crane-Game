@@ -12,6 +12,9 @@ import { canTie, tieLug, tieReach, tiedHookCenter } from '../crane/tiedown';
 import { foldedTowerBox } from '../render/models/tower';
 import type { BoxKind } from '../levels/levels';
 import { slingTensions, type SlingObs } from './tandem';
+import { t } from '../i18n';
+
+const tw = t.world;
 
 // Unidades de masa: toneladas (igual que la referencia). Gravedad 9,81 m/s².
 // Mientras la grúa está de pie NO es un cuerpo dinámico: su cinemática viene del modelo analítico y aquí
@@ -239,19 +242,19 @@ export class Physics {
     // esquinas en el mundo para el límite de la obra
     for (const lx of [L0, L1]) for (const lz of [-bodyHalf(T), bodyHalf(T)]) {
       const wx = x + c * lx + s * lz, wz = z - s * lx + c * lz;
-      if (this.outside(wx, wz, 0.3)) return 'Límite de la obra';
+      if (this.outside(wx, wz, 0.3)) return tw.bounds;
     }
     const soft = terrainBlocked(T, this.softs, x, z, h);
     if (soft) return soft;
     const cx = (L0 + L1) / 2, hy = (T.deckHi - CLEARANCE) / 2;
     const shape = new RAPIER.Cuboid((L1 - L0) / 2, hy, bodyHalf(T));
     const pos = { x: x + c * cx, y: CLEARANCE + hy, z: z - s * cx };
-    if (this.hitsSomething(pos, axisAngle(0, 1, 0, h), shape)) return 'El chasis toca un obstáculo';
+    if (this.hitsSomething(pos, axisAngle(0, 1, 0, h), shape)) return tw.chassis;
     // grúa torre plegada: sobresale por delante del camión (no está en la referencia, que solo mira el chasis)
     if (T.tower) {
       const b = foldedTowerBox(T), bx = (b.x0 + b.x1) / 2;
       const tp = { x: x + c * bx, y: (b.y0 + b.y1) / 2, z: z - s * bx };
-      if (this.hitsSomething(tp, axisAngle(0, 1, 0, h), new RAPIER.Cuboid((b.x1 - b.x0) / 2, (b.y1 - b.y0) / 2, b.hz))) return 'La torre plegada toca un obstáculo';
+      if (this.hitsSomething(tp, axisAngle(0, 1, 0, h), new RAPIER.Cuboid((b.x1 - b.x0) / 2, (b.y1 - b.y0) / 2, b.hz))) return tw.foldedTower;
     }
     // la bandeja del superlift se arrastra con la grúa (no está en la referencia, que solo mira el chasis)
     return T.superlift ? this.trayBlocked(x, z, h, this.slew, this.slR) : null;
@@ -265,14 +268,14 @@ export class Physics {
   trayBlocked(x: number, z: number, h: number, slew: number, slR: number): string | null {
     const T = this.T, sl = T.superlift;
     if (!sl) return null;
-    if (trayHitsTracks(T, slR, slew)) return 'El lastre superlift tocaría las orugas';
+    if (trayHitsTracks(T, slR, slew)) return tw.trayTracks;
     const c = Math.cos(h), s = Math.sin(h);
     // centro de la bandeja: en el marco del chasis (piv − slR·cos slew, slR·sin slew), luego al mundo
     const lx = T.piv - slR * Math.cos(slew), lz = slR * Math.sin(slew);
     const pos = { x: x + c * lx + s * lz, y: 0.2 + (sl.h - 0.2) / 2, z: z - s * lx + c * lz };
-    if (this.outside(pos.x, pos.z, Math.hypot(sl.d, sl.w) / 2)) return 'Límite de la obra';
+    if (this.outside(pos.x, pos.z, Math.hypot(sl.d, sl.w) / 2)) return tw.bounds;
     const shape = new RAPIER.Cuboid(sl.d / 2 + 0.2, (sl.h - 0.2) / 2, sl.w / 2 + 0.2);
-    return this.hitsSomething(pos, axisAngle(0, 1, 0, h + slew), shape) ? 'El lastre superlift golpearía un obstáculo' : null;
+    return this.hitsSomething(pos, axisAngle(0, 1, 0, h + slew), shape) ? tw.trayHit : null;
   }
 
   /**
@@ -306,7 +309,7 @@ export class Physics {
       const lx = b.cx, lz = side * b.cz;
       const px = T.piv + lx * cs + lz * ss, pz = -lx * ss + lz * cs;
       const pos = { x: S.x + c * px + s * pz, y: b.cy + carrierLift(S), z: S.z - s * px + c * pz };
-      if (this.hitsSomething(pos, rot, shape)) return 'El contrapeso golpearía un obstáculo';
+      if (this.hitsSomething(pos, rot, shape)) return tw.tailHit;
     }
     return null;
   }
@@ -319,8 +322,8 @@ export class Physics {
     const shape = new RAPIER.Cuboid(0.6, 0.5, 0.6);
     for (const lx of [o.xf, o.xr]) for (const lz of [-o.hw, o.hw]) {
       const wx = S.x + c * lx + s * lz, wz = S.z - s * lx + c * lz;
-      if (this.outside(wx, wz)) return 'No hay espacio para los estabilizadores';
-      if (this.hitsSomething({ x: wx, y: 0.55, z: wz }, q, shape)) return 'Un obstáculo impide abrir los estabilizadores';
+      if (this.outside(wx, wz)) return tw.padsSpace;
+      if (this.hitsSomething({ x: wx, y: 0.55, z: wz }, q, shape)) return tw.padsHit;
     }
     return padsOnSoft(this.T, this.softs, S.x, S.z, S.h);
   }
@@ -351,14 +354,14 @@ export class Physics {
     const a = apply(pose, headPos(T, S)), b = apply(pose, tipPos(T, S));
     let n = 0, what = '';
     const low = Math.min(a.y, b.y);
-    if (low < JIB_MIN_H) { n += (JIB_MIN_H - low) * 10; what = 'El plumín tocaría el suelo'; }
+    if (low < JIB_MIN_H) { n += (JIB_MIN_H - low) * 10; what = tw.jibGround; }
     const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z, len = Math.hypot(dx, dy, dz);
     // el eje x de la caja a lo largo del plumín: primero el cabeceo (z), después el rumbo (y)
     const rot = mul(axisAngle(0, 1, 0, Math.atan2(-dz, dx)), axisAngle(0, 0, 1, Math.atan2(dy, Math.hypot(dx, dz))));
     const N = 8, shape = new RAPIER.Cuboid(len / N / 2, JIB_HALF, JIB_HALF);
     for (let i = 0; i < N; i++) {
       const k = (i + 0.5) / N;
-      if (this.hitsSomething({ x: a.x + dx * k, y: a.y + dy * k, z: a.z + dz * k }, rot, shape)) { n++; what = 'El plumín golpearía un obstáculo'; }
+      if (this.hitsSomething({ x: a.x + dx * k, y: a.y + dy * k, z: a.z + dz * k }, rot, shape)) { n++; what = tw.jibHit; }
     }
     return { n, what };
   }
@@ -376,7 +379,7 @@ export class Physics {
     const d = 1.5 + jd.len / 2;
     const pos = { x: h.x + fx * d, y: 0.85, z: h.z + fz * d };
     return this.hitsSomething(pos, axisAngle(0, 1, 0, th), new RAPIER.Cuboid(jd.len / 2, 0.75, 0.9))
-      ? 'Un obstáculo impide armar el plumín en el suelo: gira la pluma hacia un sitio libre' : null;
+      ? tw.jibNoRoom : null;
   }
 
   /**
@@ -391,9 +394,9 @@ export class Physics {
     const P = (v: [number, number, number]) => ({ x: v[0], y: v[1], z: v[2] });
     const at = (o: [number, number, number], d: [number, number, number], k: number) => P([o[0] + d[0] * k, o[1] + d[1] * k, o[2] + d[2] * k]);
     const pieces: [V3, V3, number, number, string][] = [
-      [at(g.base, g.dir, 3), P(g.top), 1.0, 5, 'La torre golpearía un obstáculo'],
-      [P(g.top), at(g.top, g.jd, g.jlVis), 0.6, 10, 'La pluma golpearía un obstáculo'],
-      [P(g.top), at(g.top, g.jd, -COUNTER_JIB), 0.6, 2, 'La contrapluma golpearía un obstáculo'],
+      [at(g.base, g.dir, 3), P(g.top), 1.0, 5, tw.towerHit],
+      [P(g.top), at(g.top, g.jd, g.jlVis), 0.6, 10, tw.towerBoomHit],
+      [P(g.top), at(g.top, g.jd, -COUNTER_JIB), 0.6, 2, tw.counterJibHit],
     ];
     let n = 0, what = '';
     for (const [a0, b0, half, N, msg] of pieces) {
@@ -503,7 +506,7 @@ export class Physics {
       l.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
       if (l.dyn) { l.dyn.p = []; l.dyn.w = []; }
     }
-    return 'Carga repuesta en su posición inicial';
+    return tw.loadsReset;
   }
 
   /** Reiniciar tras el vuelco: grúa de pie con la pose dada, gancho bajo la cabeza y cargas en su sitio. */
@@ -911,14 +914,14 @@ export class Physics {
 
   /** Espacio: enganchar o soltar. Devuelve el mensaje para el operador (condiciones de la referencia). */
   toggleHook(): string {
-    if (this.tied) { this.untie(); return 'Gancho suelto del frente'; }
+    if (this.tied) { this.untie(); return tw.untied; }
     if (this.attached) {
       const load = this.attached;
       // tándem: una grúa puede soltar mientras otra sostiene la carga (la de cola, con la columna ya de pie)
       const held = this.crew.some((c) => c !== this && c.attached === load);
-      if (!held && !this.isResting(load)) return 'Apoya la carga antes de soltarla';
+      if (!held && !this.isResting(load)) return tw.restFirst;
       this.release();
-      return `${load.label} soltada${held ? ' · la sostiene la otra grúa' : ''}`;
+      return tw.released(load.label, held);
     }
     const hp = this.hookBody.translation();
     const hv = this.hookBody.linvel();
@@ -945,10 +948,10 @@ export class Physics {
       const tie = this.tryTie();
       if (tie) return tie;
       return canTie(this.T) && !this.tipped
-        ? 'Baja el gancho sobre el centro de la carga para engancharla, o junto al gancho de remolque delantero para amarrarlo'
-        : 'Baja el gancho sobre el centro de la carga (o sobre una orejeta libre) para engancharla';
+        ? tw.lowerTie
+        : tw.lower;
     }
-    if (Math.hypot(hv.x, hv.z) > 0.6) return 'Estabiliza el gancho antes de enganchar';
+    if (Math.hypot(hv.x, hv.z) > 0.6) return tw.steady;
     // Eslinga: rope joint del fondo del gancho al centro de la cara superior de la carga (o a la orejeta).
     const anchor = load.lugs ? load.lugs[lug] : { x: 0, y: load.half.y, z: 0 };
     // orejeta: la eslinga se ajusta a la distancia (la de cabeza está al costado del gancho), sin tirón al enganchar
@@ -962,8 +965,7 @@ export class Physics {
     this.attachedLug = load.lugs ? lug : -1;
     this.trLoad = newTrack();
     load.body.wakeUp();
-    const where = load.lugs ? (lug === 0 ? ' por la cabeza' : ' por el pie') : '';
-    return `Enganchada ${load.label}${where} · ${load.mass.toFixed(1).replace('.', ',')} t`;
+    return tw.hooked(load.label, load.lugs ? lug : null, load.mass);
   }
 
   /**
@@ -976,12 +978,12 @@ export class Physics {
     const lug = apply(pose, tieLug(this.T)), hb = this.bodyPoint(this.hookBody, 0, -HOOK_HALF_H, 0);
     if (!tieReach(lug, hb)) return null;
     const hv = this.hookBody.linvel();
-    if (Math.hypot(hv.x, hv.z) > 0.6) return 'Estabiliza el gancho antes de amarrarlo';
+    if (Math.hypot(hv.x, hv.z) > 0.6) return tw.steadyTie;
     this.hookBody.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased, true);
     this.hookBody.setTranslation(apply(pose, tiedHookCenter(this.T, hookScale(this.T), HOOK_HALF_H)), true);
     this.hookBody.setRotation(mul(pose.q, axisAngle(0, 1, 0, Math.PI / 2)), true);
     this.tied = true;
-    return 'Gancho amarrado al frente (posición de transporte) · Espacio para soltarlo';
+    return tw.tiedUp;
   }
 
   /** Suelta el amarre del gancho, si lo hay: vuelve a colgar del cable, quieto. */

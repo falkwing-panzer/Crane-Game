@@ -1,6 +1,7 @@
 import { isCrawler, type CraneSpec } from './cranes';
 import type { CraneInput } from './kinematics';
 import type { V3 } from './pose';
+import { t } from '../i18n';
 
 // Amarre del gancho al frente del chasis (posición de transporte; no está en la referencia, pedido de Jesús):
 // con la pluma tumbada hacia delante, el motón se ata al gancho de remolque delantero para que no se balancee al
@@ -32,5 +33,5 @@ export const tiedHookCenter = (T: CraneSpec, hb: number, halfH: number): V3 =>
 export function blockWhileTied(inp: CraneInput): string | null {
   const tried = inp.slew || inp.luff || inp.tele || inp.hoist || inp.jib;
   inp.slew = inp.luff = inp.tele = inp.hoist = inp.jib = 0;
-  return tried ? 'Gancho amarrado al frente: suéltalo (Espacio) para mover la pluma o el cable' : null;
+  return tried ? t.ops.tiedBlock : null;
 }
