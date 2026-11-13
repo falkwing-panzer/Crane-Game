@@ -41,7 +41,11 @@ describe('desmontar una partida', () => {
     WebAssembly.instantiate = async (...a: Parameters<typeof inst>) => {
       const r = await (inst as (...b: unknown[]) => Promise<unknown>)(...a);
       const i = (r as { instance?: WebAssembly.Instance }).instance ?? (r as WebAssembly.Instance);
-      memory ??= Object.values(i.exports).find((e): e is WebAssembly.Memory => e instanceof WebAssembly.Memory) ?? null;
+      // solo el wasm de Rapier: en la acción de GitHub otras herramientas instancian su propio wasm antes
+      // (se tomó uno de 128 kB y la prueba falló)
+      if (!memory && 'rawphysicspipeline_new' in i.exports) {
+        memory = Object.values(i.exports).find((e): e is WebAssembly.Memory => e instanceof WebAssembly.Memory) ?? null;
+      }
       return r;
     };
     await RAPIER.init();
