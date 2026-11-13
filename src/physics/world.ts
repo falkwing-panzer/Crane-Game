@@ -1185,6 +1185,29 @@ export class Physics {
     this.events.length = 0;
   }
 
+  /**
+   * ¿El gancho o su carga están apoyados en algo? (dibujo del cable flojo, fase 15 C). Colgando, el cable va tenso
+   * aunque el gancho quede unos cm por debajo del largo (al bajar, el solucionador lo deja atrás 2–20 cm).
+   */
+  hookSupported(): boolean {
+    if (this.tied || this.tipped) return false;
+    if (this.attached && this.touching(this.attached)) return true;
+    let hit = false;
+    this.world.contactPairsWith(this.hookCollider, (other) => {
+      if (hit || (this.attached && other.handle === this.attached.collider.handle && !this.touching(this.attached))) return;
+      this.world.contactPair(this.hookCollider, other, (m) => { if (m.numContacts() > 0) hit = true; });
+    });
+    return hit;
+  }
+
+  /** ¿La carga enganchada está apoyada en algo (no en un gancho)? (dibujo de los ramales flojos) */
+  loadSupported(): boolean {
+    return !!this.attached && this.touching(this.attached);
+  }
+
+  /** Largo de la eslinga enganchada (fondo del gancho al punto de la carga; dibujo de los ramales) */
+  get slingLength() { return this.slingLen; }
+
   /** Parte de la carga que lleva esta grúa (t, sin el gancho) si es una carga con orejetas; si no, null */
   slingShare(): number | null {
     return this.attached?.dyn ? this.share : null;

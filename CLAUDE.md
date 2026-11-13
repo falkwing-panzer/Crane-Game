@@ -179,6 +179,10 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   "Continuar" en la ficha). Pruebas en `game/determinism.test.ts` (60 s del nivel 1, LR 3000 y tándem: la grabación
   y la instantánea, también guardada como texto en una partida nueva, dan el mismo estado exacto), `game/interp.test.ts`
   y dos casos nuevos en `e2e/juego.e2e.ts` (32).
+- **Fase 15, parte C** (cable): Rapier 0.21.0 es la última versión y su API JS no da impulsos ni fuerzas de las juntas
+  (`RawImpulseJointSet` solo tiene límites y motores), así que la tensión sigue medida por posiciones (nada que
+  comparar). Cable flojo en catenaria y ramales de la eslinga que cuelgan con la carga apoyada y se tensan al izar.
+  Pruebas en `render/catenary.test.ts`.
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -305,7 +309,8 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   `Rigging.update(lat, unitFrame, loads)`), `Loop.alpha`/`steps`, `ui/adaptive.ts` (`AdaptiveScale`), `App.adaptive`/
   `basePr`/`probe`/`resume` (`?continuar=1`), `ui/savegame.ts` (`saveGame`, `loadSave`, `clearSave`, `encodeSnap`/
   `decodeSnap`; clave `gruas-guardado-<nivel>`), `ui/bench.ts` (`BENCH_CASES`, `runBench` → `window.__benchReport`),
-  `ui/gpuTimer.ts`. Eventos nuevos del bus: `switch` (Tab llega desde el paso), `restored`. `LevelUi.onSave`/
+  `ui/gpuTimer.ts`, `render/catenary.ts` (`catenary(a, b, largo, n, suelo)`, `SLACK_MIN`; parte C), `render/ropeSim.ts`,
+  `Physics.slingLength`/`hookSupported`/`loadSupported`, `Rigging.update(…, dt)`. Eventos nuevos del bus: `switch` (Tab llega desde el paso), `restored`. `LevelUi.onSave`/
   `showSave`, `brief(…, cont)`. `LevelRules.winClock`.
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
   cut…, de la grúa que se maneja; `units`, todas) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
@@ -664,6 +669,18 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   `GameStep.source`). Para medir desde aquí con la GPU de la laptop sin ver el panel: Playwright sin ventana con
   `--use-angle=d3d11 --enable-gpu --ignore-gpu-blocklist` (da la Intel real, 1920×1080, y el tiempo de GPU).
 
+- **Catenaria (fase 15, parte C)**, solo dibujo (en la física el cable es una distancia máxima): cada ramal del cable
+  en 16 tramos (InstancedMesh, `nFalls · 16` instancias) y cada ramal de la eslinga en 8 (LineSegments). Holgura del
+  cable = `S.cable` − distancia de la cabeza al gancho (cada ramal mide su recta + la holgura); la de la eslinga =
+  `slingLength` − distancia del fondo del gancho al punto de enganche. **Solo con el gancho o la carga apoyados**
+  (`hookSupported`/`loadSupported`): colgando, al bajar con F el gancho va 2–20 cm detrás del cabrestante (City 25,
+  hasta 1,1 m al rebotar) y el cable parpadeaba entre recto y curvo (visto por Jesús). Con menos de 3 cm, recta.
+  Cable flojo **simulado** (`render/ropeSim.ts`, `RopeSim`): cada ramal es una cadena de 17 puntos (Verlet a 120 Hz,
+  24 pasadas, tramos que no se estiran, suelo = fondo del gancho o 3 cm), así cae por su peso, se amontona donde está
+  apoyado el gancho y se mueve al girar (se probaron antes una catenaria fija, que con el gancho debajo de la cabeza
+  quedaba en "L" contra el suelo, y unos arcos hacia fuera, que Jesús vio rígidos). Solo dibujo: no toca el
+  determinismo. Eslinga: catenaria (`catenary`), sin bajar del punto de enganche (queda sobre la carga). Amarrado, recto.
+
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
   grúas grandes (fases 4–6): cabeza cinemática, izado a velocidad plena, estiramiento máximo del cable.
@@ -751,11 +768,11 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   paso (todo el `tick`, sin ventana) 0,48–0,87 → 0,56–0,93 ms: dentro del ruido entre pasadas de la misma versión
   (±0,1). Bundle: `app.js` 778 → 787 kB (185,6 kB comprimido); el banco va en un trozo aparte.
   **Pendiente**: `?bench=1` con el panel visible en uso normal y mirar la interpolación en una pantalla de 120/144 Hz.
+- Fase 15 C (mismo banco): draw calls iguales, 60 fps, GPU 6,7–7,8 ms; triángulos +3.800 a +7.700 (los tramos de
+  los ramales, también en el pase de sombras): nivel 14 50.000 → 57.700, LR 3000 28.700 → 32.500.
 
 ### Pendientes
-- **Fase 15, parte C** (cable): Rapier 0.21.0 es la última versión en npm y su API JS no da impulsos ni fuerzas de
-  las juntas (`RawImpulseJointSet` solo tiene límites y motores): la tensión sigue medida por posiciones. Falta la
-  catenaria del cable flojo y los ramales que se tensan al izar.
+- Rapier: si una versión nueva da las fuerzas de las juntas, cambiar la tensión medida por la real (comparando antes).
 - Posible mejora de carga: el `.wasm` empieza a bajar cuando ya llegó `app.js` (no se puede precargar desde
   `index.html` porque su nombre lleva hash).
 - Textos de datos con teclas fijas ("(B)", "T sube el plumín…") en `LEVELS`, el nivel de tándem y las notas de las
