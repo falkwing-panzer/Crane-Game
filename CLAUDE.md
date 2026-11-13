@@ -169,7 +169,8 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - **Fase 14, parte C** (teclas, textos y pruebas en el navegador): teclas configurables en la ayuda (guardadas en
   `localStorage`, la tabla de siempre por defecto, botón Restaurar), textos de la interfaz en `i18n/es.ts` (los
   avisos muestran la tecla que tenga el jugador) y Playwright en la acción de GitHub, que ahora también corre en cada
-  PR (sin publicar). Pruebas en `ui/keys.test.ts`, `ui/help.test.ts` y `e2e/juego.e2e.ts` (30 casos).
+  PR (sin publicar; después, solo ahí: ver "Acción de GitHub y merges"). Pruebas en `ui/keys.test.ts`,
+  `ui/help.test.ts` y `e2e/juego.e2e.ts` (30 casos).
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -604,7 +605,12 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   (SwiftShader, pedido con `--enable-unsafe-swiftshader`). Los avisos de rendimiento del driver ("GPU stall due to
   ReadPixels") se filtran: son del entorno. Con SwiftShader va a pocos fps: el reloj de un nivel tarda segundos en
   avanzar. `warmUp` usa `compile` (no `compileAsync`) si no hay `KHR_parallel_shader_compile`, porque three avisaba
-  en la consola. La acción corre también en cada PR a main (sin publicar), para ver las pruebas antes del merge.
+  en la consola.
+- **Acción de GitHub y merges** (decidido con Jesús tras la fase 14C, porque el merge tardaba ~10 min): en cada PR a
+  main corren las pruebas unitarias, la compilación y Playwright (4 en paralelo, ~2–3 min), sin publicar. Al
+  llegar a main (push) solo pruebas unitarias, compilación y publicación (< 1 min): Playwright **no** se repite,
+  porque el PR ya prueba el código tal como queda tras el merge. Forma de trabajar: abrir el PR, esperar a que su
+  acción pase y entonces hacer el merge (con el permiso de Jesús); después comprobar que la publicación terminó bien.
 
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
@@ -691,7 +697,10 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - Textos de datos con teclas fijas ("(B)", "T sube el plumín…") en `LEVELS`, el nivel de tándem y las notas de las
   grúas: si el jugador cambia una tecla, la ficha sigue diciendo la de por defecto. Se resolverá al traducir esos datos.
 - Playwright: en local una prueba falló una vez y no se repitió (3 vueltas); en la acción hay 1 reintento. Local:
-  `npm run e2e` (~2 min).
+  `npm run e2e` (~2 min). Tras el merge de la 14C falló en la acción la prueba libre de la LR 3000 (bajar el cable con
+  F no lo alarga: el gancho empieza cerca del suelo); ahora sube con R (#27).
+- Si la acción del PR sigue lenta: recorrer los niveles en una sola página cambiando de partida sin recargar (no
+  cargar el wasm 30 veces).
 - `tower.test.ts` "el gancho sigue a la punta…": 0,7 s sola, pero con toda la batería en paralelo pasó una vez de 5 s;
   ahora tiene 20 s de margen.
 - Tándem: Jesús jugó el nivel 14 a mano y le pareció bien (el guion de prueba cambia de grúa ~13 veces al ponerla de
