@@ -603,11 +603,12 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   niveles, también el de tándem): tienen teclas fijas como "(B)" y se traducirán con sus datos.
 - **Playwright (fase 14)**: prueba el juego compilado con `vite preview` en Chromium con WebGL por software
   (SwiftShader, pedido con `--enable-unsafe-swiftshader`). Los avisos de rendimiento del driver ("GPU stall due to
-  ReadPixels") se filtran: son del entorno. Con SwiftShader va a pocos fps: el reloj de un nivel tarda segundos en
-  avanzar. `warmUp` usa `compile` (no `compileAsync`) si no hay `KHR_parallel_shader_compile`, porque three avisaba
+  ReadPixels") se filtran: son del entorno. Con SwiftShader va a pocos fps, así que las pruebas abren todo con
+  `?calidad=bajo` y una ventana de 960 × 540 (de 4 min a 1 min en la acción; 4 en paralelo sin eso no ayudaba) y
+  esperan a que pase algo (tecla pulsada hasta que el cable cambie), nunca un tiempo fijo. `warmUp` usa `compile` (no `compileAsync`) si no hay `KHR_parallel_shader_compile`, porque three avisaba
   en la consola.
 - **Acción de GitHub y merges** (decidido con Jesús tras la fase 14C, porque el merge tardaba ~10 min): en cada PR a
-  main corren las pruebas unitarias, la compilación y Playwright (4 en paralelo, ~2–3 min), sin publicar. Al
+  main corren las pruebas unitarias, la compilación y Playwright (~1 min; la acción entera ~1,5 min), sin publicar. Al
   llegar a main (push) solo pruebas unitarias, compilación y publicación (< 1 min): Playwright **no** se repite,
   porque el PR ya prueba el código tal como queda tras el merge. Forma de trabajar: abrir el PR, esperar a que su
   acción pase y entonces hacer el merge (con el permiso de Jesús); después comprobar que la publicación terminó bien.
