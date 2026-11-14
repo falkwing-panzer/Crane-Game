@@ -66,14 +66,16 @@ export function createScene(canvas: HTMLCanvasElement, quality: Quality = 'alto'
   s.layers.enable(SHADOW_LAYER);
   scene.add(sun, sun.target);
 
-  // Suelo con cuadrícula de 5 m (referencia de escala).
+  // Suelo con cuadrícula de 5 m (referencia de escala) en la zona de la prueba libre (±150 m). Fase 17: solo se ve en
+  // la prueba libre; el suelo de alrededor es del decorado (render/decorView.ts), un poco más abajo.
   const tex = gridTexture();
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(80, 80);
+  tex.repeat.set(60, 60);
   tex.anisotropy = 4;
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), lit({ map: tex, roughness: 1 }));
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), lit({ map: tex, roughness: 1 }));
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
+  ground.name = 'cuadricula';
   scene.add(ground);
 
   const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.3, 900);

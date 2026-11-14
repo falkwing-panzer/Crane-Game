@@ -191,6 +191,11 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   encuadre de sombras según lo que se ve, polvo, humo, lluvia (prueba libre), agua con ondas y sonido 3D. Pruebas en
   `render/camera.test.ts`, `render/effects.test.ts` y `render/models/builder.test.ts`.
 
+- **Fase 17** (decorado de fondo): valla con portón, recinto de obra (casetas, baños, acopios, maquinaria parada,
+  focos, conos), alrededores por nivel (puerto, ciudad, subestación con las líneas que siguen, río, bosque, campo,
+  logística, refinería, polígono; patio de maquinaria en la prueba libre), suelo exterior con ruido, calles, horizonte,
+  nubes, manga de viento y banderas con el viento del nivel, camiones y trabajadores. Pruebas en `decor/layout.test.ts`.
+
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
   `CraneSpec`, `AT60` (= `CRANES.medium`, tipada `WheeledSpec` para el modelo 3D de la fase 0), `CrawlerSpec`/`isCrawler`.
@@ -326,6 +331,12 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   `shadowStep`, `render/particles.ts` (`Particles`, `Rain`), `render/effects.ts` (`Effects`: polvo, zapatas, humo,
   lluvia; `Presenter.fx`, `setRain`), `render/water.ts` (`waterMaterial`, `updateWater`), `Sound.listen` y
   `update(…, at)`/`thump(v, at)` en `audio.ts`. Banco: `GpuTimer.push/pop` (pase de sombras aparte) y `Presenter.hudMs`.
+- Fase 17: `decor/kit.ts` (sin three.js: `Kit` con primitivas en el mundo por capa `near`/`far`/`detail`, `solids`
+  y `fence`; piezas: `caseta`, `excavadora`, `edificio`, `nave`, `tanque`, `torreAT`…), `decor/layout.ts`
+  (`decorFor(nivel, L)` → `Decor`; `LEVEL_ENV`, `GATES`, `Placer`, `rng` = mulberry32), `decor/wind.ts` (`windYaw`,
+  `sockDroop`), `render/decorView.ts` (`DecorView`: mallas y animación; `Presenter.decor`), `Session.decor`,
+  `Physics.addDecor`/`decor` (handles). La cuadrícula de `scene.ts` se llama `cuadricula` (300 × 300) y solo se ve en
+  la prueba libre.
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
   cut…, de la grúa que se maneja; `units`, todas) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
   dibuja cuadros; así se puede probar desde la consola).
@@ -727,6 +738,21 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   el pie de la pluma (18 m), golpes en la carga o el gancho (20 m); oyente = cámara cada cuadro. En el tándem la otra
   grúa suena al ralentí desde su sitio. Alarmas sin posición.
 
+- **Decorado (fase 17)**, aproximación visual (la referencia no tiene): lista por nivel aprobada por Jesús. Todo fuera
+  de la obra: valla a 3 m del borde, pasillo libre hasta 5,2 m; en el nivel 11, franja libre al oeste (x −50…0,
+  z 22…30) para tender el plumín. **Fusionado en vez de un InstancedMesh por tipo** (habrían sido 20+ draw calls): una
+  malla cercana (≤ 55 m de la obra) con su malla solo de sombra, una lejana sin sombra y una de detalles que el
+  sombreador saca de pantalla a más de 80 m (40 en calidad baja). Valla de malla con textura y `alphaTest`, sin
+  sombra; en la ciudad, paneles con lona. Horizonte y nubes sin niebla.
+- **Colisionadores del decorado** (cajas estáticas, solo lo cercano): la carga y el gancho chocan (y cuenta como
+  golpe), pero `hitsSomething` (chasis, zapatas, contrapeso, bandeja, plumín, torre) y el rayo de la cámara los
+  ignoran: así ningún nivel cambia de dificultad, y la cámara no salta hacia dentro con cada valla o árbol (decidido
+  con Jesús). Las instantáneas los llevan: pasan de 10–13 a 26–69 kB (~0,1 ms); `savegame` versión 2.
+- **Manga y banderas**: apuntan a sotavento, (cos a, sin a) como `windForce` (`windYaw` = −a), cuelgan sin viento
+  y quedan horizontales desde ~8 m/s (`run.wind`). Ondean en el sombreador. Camiones (recorrido por la calle
+  perimetral o carretera de paso) y trabajadores: instancias movidas en la CPU, con el tiempo de dibujo (no tocan el
+  determinismo; quietos en pausa).
+
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
   grúas grandes (fases 4–6): cabeza cinemática, izado a velocidad plena, estiramiento máximo del cable.
@@ -828,6 +854,12 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   comparar, mirar draw calls, triángulos y fps, o medir con la GPU cargada. Bundle: `app.js` 790 → 804 kB (192 kB
   comprimido).
 
+- Fase 17 (`?bench=1`, Chromium sin ventana sobre la Intel, 1920×1080, calidad alta; antes → después): nivel 14
+  134 → 146 draw calls, 59.900 → 109.600 triángulos, GPU 5,5 → 8,0 ms (escena 3,6 → 6,3); nivel 11 82 → 93,
+  27.400 → 59.400, GPU 6,2 → 7,8; nivel 9 82 → 94; LR 3000 libre 66 → 77; AT 650-8 libre 83 → 94; SK 60 58 → 69.
+  Todos a 60 fps; sombras igual (~1,7–2,4 ms); física por paso +0,05–0,1 ms. Calidad baja, nivel 6: 53 draw calls.
+  Bundle `app.js` 804 → 843 kB (207 kB comprimido).
+
 ### Pendientes
 - Rapier: si una versión nueva da las fuerzas de las juntas, cambiar la tensión medida por la real (comparando antes).
 - Posible mejora de carga: el `.wasm` empieza a bajar cuando ya llegó `app.js` (no se puede precargar desde
@@ -871,4 +903,7 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - Fase 16: Jesús no ha visto todavía en la laptop la lluvia, el polvo, el humo, el agua ni el sonido 3D (las capturas
   son de Chromium sin ventana). Las vistas generales casi no cambian: lo que se nota es de cerca y los efectos. Si se
   quiere más, lo siguiente sería oclusión entre grupos (chasis bajo la superestructura) o un sol más bajo y de frente.
+- Fase 17: Jesús no lo ha visto todavía en la laptop. Playwright: 31 de 32 la primera vez (falló "nivel 6: consola
+  limpia", sin ver el mensaje; sola pasó); la segunda vuelta se cortó a pedido de Jesús. En el nivel 11 los camiones
+  de la calle oeste cruzan la franja del plumín (lo atraviesan si está tendido en el suelo).
 - Vite avisaría que `app.js` pasa de 500 kB (three.js y el juego, ~780 kB): `chunkSizeWarningLimit` = 1200.

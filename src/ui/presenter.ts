@@ -7,6 +7,7 @@ import { canTie } from '../crane/tiedown';
 import { CameraRig } from '../render/camera';
 import { sceneFog, type SceneCtx } from '../render/scene';
 import { DetailLod, LOD_DIST } from '../render/lod';
+import { DecorView } from '../render/decorView';
 import { Effects } from '../render/effects';
 import { updateWater } from '../render/water';
 import { apply } from '../crane/pose';
@@ -69,6 +70,8 @@ export class Presenter {
   hudMs = 0;
   /** Polvo, humo y lluvia (fase 16); null en calidad baja */
   readonly fx: Effects | null;
+  /** Decorado de fondo (fase 17) */
+  readonly decor: DecorView;
   /** Intensidad del sol sin lluvia (con lluvia se oscurece; se repone al desmontar) */
   private sunI: number;
 
@@ -88,6 +91,10 @@ export class Presenter {
     sceneFog(ctx, site ? { w: site[0], d: site[1] } : null, camSize(specs));
     this.lod = new DetailLod(units.map((u) => u.crane.root), settings.calidad === 'bajo' ? LOD_DIST / 2 : LOD_DIST);
     this.fx = settings.calidad === 'bajo' ? null : new Effects(ctx.scene);
+    this.decor = new DecorView(ctx.scene, ses.decor, L?.wind[2] ?? 0, settings.calidad === 'bajo');
+    // cuadrícula de 5 m solo en la prueba libre (fase 17)
+    const grid = ctx.scene.getObjectByName('cuadricula');
+    if (grid) grid.visible = ses.decor.grid;
     this.sunI = ctx.sun.intensity;
     // tándem: cámara libre en el centro de las grúas (V), que no salta al cambiar de grúa con Tab
     if (multi) this.cam.enableFree(() => {
@@ -215,6 +222,7 @@ export class Presenter {
     // efectos (fase 16): en pausa se quedan quietos
     this.fx?.update(paused || ses.tipped() ? 0 : dt, units.map((u, i) => ({ T: u.T, S: f.units[i].S, pose: f.units[i].pose, work: u === act ? work : 0 })),
       ctx.camera, ctx.renderer.domElement.height);
+    this.decor.update(paused ? 0 : dt, run.wind, ctx.camera, ctx.renderer.domElement.height);
     updateWater(performance.now() / 1000);
     ctx.renderer.render(ctx.scene, ctx.camera);
     bootDone(); // primer cuadro dibujado: se quita la pantalla de carga
