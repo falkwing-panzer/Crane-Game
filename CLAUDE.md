@@ -196,6 +196,12 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   logística, refinería, polígono; patio de maquinaria en la prueba libre), suelo exterior con ruido, calles, horizonte,
   nubes, manga de viento y banderas con el viento del nivel, camiones y trabajadores. Pruebas en `decor/layout.test.ts`.
 
+- **Fase 18, parte A** (terreno y conducción; plan de 3 partes aprobado por Jesús: A = terreno y conducción, B =
+  nivelación con estabilizadores y estabilidad en pendiente, C = presión al suelo si hay datos): terreno con alturas
+  (parches = heightfield de Rapier y malla con las mismas alturas y triángulos), los 14 niveles planos como siempre,
+  las colinas del horizonte como terreno real más allá del decorado, meseta de prueba en la prueba libre, el chasis
+  sigue el terreno (ruedas y orugas) con pendiente máxima. Pruebas en `terrain/terrain.test.ts`.
+
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
   `CraneSpec`, `AT60` (= `CRANES.medium`, tipada `WheeledSpec` para el modelo 3D de la fase 0), `CrawlerSpec`/`isCrawler`.
@@ -337,6 +343,13 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   `sockDroop`), `render/decorView.ts` (`DecorView`: mallas y animación; `Presenter.decor`), `Session.decor`,
   `Physics.addDecor`/`decor` (handles). La cuadrícula de `scene.ts` se llama `cuadricula` (300 × 300) y solo se ve en
   la prueba libre.
+- Fase 18: `terrain/terrain.ts` (sin three.js ni Rapier: `Patch` con el orden de Rapier, `makePatch`, `patchHeight`
+  con los triángulos de Rapier, `Mesa`/`mesaHeight`, `Hills`/`hillHeight`, `Terrain.height`), `terrain/build.ts`
+  (`TEST_MESA`, `decorReach`, `hillsFor`, `terrainFor(decor, libre)`), `crane/ground.ts` (`groundFit`,
+  `supportPoints`, `MAX_SLOPE`, `MAX_SPREAD`, `PAD_SLOPE`), `CraneState.gy/gb/gc/gspread`, `slopeQuat` y
+  `carrierFrame` con altura e inclinación en `pose.ts`, `DriveCtx.ground`, `Physics.addTerrain`/`terrain`/`groundY`
+  (`land`: terreno y handles compartidos en el tándem), `render/terrainView.ts` (`terrainMeshes`), `Session.terrain`
+  y `groundState`, `CameraRig.groundY`, `DecorView(…, hills)`.
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
   cut…, de la grúa que se maneja; `units`, todas) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
   dibuja cuadros; así se puede probar desde la consola).
@@ -753,6 +766,27 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   perimetral o carretera de paso) y trabajadores: instancias movidas en la CPU, con el tiempo de dibujo (no tocan el
   determinismo; quietos en pausa).
 
+- **Terreno (fase 18)**: los 14 niveles y el tándem siguen sobre el plano y = 0 (sin heightfield: el suelo de Rapier
+  es la caja de siempre y las grúas quedan con gy = gb = gc = 0 exactos, así nada cambia). Solo hay heightfield donde
+  hay relieve en la zona de juego: la meseta de la prueba libre (`TEST_MESA`, celdas de 1 m, encima del suelo plano;
+  ~4.600 alturas). Medido en Rapier: columnas = x, filas = z, por columnas; la diagonal de cada celda une (x0, z1) con
+  (x1, z0); `patchHeight` usa esos triángulos (prueba con rayos, 1e-4). `FIX_INTERNAL_EDGES` puesto. El terreno no
+  cuenta en las consultas de choques (como el suelo) ni como golpe de costado; el rayo de la cámara sí lo ve.
+- **Colinas**: los dos anillos de la fase 17 eran una malla a 350 y 410 m en medio del decorado; ahora son el suelo
+  exterior desplazado (`hillHeight`), desde 30 m más allá de lo último del decorado (piezas, calles, caminos, cables;
+  ≥ 420 m del centro) hasta +150 m, sin colisionador (nada llega). Se hunden junto al agua grande (puerto, río) para
+  que siga hasta el horizonte. Su niebla se limita al 55 % (como el anillo, que no tenía niebla). El suelo exterior
+  crece lo necesario (prueba libre 2040 m). En la ciudad quedan las siluetas de edificios.
+- **Chasis sobre el terreno** (aproximación del juego; la referencia es plana): alturas bajo cada rueda (cada eje a
+  ±`tire.hw`) o en 3 puntos de cada oruga, plano por mínimos cuadrados y subido lo justo para no enterrar ningún
+  apoyo; va en `carrierFrame`, así física, cable, cámara y dibujo lo heredan. Solo cambia al moverse. **Límites**
+  (valores de ejemplo del plan, aceptados por Jesús al decir "empieza la A"): 15° ruedas, 20° orugas, y 1 m de
+  irregularidad (una oruga rígida en la cresta del talud de 18° llega a ~0,7 m). Se deja salir si la pose nueva
+  mejora (marcha atrás). La velocidad no cambia con la pendiente.
+- **Estabilizadores en pendiente (parte A)**: O no los apoya con más de 1° o suelo irregular (aviso); la nivelación
+  es la parte B. La estabilidad (LMI, vuelco) todavía no tiene en cuenta la inclinación: parte B, con el visto bueno
+  de Jesús antes de tocar `stability.ts`.
+
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
   grúas grandes (fases 4–6): cabeza cinemática, izado a velocidad plena, estiramiento máximo del cable.
@@ -860,6 +894,13 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   Todos a 60 fps; sombras igual (~1,7–2,4 ms); física por paso +0,05–0,1 ms. Calidad baja, nivel 6: 53 draw calls.
   Bundle `app.js` 804 → 843 kB (207 kB comprimido).
 
+- Fase 18 parte A (`?bench=1`, Chromium sin ventana sobre la Intel, 1920×1080, calidad alta; antes → después): todos
+  a 60 fps; draw calls nivel 14 146 → 145, nivel 11 93 → 92, nivel 9 94 → 93 (sin la malla del horizonte), LR 3000
+  libre 77 → 78, AT 650-8 libre 94 → 95, SK 60 69 → 70 (la meseta); triángulos de los niveles +260, de la prueba libre
+  +18.400 (suelo exterior más grande y la meseta con su sombra). GPU 11,3–12,1 → 11,5–12,1 ms (la gráfica a baja
+  frecuencia: ver la nota de la fase 16); física por paso igual (0,67–1,09 → 0,70–0,98). Nivel 11: un cuadro de
+  33 ms en una pasada (59,5 fps). Bundle `app.js` 843 → 848 kB (209 kB comprimido).
+
 ### Pendientes
 - Rapier: si una versión nueva da las fuerzas de las juntas, cambiar la tensión medida por la real (comparando antes).
 - Posible mejora de carga: el `.wasm` empieza a bajar cuando ya llegó `app.js` (no se puede precargar desde
@@ -906,4 +947,11 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - Fase 17: Jesús no lo ha visto todavía en la laptop. Playwright: 31 de 32 la primera vez (falló "nivel 6: consola
   limpia", sin ver el mensaje; sola pasó); la segunda vuelta se cortó a pedido de Jesús. En el nivel 11 los camiones
   de la calle oeste cruzan la franja del plumín (lo atraviesan si está tendido en el suelo).
+- Fase 18: sobre la meseta no se ajustan al terreno el apoyo del plumín (`jibGroundBlocked`, eje ≥ 0,5 m sobre
+  y = 0), `placeHook`, el suelo del cable flojo (`ropeSim`, 3 cm) ni el polvo y las bocanadas (y = 0). El chasis es
+  rígido: en una cresta, alguna rueda queda en el aire. Las cargas apoyadas en la rampa resbalan (rozamiento 0,8).
+  Jesús no lo ha visto todavía en la laptop.
+- Playwright en local (fase 18): "guardar a mitad y continuar" falla siempre, también en `main` (el reloj tras
+  Continuar queda 1 s antes del que se leyó al guardar); en la acción del PR #32 pasó. Revisar si el guardado toma el
+  estado de un paso anterior al que muestra el reloj, o si la prueba compara mal el redondeo.
 - Vite avisaría que `app.js` pasa de 500 kB (three.js y el juego, ~780 kB): `chunkSizeWarningLimit` = 1200.

@@ -24,6 +24,15 @@ export interface CraneState {
   x: number;
   z: number;
   h: number;
+  /**
+   * Fase 18: suelo bajo el chasis (groundFit): altura del origen y pendiente del plano en el marco del chasis
+   * (gb = dy/dx, + sube hacia delante; gc = dy/dz, + sube hacia la derecha). 0 en suelo plano.
+   */
+  gy: number;
+  gb: number;
+  gc: number;
+  /** Irregularidad del suelo bajo el chasis (GroundFit.spread, m) */
+  gspread: number;
   /** Velocidad de marcha (m/s, + adelante) y dirección (rad, + izquierda), como S.v y S.steer de la referencia */
   vd: number;
   steer: number;
@@ -105,7 +114,7 @@ export function initialState(T: CraneSpec): CraneState {
     slew: 0, ang: (T.crawler ? 70 : 40) * Math.PI / 180, Lb: T.boom.min,
     cable: T.crawler ? Math.max(4, T.pivH + T.boom.min * Math.sin(70 * Math.PI / 180) - 4 - 1.5) : 4, v: { slew: 0, ang: 0, Lb: 0, cable: 0, jib: 0 },
     out: 0, outT: 0, phi: 0, phiV: 0, edge: -1,
-    x: 0, z: 0, h: 0, vd: 0, steer: 0, spin: 0, trackL: 0, trackR: 0, turnKey: false, sus: { pitch: 0, bank: 0, vp: 0, vb: 0 },
+    x: 0, z: 0, h: 0, gy: 0, gb: 0, gc: 0, gspread: 0, vd: 0, steer: 0, spin: 0, trackL: 0, trackR: 0, turnKey: false, sus: { pitch: 0, bank: 0, vp: 0, vb: 0 },
     cw: 0, cwT: 0, yg: 0, ygT: 0,
     jg: 0, jgT: 0, jibRel: 20 * Math.PI / 180, // la referencia empieza con jibRel = 20°
     er: 0, erT: 0,

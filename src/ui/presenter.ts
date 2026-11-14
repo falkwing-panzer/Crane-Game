@@ -86,12 +86,13 @@ export class Presenter {
     this.cam = new CameraRig(ctx, act.crane.cab, (s) => ses.act.crane.eye(s), camSize(specs), shadowHalf(specs));
     // la cámara no atraviesa obstáculos, cargas ni grúas (fase 16; el mundo de Rapier es el mismo para las dos del tándem)
     this.cam.ray = (o, d, max) => ses.act.phys.rayHit(o, d, max);
+    this.cam.groundY = (x, z) => ses.terrain.height(x, z);
     // niebla según la obra (fase 16) y detalles que se ocultan de lejos
     const site = L ? levelSize(L) : null;
     sceneFog(ctx, site ? { w: site[0], d: site[1] } : null, camSize(specs));
     this.lod = new DetailLod(units.map((u) => u.crane.root), settings.calidad === 'bajo' ? LOD_DIST / 2 : LOD_DIST);
     this.fx = settings.calidad === 'bajo' ? null : new Effects(ctx.scene);
-    this.decor = new DecorView(ctx.scene, ses.decor, L?.wind[2] ?? 0, settings.calidad === 'bajo');
+    this.decor = new DecorView(ctx.scene, ses.decor, L?.wind[2] ?? 0, settings.calidad === 'bajo', ses.terrain.hills);
     // cuadrícula de 5 m solo en la prueba libre (fase 17)
     const grid = ctx.scene.getObjectByName('cuadricula');
     if (grid) grid.visible = ses.decor.grid;

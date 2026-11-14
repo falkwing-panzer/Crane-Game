@@ -64,9 +64,22 @@ export function compose(A: Pose, B: Pose): Pose {
   return { t: apply(A, B.t), q: mul(A.q, B.q) };
 }
 
-/** Marco del portador en el suelo: solo posición y rumbo de la conducción. */
-export function carrierFrame(S: Pick<CraneState, 'x' | 'z' | 'h'>): Pose {
-  return { t: { x: S.x, y: 0, z: S.z }, q: axisAngle(0, 1, 0, S.h) };
+/** Inclinación de un plano de pendientes (b = dy/dx, c = dy/dz): giro que lleva la vertical a su normal */
+export function slopeQuat(b: number, c: number): Quat {
+  const n = Math.hypot(b, 1, c), nx = -b / n, ny = 1 / n, nz = -c / n;
+  // de (0, 1, 0) a n: eje (0,1,0) × n = (nz, 0, −nx), w = 1 + ny (normalizado)
+  const k = Math.hypot(nz, nx, 1 + ny);
+  return { x: nz / k, y: 0, z: -nx / k, w: (1 + ny) / k };
+}
+
+/**
+ * Marco del portador en el suelo: posición y rumbo de la conducción y, desde la fase 18, la altura y la inclinación
+ * del terreno bajo el chasis (gy, gb, gc; sin ellos o en 0, el suelo plano de siempre, con los mismos números).
+ */
+export function carrierFrame(S: Pick<CraneState, 'x' | 'z' | 'h'> & Partial<Pick<CraneState, 'gy' | 'gb' | 'gc'>>): Pose {
+  const yaw = axisAngle(0, 1, 0, S.h);
+  const gb = S.gb ?? 0, gc = S.gc ?? 0;
+  return { t: { x: S.x, y: S.gy ?? 0, z: S.z }, q: gb || gc ? mul(yaw, slopeQuat(gb, gc)) : yaw };
 }
 
 /** Punto del mundo → marco del portador en el suelo (inverso de carrierFrame; y no cambia). */

@@ -1,6 +1,7 @@
 // Operación de la grúa: modo de apoyo, estabilizadores (tecla O), estabilidad dinámica con la tensión
 // del cable y la inclinación incipiente al vuelco. Lógica de step(), mode() y toggleOutriggers() de la referencia.
 
+import { PAD_SLOPE } from './ground';
 import type { CraneSpec } from './cranes';
 import type { CraneState } from './kinematics';
 import { MOVING } from './drive';
@@ -40,6 +41,8 @@ export function toggleOutriggers(T: CraneSpec, C: CraneConfig, S: CraneState, ct
   if (S.outT === 0) {
     if (Math.abs(S.vd) > MOVING) return o.stopFirst;
     if (ctx.padsBlocked) return ctx.padsBlocked;
+    // fase 18 (parte A): sin nivelación todavía, solo en suelo llano
+    if (Math.atan(Math.hypot(S.gb, S.gc)) > PAD_SLOPE || S.gspread > 0.05) return o.slopePads;
     S.outT = 1;
     return o.deploying;
   }

@@ -5,6 +5,7 @@ import { Kit, camion, DC, type Prim } from '../decor/kit';
 import { rng, type Decor, type Flat, type FlatKind } from '../decor/layout';
 import { sockDroop, windYaw } from '../decor/wind';
 import { waterMaterial } from './water';
+import { hillHeight, type Hills } from '../terrain/terrain';
 
 // Fase 17: dibujo del decorado (`decor/layout.ts`). Todo lo quieto se fusiona: una malla cercana (con su malla solo
 // de sombra, como `Parts.build`), una lejana sin sombra, una de detalles que el sombreador quita de lejos, la malla
@@ -152,25 +153,41 @@ function noise2(R: () => number) {
 }
 
 /** Suelo exterior: plano grande con dos colores mezclados con ruido y grano fino en el sombreador */
-function groundMesh(D: Decor) {
-  const size = 1600, seg = 80;
+const HILL = new THREE.Color('#56664a'), HILL_CITY = new THREE.Color('#6d7a86');
+
+function groundMesh(D: Decor, hills: Hills | null) {
+  // fase 18: llega hasta pasadas las colinas (antes, 1600 m fijos); celdas de ~20 m
+  const size = Math.max(1600, hills ? 2 * (hills.r1 + 260) : 0), seg = Math.round(size / 20);
   const g = new THREE.PlaneGeometry(size, size, seg, seg).rotateX(-Math.PI / 2);
   g.translate(D.center[0], -0.03, D.center[1]);
   g.deleteAttribute('uv');
+  if (hills) {
+    const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) p.setY(i, p.getY(i) + hillHeight(hills, p.getX(i), p.getZ(i)));
+    g.computeVertexNormals();
+  }
   const n = noise2(rng(D.seed + 1)), A = new THREE.Color(D.ground.a), B = new THREE.Color(D.ground.b);
   const pos = g.attributes.position, col = new Float32Array(pos.count * 3);
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i);
     const t = Math.min(1, Math.max(0, (n(x / 70, z / 70) * 0.7 + n(x / 23 + 17, z / 23 + 5) * 0.3 - 0.35) * 2.2));
     _c.copy(A).lerp(B, t);
+    // fase 18: las colinas, del color del anillo de la fase 17 (verde; gris azulado en la ciudad)
+    const y = pos.getY(i);
+    if (y > 0.5) _c.lerp(D.city ? HILL_CITY : HILL, Math.min(1, (y - 0.5) / 12) * 0.85);
     col[3 * i] = _c.r; col[3 * i + 1] = _c.g; col[3 * i + 2] = _c.b;
   }
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   const m = new THREE.MeshLambertMaterial({ vertexColors: true });
   m.onBeforeCompile = (sh) => {
-    sh.vertexShader = 'varying vec2 vGp;\n' + sh.vertexShader.replace('#include <project_vertex>',
-      '#include <project_vertex>\n\tvGp = (modelMatrix * vec4(transformed, 1.0)).xz;');
-    sh.fragmentShader = 'varying vec2 vGp;\nfloat gh(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }\n' +
+    sh.vertexShader = 'varying vec3 vGw;\n' + sh.vertexShader.replace('#include <project_vertex>',
+      '#include <project_vertex>\n\tvGw = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    // fase 18: las colinas (por encima de unos metros) se velan como mucho al 55 %, como el anillo de la fase 17
+    sh.fragmentShader = sh.fragmentShader.replace('#include <fog_fragment>', '#ifdef USE_FOG\n' +
+      '\tfloat fogF = smoothstep(fogNear, fogFar, vFogDepth);\n' +
+      '\tfogF = mix(fogF, min(fogF, 0.55), smoothstep(1.5, 12.0, vGw.y));\n' +
+      '\tgl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, fogF);\n#endif');
+    sh.fragmentShader = 'varying vec3 vGw;\n#define vGp vGw.xz\nfloat gh(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }\n' +
       'float gn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);' +
       ' return mix(mix(gh(i), gh(i + vec2(1.0, 0.0)), f.x), mix(gh(i + vec2(0.0, 1.0)), gh(i + vec2(1.0, 1.0)), f.x), f.y); }\n' +
       sh.fragmentShader.replace('#include <color_fragment>',
@@ -183,28 +200,16 @@ function groundMesh(D: Decor) {
   return mesh;
 }
 
-/** Horizonte: dos anillos de colinas (y, en la ciudad, siluetas de edificios) sin niebla, teñidos de cielo */
+/**
+ * Horizonte: en la ciudad, siluetas de edificios sin niebla, teñidas de cielo. Los dos anillos de colinas de la fase 17
+ * son ahora terreno de verdad (fase 18, `Hills` en el suelo exterior). null fuera de la ciudad.
+ */
 function horizonMesh(D: Decor) {
+  if (!D.city) return null;
   const R = rng(D.seed + 2);
   const pos: number[] = [], col: number[] = [];
   const [cx, cz] = D.center;
-  const hill = new THREE.Color(D.city ? '#6d7a86' : '#56664a');
-  const ring = (rad: number, hMin: number, hMax: number, haze: number) => {
-    const N = 180, ph = [R() * 6.3, R() * 6.3, R() * 6.3], top = hill.clone().lerp(SKY_HORIZON, haze), bot = top.clone().lerp(SKY_HORIZON, 0.35);
-    const h = (i: number) => {
-      const a = (i / N) * Math.PI * 2;
-      const v = 0.5 + 0.25 * Math.sin(a * 3 + ph[0]) + 0.17 * Math.sin(a * 7 + ph[1]) + 0.08 * Math.sin(a * 17 + ph[2]);
-      return hMin + (hMax - hMin) * v;
-    };
-    for (let i = 0; i < N; i++) {
-      const a0 = (i / N) * Math.PI * 2, a1 = ((i + 1) / N) * Math.PI * 2;
-      const p0 = [cx + Math.cos(a0) * rad, cz + Math.sin(a0) * rad], p1 = [cx + Math.cos(a1) * rad, cz + Math.sin(a1) * rad];
-      const h0 = h(i), h1 = h(i + 1);
-      const v = [[p0[0], -2, p0[1], bot], [p1[0], -2, p1[1], bot], [p1[0], h1, p1[1], top], [p0[0], -2, p0[1], bot], [p1[0], h1, p1[1], top], [p0[0], h0, p0[1], top]] as const;
-      for (const [x, y, z, c] of v) { pos.push(x, y, z); col.push(c.r, c.g, c.b); }
-    }
-  };
-  ring(410, 18, 55, 0.5);
+  R(); R(); R(); // (fase 17: fases del anillo lejano; así las siluetas salen donde estaban)
   if (D.city) {
     // siluetas de la ciudad delante del anillo lejano
     const city = new THREE.Color('#8a96a3');
@@ -218,7 +223,6 @@ function horizonMesh(D: Decor) {
       for (const [[px, pz], y] of v) { pos.push(px, y, pz); col.push(c.r, c.g, c.b); }
     }
   }
-  ring(350, 6, 22, 0.3);
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
@@ -352,12 +356,12 @@ export class DecorView {
   private t = 0;
 
   /** low = calidad baja (detalles más cerca, sin sombras del decorado) */
-  constructor(scene: THREE.Scene, private D: Decor, private windDir: number, private low = false) {
+  constructor(scene: THREE.Scene, private D: Decor, private windDir: number, private low = false, hills: Hills | null = null) {
     const root = this.root;
     root.name = 'decorado';
     scene.add(root);
     if (low) this.uDetail.value = DECOR_DETAIL / 2;
-    root.add(groundMesh(D));
+    root.add(groundMesh(D, hills));
     const fg = flatsGeo(D.flats);
     if (fg) {
       const fm = new THREE.Mesh(fg, new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
@@ -433,7 +437,8 @@ export class DecorView {
       g.setAttribute('position', new THREE.Float32BufferAttribute(D.wires.flatMap(([a, b]) => [...a, ...b]), 3));
       root.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: '#1d1f22' })));
     }
-    root.add(horizonMesh(D));
+    const hz = horizonMesh(D);
+    if (hz) root.add(hz);
     root.add(cloudMesh(D, this.uTime, this.uDrift));
 
     // animado

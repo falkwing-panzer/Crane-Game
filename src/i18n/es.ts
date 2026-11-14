@@ -360,6 +360,9 @@ export const es = {
     water: 'No se puede entrar al agua',
     mud: 'Terreno blando: las ruedas se hundirían',
     softPad: 'Terreno blando bajo un estabilizador',
+    steep: (deg: number, max: number) => `Pendiente demasiado fuerte (${deg}°; máximo ${max}°)`,
+    rough: 'El suelo es demasiado irregular bajo el chasis',
+    slopePads: 'El terreno está inclinado: busca un sitio llano para apoyar los estabilizadores',
     tiedBlock: 'Gancho amarrado al frente: suéltalo ({hook}) para mover la pluma o el cable',
   },
 

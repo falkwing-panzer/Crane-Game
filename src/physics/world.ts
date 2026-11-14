@@ -13,6 +13,7 @@ import { foldedTowerBox } from '../render/models/tower';
 import type { BoxKind } from '../levels/levels';
 import { slingTensions, type SlingObs } from './tandem';
 import { t } from '../i18n';
+import { Terrain, patchRect } from '../terrain/terrain';
 
 const tw = t.world;
 
@@ -112,6 +113,11 @@ export class Physics {
 
   /** Suelo (las consultas de choques no lo cuentan: el suelo del plumín se mira aparte) */
   private groundCol!: RAPIER.Collider;
+  /**
+   * Fase 18: terreno de la partida (compartido en el tándem) y los handles de sus heightfields. Como el suelo, no
+   * cuentan en las consultas de choques ni como golpe de costado; el rayo de la cámara sí los ve.
+   */
+  private land!: { terrain: Terrain; cols: Set<number> };
   private chassisBody!: RAPIER.RigidBody;
   private supBody!: RAPIER.RigidBody;
   /** Bandeja del superlift (colisionador de la superestructura, se mueve con el radio) */
@@ -178,6 +184,7 @@ export class Physics {
       this.decor = site.decor;
       this.softs = site.softs;
       this.groundCol = site.groundCol;
+      this.land = site.land;
       this.crew = site.crew;
     } else {
       this.bounds = opts.bounds ?? { x0: -SITE_HALF, x1: SITE_HALF, z0: -SITE_HALF, z1: SITE_HALF };
@@ -186,6 +193,7 @@ export class Physics {
       this.decor = new Set();
       this.softs = [];
       this.crew = [];
+      this.land = { terrain: new Terrain(), cols: new Set() };
       world = this.world = new RAPIER.World({ x: 0, y: -G, z: 0 });
       world.timestep = FIXED_DT;
       // Medido (fase 2): con 8 + 16 iteraciones internas el cable no se estira al izar ni con 200 t colgando
@@ -223,6 +231,32 @@ export class Physics {
 
     // Carga de prueba: caja de 2 t delante a la derecha de la grúa (fuera del chasis de la LR 3000)
     if (opts.testLoad ?? !site) this.addLoad('Caja', 2.0, { x: 1.0, y: 0.5, z: 0.7 }, { x: Math.max(9, T.len[1] + 3), y: 0.5, z: 6 });
+  }
+
+  /** Terreno de la partida (fase 18) */
+  get terrain() { return this.land.terrain; }
+
+  /** Altura del suelo en (x, z) */
+  groundY(x: number, z: number) { return this.land.terrain.height(x, z); }
+
+  /**
+   * Fase 18: pone el terreno de la partida. Cada parche es un heightfield fijo de Rapier con las mismas alturas
+   * (encima del suelo plano, que sigue debajo); las colinas no tienen colisionador (nada llega hasta ellas).
+   */
+  addTerrain(terrain: Terrain) {
+    this.land.terrain = terrain;
+    for (const p of terrain.patches) {
+      const r = patchRect(p);
+      const c = this.world.createCollider(
+        RAPIER.ColliderDesc.heightfield(p.nz, p.nx, p.h, { x: r.x1 - r.x0, y: 1, z: r.z1 - r.z0 }, RAPIER.HeightFieldFlags.FIX_INTERNAL_EDGES)
+          .setTranslation((r.x0 + r.x1) / 2, 0, (r.z0 + r.z1) / 2).setFriction(0.8),
+      );
+      this.land.cols.add(c.handle);
+    }
+  }
+
+  private isGround(col: RAPIER.Collider) {
+    return col.handle === this.groundCol.handle || this.land.cols.has(col.handle);
   }
 
   /** ¿(x, z) queda fuera de la obra, o a menos de `m` de su borde? */
@@ -266,11 +300,13 @@ export class Physics {
     const cx = (L0 + L1) / 2, hy = (T.deckHi - CLEARANCE) / 2;
     const shape = new RAPIER.Cuboid((L1 - L0) / 2, hy, bodyHalf(T));
     const pos = { x: x + c * cx, y: CLEARANCE + hy, z: z - s * cx };
+    pos.y += this.groundY(pos.x, pos.z);
     if (this.hitsSomething(pos, axisAngle(0, 1, 0, h), shape)) return tw.chassis;
     // grúa torre plegada: sobresale por delante del camión (no está en la referencia, que solo mira el chasis)
     if (T.tower) {
       const b = foldedTowerBox(T), bx = (b.x0 + b.x1) / 2;
       const tp = { x: x + c * bx, y: (b.y0 + b.y1) / 2, z: z - s * bx };
+      tp.y += this.groundY(tp.x, tp.z);
       if (this.hitsSomething(tp, axisAngle(0, 1, 0, h), new RAPIER.Cuboid((b.x1 - b.x0) / 2, (b.y1 - b.y0) / 2, b.hz))) return tw.foldedTower;
     }
     // la bandeja del superlift se arrastra con la grúa (no está en la referencia, que solo mira el chasis)
@@ -291,6 +327,7 @@ export class Physics {
     const lx = T.piv - slR * Math.cos(slew), lz = slR * Math.sin(slew);
     const pos = { x: x + c * lx + s * lz, y: 0.2 + (sl.h - 0.2) / 2, z: z - s * lx + c * lz };
     if (this.outside(pos.x, pos.z, Math.hypot(sl.d, sl.w) / 2)) return tw.bounds;
+    pos.y += this.groundY(pos.x, pos.z);
     const shape = new RAPIER.Cuboid(sl.d / 2 + 0.2, (sl.h - 0.2) / 2, sl.w / 2 + 0.2);
     return this.hitsSomething(pos, axisAngle(0, 1, 0, h + slew), shape) ? tw.trayHit : null;
   }
@@ -325,7 +362,7 @@ export class Physics {
       // superestructura → chasis (como trayCorners) → mundo
       const lx = b.cx, lz = side * b.cz;
       const px = T.piv + lx * cs + lz * ss, pz = -lx * ss + lz * cs;
-      const pos = { x: S.x + c * px + s * pz, y: b.cy + carrierLift(S), z: S.z - s * px + c * pz };
+      const pos = { x: S.x + c * px + s * pz, y: b.cy + carrierLift(S) + S.gy, z: S.z - s * px + c * pz };
       if (this.hitsSomething(pos, rot, shape)) return tw.tailHit;
     }
     return null;
@@ -340,7 +377,7 @@ export class Physics {
     for (const lx of [o.xf, o.xr]) for (const lz of [-o.hw, o.hw]) {
       const wx = S.x + c * lx + s * lz, wz = S.z - s * lx + c * lz;
       if (this.outside(wx, wz)) return tw.padsSpace;
-      if (this.hitsSomething({ x: wx, y: 0.55, z: wz }, q, shape)) return tw.padsHit;
+      if (this.hitsSomething({ x: wx, y: 0.55 + this.groundY(wx, wz), z: wz }, q, shape)) return tw.padsHit;
     }
     return padsOnSoft(this.T, this.softs, S.x, S.z, S.h);
   }
@@ -445,7 +482,7 @@ export class Physics {
     const own = new Set([this.chassisBody?.handle, this.supBody?.handle, this.headBody?.handle]);
     this.world.intersectionsWithShape(pos, rot, shape, () => { hit = true; return false; }, undefined, undefined, undefined, undefined,
       (col) => {
-        if (col.handle === this.hookCollider.handle || col.handle === this.groundCol.handle || this.decor.has(col.handle)) return false;
+        if (col.handle === this.hookCollider.handle || this.isGround(col) || this.decor.has(col.handle)) return false;
         if (this.attached && col.handle === this.attached.collider.handle) return false;
         const b = col.parent();
         return !(b && own.has(b.handle));
@@ -909,7 +946,7 @@ export class Physics {
   private sideContact(load: Load) {
     let side = false;
     this.world.contactPairsWith(load.collider, (other) => {
-      if (side || this.isHook(other) || other.handle === this.groundCol.handle) return;
+      if (side || this.isHook(other) || this.isGround(other)) return;
       this.world.contactPair(load.collider, other, (manifold) => {
         if (manifold.numContacts() > 0 && Math.abs(manifold.normal().y) < 0.5) side = true;
       });
