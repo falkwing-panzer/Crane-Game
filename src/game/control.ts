@@ -5,6 +5,7 @@ import { lmiStatic } from '../crane/stability';
 import { dynamicStability, stepTilt, supportMode, TILTED_PHI } from '../crane/ops';
 import { apply, carrierFrame, carrierPose, edgeAxis, rotate, worldToCarrier } from '../crane/pose';
 import { stepDrive, stepSuspension } from '../crane/drive';
+import { groundFit } from '../crane/ground';
 import { blockWhileTied } from '../crane/tiedown';
 import { blockWhileAssembling, stepAssembly, teleLimit } from '../crane/assembly';
 import { stepSuperlift } from '../crane/superlift';
@@ -39,6 +40,7 @@ export function controlUnit(ses: Session, u: Unit, dt: number, inp: CraneInput, 
     tilted: S.phi > TILTED_PHI,
     bypass,
     blocked: (x, z, h) => phys.carrierBlocked(x, z, h),
+    ground: (x, z, h) => groundFit(T, (px, pz) => phys.groundY(px, pz), x, z, h),
   });
   if (dr.msg) {
     // choque del chasis a más de 1,2 m/s: golpe (referencia)

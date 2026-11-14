@@ -62,6 +62,8 @@ export class CameraRig {
   private freeCenter: (() => { x: number; z: number }) | null = null;
   /** Rayo contra el mundo para no atravesar nada (lo pone la presentación) */
   ray: RayFn | null = null;
+  /** Altura del suelo (fase 18: terreno); sin esto, plano en y = 0 */
+  groundY: ((x: number, z: number) => number) | null = null;
   /** Posición pedida en el último cuadro y la que se mostró (acercada o en transición) */
   private want = new THREE.Vector3();
   private shown = new THREE.Vector3(NaN, 0, 0);
@@ -241,7 +243,8 @@ export class CameraRig {
       } else this.allow = Infinity;
       if (this.allow < dist) camera.position.copy(this.look).addScaledVector(_d, this.allow);
     }
-    if (camera.position.y < MIN_Y) camera.position.y = MIN_Y;
+    const gy = (this.groundY?.(camera.position.x, camera.position.z) ?? 0) + MIN_Y;
+    if (camera.position.y < gy) camera.position.y = gy;
   }
 
   /** Encuadre de sombras alrededor de lo que se ve, por escalones y ajustado a los texels (sin temblor) */

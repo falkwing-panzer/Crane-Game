@@ -9,6 +9,10 @@ import { Rigging } from '../render/rigging';
 import { buildSite, TEST_HEAVY, TEST_OBSTACLES, TEST_SOFT } from '../render/site';
 import { buildLevelSite } from '../render/levelSite';
 import { decorFor, type Decor } from '../decor/layout';
+import { terrainFor } from '../terrain/build';
+import { terrainMeshes } from '../render/terrainView';
+import type { Terrain } from '../terrain/terrain';
+import { groundFit } from '../crane/ground';
 import { TRUCK_IDS } from '../render/models/layout';
 import { Physics } from '../physics/world';
 import { levelBounds, placeCrane, populate } from '../levels/setup';
@@ -97,6 +101,12 @@ export function sessionDef(search: string): SessionDef {
   return { nivel, li, L, freeTandem, tandem, showMenu, ids };
 }
 
+/** Suelo bajo el chasis en su sitio (gy, gb, gc, gspread de CraneState) */
+export function groundState(T: CraneSpec, S: CraneState, terrain: Terrain) {
+  const g = groundFit(T, (x, z) => terrain.height(x, z), S.x, S.z, S.h);
+  return { gy: g.y, gb: g.b, gc: g.c, gspread: g.spread };
+}
+
 /**
  * Una partida: las grúas (estado, física, modelos), la obra, la grúa que se maneja, si el turno corre y el estado
  * del turno. Lo crea main.ts a partir de la URL. Emite sus eventos por `bus`.
@@ -108,6 +118,8 @@ export class Session {
   readonly multi: boolean;
   /** Decorado de fondo (fase 17); lo dibuja el Presenter */
   readonly decor: Decor;
+  /** Terreno (fase 18): plano en los niveles; meseta de prueba en la prueba libre; colinas del horizonte */
+  readonly terrain: Terrain;
   readonly bus = new Bus<GameEvents>();
   /** Grúa que se maneja (Tab la cambia en el tándem) */
   act: Unit;
@@ -127,6 +139,10 @@ export class Session {
       return { id, T, S: initialState(T), C: baseConfig(T) };
     });
     this.place(states);
+    // decorado de fondo (fase 17) y terreno (fase 18): el terreno sale del decorado (colinas más allá de todo)
+    this.decor = decorFor(def.nivel, L);
+    this.terrain = terrainFor(this.decor, !L && !def.freeTandem);
+    for (const { T, S } of states) Object.assign(S, groundState(T, S, this.terrain));
 
     // Física: la primera grúa crea el mundo; la segunda lo comparte
     for (const st of states) {
@@ -142,6 +158,8 @@ export class Session {
       });
     }
     const site = this.units[0].phys;
+    site.addTerrain(this.terrain);
+    for (const m of terrainMeshes(this.terrain)) scene.add(m);
     if (L) {
       populate(site, L);
       buildLevelSite(scene, L);
@@ -158,7 +176,6 @@ export class Session {
       buildSite(scene, site.obstacles, site.softs);
     }
     // decorado de fondo (fase 17): sus colisionadores (solo para la carga y el gancho), después de la obra
-    this.decor = decorFor(def.nivel, L);
     site.addDecor(this.decor.kit.solids);
     // el aparejo de la primera grúa dibuja las cargas (después de crearlas)
     this.units.forEach((u, i) => { u.rig = new Rigging(scene, u.phys, u.T, i === 0); });

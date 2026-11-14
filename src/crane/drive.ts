@@ -6,6 +6,7 @@
 import type { CraneSpec } from './cranes';
 import type { CraneState } from './kinematics';
 import { t } from '../i18n';
+import { MAX_SPREAD, maxSlope, type GroundFit } from './ground';
 
 export interface DriveInput {
   /** +1 adelante (↑), −1 atrás (↓) */
@@ -26,6 +27,8 @@ export interface DriveCtx {
   bypass?: boolean;
   /** ¿La pose (x, z, h) choca con algo? Devuelve el motivo o null */
   blocked?: (x: number, z: number, h: number) => string | null;
+  /** Fase 18: plano del suelo bajo el chasis en la pose (x, z, h); sin esto, suelo plano */
+  ground?: (x: number, z: number, h: number) => GroundFit;
 }
 
 export interface DriveResult {
@@ -60,6 +63,19 @@ export function minTurnRadius(T: CraneSpec) {
   return T.wheelbase! / (Math.tan(T.steerMax!) * (T.allSteer ? 2 : 1));
 }
 
+/**
+ * Fase 18: ¿se puede pasar a la pose nueva por el terreno? Sin pendiente de más de `maxSlope` ni suelo irregular
+ * (salvo si mejora: así se puede salir marcha atrás). Si sí, deja el plano en S y devuelve null; si no, el motivo.
+ */
+function groundStep(T: CraneSpec, S: CraneState, ctx: DriveCtx, x: number, z: number, h: number): string | null {
+  if (!ctx.ground) return null;
+  const g = ctx.ground(x, z, h), now = Math.atan(Math.hypot(S.gb, S.gc)), lim = maxSlope(T);
+  if (g.slope > lim && g.slope > now + 1e-9) return t.ops.steep(Math.round((g.slope * 180) / Math.PI), Math.round((lim * 180) / Math.PI));
+  if (g.spread > MAX_SPREAD && g.spread > S.gspread + 1e-9) return t.ops.rough;
+  S.gy = g.y; S.gb = g.b; S.gc = g.c; S.gspread = g.spread;
+  return null;
+}
+
 export function stepDrive(T: CraneSpec, S: CraneState, inp: DriveInput, dt: number, ctx: DriveCtx): DriveResult {
   if (T.crawler) return stepCrawl(T, S, inp, dt, ctx);
   const res: DriveResult = { msg: null, lmiCut: false, hit: false };
@@ -80,7 +96,7 @@ export function stepDrive(T: CraneSpec, S: CraneState, inp: DriveInput, dt: numb
   if (Math.abs(S.vd) > 1e-4 || Math.abs(dh) > 1e-5) {
     const nh = S.h + dh * dt;
     const nx = S.x + Math.cos(nh) * S.vd * dt, nz = S.z - Math.sin(nh) * S.vd * dt;
-    const why = ctx.blocked?.(nx, nz, nh) ?? null;
+    const why = ctx.blocked?.(nx, nz, nh) ?? groundStep(T, S, ctx, nx, nz, nh);
     if (why) {
       if (Math.abs(S.vd) > 1.2 && why.includes('obstáculo')) { res.hit = true; res.msg = t.ops.chassisHit; }
       else res.msg = why;
@@ -113,7 +129,7 @@ function stepCrawl(T: CraneSpec, S: CraneState, inp: DriveInput, dt: number, ctx
   if (Math.abs(S.vd) > 1e-4 || Math.abs(dh) > 1e-5) {
     const nh = S.h + dh * dt;
     const nx = S.x + Math.cos(nh) * S.vd * dt, nz = S.z - Math.sin(nh) * S.vd * dt;
-    const why = ctx.blocked?.(nx, nz, nh) ?? null;
+    const why = ctx.blocked?.(nx, nz, nh) ?? groundStep(T, S, ctx, nx, nz, nh);
     if (why) {
       if (Math.abs(S.vd) > 1.2 && why.includes('obstáculo')) { res.hit = true; res.msg = t.ops.chassisHit; }
       else res.msg = why;
