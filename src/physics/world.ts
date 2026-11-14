@@ -413,6 +413,17 @@ export class Physics {
     return { n, what };
   }
 
+  /**
+   * Cámara (fase 16): distancia por el rayo o + d·t (d unitario) hasta lo primero que toca, como mucho `max`: obstáculos,
+   * cargas y las grúas. El gancho no cuenta (es pequeño y se mueve) ni el suelo (la cámara ya no baja de él), ni lo
+   * que contiene el origen (el punto al que mira la cámara puede caer dentro de la superestructura).
+   */
+  rayHit(o: V3, d: V3, max: number): number | null {
+    const hit = this.world.castRay(new RAPIER.Ray(o, d), max, true, undefined, undefined, undefined, undefined,
+      (col) => !col.isSensor() && col.handle !== this.hookCollider.handle && col.handle !== this.groundCol.handle && !col.containsPoint(o));
+    return hit ? hit.timeOfImpact : null;
+  }
+
   private hitsSomething(pos: V3, rot: { x: number; y: number; z: number; w: number }, shape: RAPIER.Shape) {
     let hit = false;
     const own = new Set([this.chassisBody?.handle, this.supBody?.handle, this.headBody?.handle]);

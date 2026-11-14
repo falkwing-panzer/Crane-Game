@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import type { MatKey, Palette } from './materials';
+import { surface, vcMaterial, type MatKey, type Palette } from './materials';
+import { bakeAO, type AoPiece } from './ao';
 
 // Primitivas de craneModel() de la referencia (caja, cilindro entre dos puntos, extrusión de un perfil)
 // acumuladas por material. build() fusiona todo lo de un mismo material en una sola malla: cada grupo rígido
@@ -25,25 +26,49 @@ function clean(g: THREE.BufferGeometry) {
 export const SHADOW_LAYER = 1;
 /** Material de las mallas de sombra (solo se usa su lado: el pase de sombras pone el suyo). */
 const SHADOW_MAT = new THREE.MeshBasicMaterial();
-/** Material de los colores lisos fusionados: el color va en cada vértice (el de la paleta, en espacio lineal). */
-const VC_MAT = new THREE.MeshLambertMaterial({ vertexColors: true });
 /** Claves que conservan su malla y su material (ver build). */
 const OWN_MESH = new Set<MatKey>(['cabin', 'glass', 'lamp', 'beacon']);
 
-export class Parts {
-  private geos = new Map<MatKey, THREE.BufferGeometry[]>();
+/** Nombre de las mallas de detalle (fase 16): se dejan de dibujar de lejos (`render/lod.ts`) */
+export const DETAIL = 'detalle';
+/** Lado máximo de los trozos en que se parten las caras grandes (la oclusión ambiental va por vértice) */
+const AO_SEG = 1.5;
 
-  add(k: MatKey, g: THREE.BufferGeometry) {
+interface Item {
+  g: THREE.BufferGeometry;
+  /** oscurece a las demás piezas (oclusión ambiental): cajas, perfiles y cilindros alineados con un eje */
+  occ: boolean;
+  /** detalle pequeño (barandillas, escalerillas, pilotos…): malla aparte, sin sombra, oculta de lejos */
+  det: boolean;
+}
+
+export class Parts {
+  private geos = new Map<MatKey, Item[]>();
+  private inDetail = false;
+
+  add(k: MatKey, g: THREE.BufferGeometry, occ = true) {
     let l = this.geos.get(k);
     if (!l) this.geos.set(k, (l = []));
-    l.push(clean(g));
+    l.push({ g: clean(g), occ, det: this.inDetail });
+  }
+
+  /**
+   * Fase 16: lo que se añade dentro de `fn` es detalle pequeño. Va en su propia malla (una por grupo), no proyecta
+   * sombra y se deja de dibujar a distancia.
+   */
+  detail(fn: () => void) {
+    const was = this.inDetail;
+    this.inDetail = true;
+    try { fn(); } finally { this.inDetail = was; }
   }
 
   /** Caja alineada con los ejes, de (x0, y0, z0) a (x1, y1, z1). */
   box(k: MatKey, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number) {
     const sx = Math.abs(x1 - x0), sy = Math.abs(y1 - y0), sz = Math.abs(z1 - z0);
     if (sx < 1e-4 || sy < 1e-4 || sz < 1e-4) return;
-    const g = new THREE.BoxGeometry(sx, sy, sz);
+    // fase 16: las caras grandes en trozos de ≤ 1,5 m, para que la oclusión ambiental tenga vértices
+    const seg = (v: number) => (this.inDetail ? 1 : Math.min(8, Math.max(1, Math.ceil(v / AO_SEG))));
+    const g = new THREE.BoxGeometry(sx, sy, sz, seg(sx), seg(sy), seg(sz));
     g.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
     this.add(k, g);
   }
@@ -58,7 +83,8 @@ export class Parts {
     _q.setFromUnitVectors(_up, _b.normalize());
     g.applyQuaternion(_q);
     g.translate(a[0] + (b[0] - a[0]) / 2, a[1] + (b[1] - a[1]) / 2, a[2] + (b[2] - a[2]) / 2);
-    this.add(k, g);
+    // un cilindro inclinado no se parece a su caja envolvente: no oscurece a las demás
+    this.add(k, g, Math.max(Math.abs(_b.x), Math.abs(_b.y), Math.abs(_b.z)) > 0.99);
   }
 
   /** Extrusión de un perfil (x, y) entre z0 y z1 (ext() de la referencia: perfil a lo largo del eje lateral). */
@@ -83,8 +109,13 @@ export class Parts {
       const dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy);
       if (L < 1e-5) continue;
       const n: P3 = [dy / L, -dx / L, 0];
-      tri([x1, y1, z0], [x2, y2, z0], [x2, y2, z1], n);
-      tri([x1, y1, z0], [x2, y2, z1], [x1, y1, z1], n);
+      // lados largos en trozos (fase 16: oclusión ambiental por vértice; la pluma es una extrusión de decenas de m)
+      const ns = this.inDetail ? 1 : Math.min(16, Math.max(1, Math.ceil(Math.abs(z1 - z0) / (2 * AO_SEG))));
+      for (let j = 0; j < ns; j++) {
+        const za = z0 + ((z1 - z0) * j) / ns, zb = z0 + ((z1 - z0) * (j + 1)) / ns;
+        tri([x1, y1, za], [x2, y2, za], [x2, y2, zb], n);
+        tri([x1, y1, za], [x2, y2, zb], [x1, y1, zb], n);
+      }
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -99,22 +130,24 @@ export class Parts {
   extX(k: MatKey, sec: [number, number][], x0: number, x1: number) {
     const n = this.geos.get(k)?.length ?? 0;
     this.ext(k, sec.map(([z, y]) => [-z, y] as [number, number]), x0, x1);
-    this.geos.get(k)![n].rotateY(Math.PI / 2);
+    this.geos.get(k)![n].g.rotateY(Math.PI / 2);
   }
 
   /**
    * Fusiona y cuelga las mallas de `parent` (fase 11, para bajar draw calls):
-   * - los colores lisos van en **una** malla con colores por vértice (material compartido `VC_MAT`);
+   * - los colores lisos van en **una** malla con colores por vértice (material compartido `vcMaterial()`), con la
+   *   oclusión ambiental horneada en el color y, con el material estándar, rugosidad y metal por vértice (atributo
+   *   `rm`) (fase 16);
+   * - los detalles pequeños (`detail`) van en otra malla de colores, `DETAIL`, que no proyecta sombra (fase 16);
    * - cabina, cristal y luces (emisivas) siguen en mallas propias: la RT y las orugas ocultan su cabina buscando
    *   esos materiales, y las luces tienen brillo propio;
    * - con sombras, las mallas de color no proyectan: **una** malla solo de sombra con todo el grupo (menos el
-   *   cristal) en la capa `SHADOW_LAYER`, que solo ve la cámara de sombras.
+   *   cristal y los detalles) en la capa `SHADOW_LAYER`, que solo ve la cámara de sombras.
    * La malla de sombra va al final de la lista devuelta (se oculta junto con las demás).
    */
   build(parent: THREE.Object3D, pal: Palette, shadow = true): THREE.Mesh[] {
     const out: THREE.Mesh[] = [];
     const casters: THREE.BufferGeometry[] = [];
-    const flat: THREE.BufferGeometry[] = [];
     const add = (g: THREE.BufferGeometry, mat: THREE.Material, cast: boolean) => {
       g.computeBoundingSphere();
       const m = new THREE.Mesh(g, mat);
@@ -123,27 +156,43 @@ export class Parts {
       if (shadow && cast) casters.push(g);
       parent.add(m);
       out.push(m);
+      return m;
     };
-    for (const [k, list] of this.geos) {
-      if (OWN_MESH.has(k)) {
-        const g = list.length === 1 ? list[0] : mergeGeometries(list, false);
-        if (list.length > 1) for (const x of list) x.dispose();
-        add(g, pal[k], k !== 'glass');
-        continue;
+    const merge = (l: THREE.BufferGeometry[]) => {
+      const g = l.length === 1 ? l[0] : mergeGeometries(l, false);
+      if (l.length > 1) for (const x of l) x.dispose();
+      return g;
+    };
+    for (const [k, list] of this.geos) if (OWN_MESH.has(k)) add(merge(list.map((x) => x.g)), pal[k], k !== 'glass');
+    // oclusión ambiental entre las piezas de color del grupo (los detalles la reciben, pero no oscurecen)
+    const flat: { k: MatKey; it: Item }[] = [];
+    for (const [k, list] of this.geos) if (!OWN_MESH.has(k)) for (const it of list) flat.push({ k, it });
+    const ao = bakeAO(flat.map(({ it }): AoPiece => {
+      let box: AoPiece['box'] = null;
+      if (it.occ && !it.det) {
+        it.g.computeBoundingBox();
+        const b = it.g.boundingBox!;
+        box = { min: [b.min.x, b.min.y, b.min.z], max: [b.max.x, b.max.y, b.max.z] };
       }
-      const c = pal[k].color;
-      for (const g of list) {
-        const n = g.attributes.position.count, col = new Float32Array(n * 3);
-        for (let i = 0; i < n; i++) { col[3 * i] = c.r; col[3 * i + 1] = c.g; col[3 * i + 2] = c.b; }
-        g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-        flat.push(g);
+      return { pos: it.g.attributes.position.array, nor: it.g.attributes.normal.array, box };
+    }));
+    const vc = vcMaterial();
+    const std = vc instanceof THREE.MeshStandardMaterial;
+    const body: THREE.BufferGeometry[] = [], det: THREE.BufferGeometry[] = [];
+    flat.forEach(({ k, it }, i) => {
+      const g = it.g, c = pal[k].color, f = ao[i];
+      const n = g.attributes.position.count, col = new Float32Array(n * 3);
+      for (let v = 0; v < n; v++) { col[3 * v] = c.r * f[v]; col[3 * v + 1] = c.g * f[v]; col[3 * v + 2] = c.b * f[v]; }
+      g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      if (std) {
+        const [r, m] = surface(k), rm = new Float32Array(n * 2);
+        for (let v = 0; v < n; v++) { rm[2 * v] = r; rm[2 * v + 1] = m; }
+        g.setAttribute('rm', new THREE.BufferAttribute(rm, 2));
       }
-    }
-    if (flat.length) {
-      const g = flat.length === 1 ? flat[0] : mergeGeometries(flat, false);
-      if (flat.length > 1) for (const x of flat) x.dispose();
-      add(g, VC_MAT, true);
-    }
+      (it.det ? det : body).push(g);
+    });
+    if (body.length) add(merge(body), vc, true);
+    if (det.length) add(merge(det), vc, false).name = DETAIL;
     if (casters.length) {
       const sg = mergeGeometries(casters.map((g) => {
         const s = new THREE.BufferGeometry();
@@ -165,7 +214,7 @@ export class Parts {
   /** Triángulos acumulados (para medir). */
   triangles() {
     let n = 0;
-    for (const l of this.geos.values()) for (const g of l) n += g.attributes.position.count / 3;
+    for (const l of this.geos.values()) for (const { g } of l) n += g.attributes.position.count / 3;
     return n;
   }
 }

@@ -20,26 +20,30 @@ export function slab(P: Parts, k: MatKey, a: V2, b: V2, z0: number, z1: number, 
 
 /** Escalerilla vertical: largueros en p y q (puntos de abajo), de y0 a y1, peldaños cada ~0,3 m. */
 export function ladder(P: Parts, k: MatKey, p: V2, q: V2, y0: number, y1: number, r = 0.022) {
-  // p y q son (x, z)
-  for (const [x, z] of [p, q]) P.cyl(k, [x, y0, z], [x, y1, z], r, 5);
-  const n = Math.max(2, Math.floor((y1 - y0) / 0.3));
-  for (let i = 1; i <= n; i++) {
-    const y = y0 + ((y1 - y0) * i) / (n + 0.5);
-    P.cyl(k, [p[0], y, p[1]], [q[0], y, q[1]], r * 0.8, 5);
-  }
+  // p y q son (x, z); detalle pequeño (fase 16): no proyecta sombra y se oculta de lejos
+  P.detail(() => {
+    for (const [x, z] of [p, q]) P.cyl(k, [x, y0, z], [x, y1, z], r, 5);
+    const n = Math.max(2, Math.floor((y1 - y0) / 0.3));
+    for (let i = 1; i <= n; i++) {
+      const y = y0 + ((y1 - y0) * i) / (n + 0.5);
+      P.cyl(k, [p[0], y, p[1]], [q[0], y, q[1]], r * 0.8, 5);
+    }
+  });
 }
 
 /** Barandilla sobre la polilínea `pts` (x, z) a la altura y0: postes, pasamanos arriba y a media altura. */
 export function railing(P: Parts, k: MatKey, pts: V2[], y0: number, h = 0.9, r = 0.022) {
   const post = (x: number, z: number) => P.cyl(k, [x, y0, z], [x, y0 + h, z], r, 5);
-  for (let i = 0; i < pts.length; i++) {
-    const [x, z] = pts[i];
-    post(x, z);
-    if (i === 0) continue;
-    const [xa, za] = pts[i - 1], L = Math.hypot(x - xa, z - za), n = Math.floor(L / 1.3);
-    for (let j = 1; j <= n; j++) post(xa + ((x - xa) * j) / (n + 1), za + ((z - za) * j) / (n + 1));
-    for (const y of [y0 + h, y0 + h / 2]) P.cyl(k, [xa, y, za] as P3, [x, y, z] as P3, r, 5);
-  }
+  P.detail(() => {
+    for (let i = 0; i < pts.length; i++) {
+      const [x, z] = pts[i];
+      post(x, z);
+      if (i === 0) continue;
+      const [xa, za] = pts[i - 1], L = Math.hypot(x - xa, z - za), n = Math.floor(L / 1.3);
+      for (let j = 1; j <= n; j++) post(xa + ((x - xa) * j) / (n + 1), za + ((z - za) * j) / (n + 1));
+      for (const y of [y0 + h, y0 + h / 2]) P.cyl(k, [xa, y, za] as P3, [x, y, z] as P3, r, 5);
+    }
+  });
 }
 
 /**
@@ -72,9 +76,11 @@ export function operatorCab(P: Parts, c: Box3, outer: -1 | 1 = -1, beacon = true
   const ux = fb[0] - fa[0], uy = fb[1] - fa[1], ul = Math.hypot(ux, uy), nx = uy / ul, ny = -ux / ul;
   const on = (u: number, z: number): P3 => { const q = t(u); return [q[0] + nx * 0.045, q[1] + ny * 0.045, z]; };
   const zc = (c.z0 + c.z1) / 2;
-  P.cyl('dark', on(0.12, zc - 0.1), on(0.62, zc + 0.15), 0.013, 4);
-  for (let x = c.x0 + 0.3; x < c.x1 - sl - 0.2; x += 0.3) P.box('dark', x, x + 0.03, c.y1 + 0.1, c.y1 + 0.13, c.z0 + 0.06, c.z1 - 0.06);
-  for (const z of [c.z0 + 0.06, c.z1 - 0.09]) P.box('dark', c.x0 + 0.25, c.x1 - sl - 0.15, c.y1 + 0.1, c.y1 + 0.13, z, z + 0.03);
+  P.detail(() => {
+    P.cyl('dark', on(0.12, zc - 0.1), on(0.62, zc + 0.15), 0.013, 4);
+    for (let x = c.x0 + 0.3; x < c.x1 - sl - 0.2; x += 0.3) P.box('dark', x, x + 0.03, c.y1 + 0.1, c.y1 + 0.13, c.z0 + 0.06, c.z1 - 0.06);
+    for (const z of [c.z0 + 0.06, c.z1 - 0.09]) P.box('dark', c.x0 + 0.25, c.x1 - sl - 0.15, c.y1 + 0.1, c.y1 + 0.13, z, z + 0.03);
+  });
   if (beacon) {
     const xm = c.x0 + 0.3, zm = (c.z0 + c.z1) / 2;
     P.cyl('beacon', [xm, c.y1 + 0.06, zm], [xm, c.y1 + 0.22, zm], 0.09, 8);

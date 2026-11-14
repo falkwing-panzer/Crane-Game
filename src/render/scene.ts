@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { isStandard, lit } from './models/materials';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { SHADOW_LAYER } from './models/builder';
 import { QUALITY, pixelRatio, type Quality } from '../ui/settings';
@@ -43,10 +44,17 @@ export function createScene(canvas: HTMLCanvasElement, quality: Quality = 'alto'
   sky.renderOrder = -1;
   scene.add(sky);
 
-  scene.add(new THREE.HemisphereLight('#dbe8f5', '#6b6250', 1.2));
+  // luz de ambiente de hemisferio: cielo azulado arriba, tierra abajo (las caras de abajo quedan más oscuras)
+  const std = isStandard();
+  scene.add(new THREE.HemisphereLight('#d6e6f7', '#62584a', std ? 0.7 : 1.15));
+  // calidad alta (fase 16): material estándar con el cielo como mapa de entorno (reflejos del cromo y la pintura)
+  if (std) {
+    scene.environment = skyEnvironment(renderer, skyMat);
+    scene.environmentIntensity = 0.45;
+  }
 
   // Una sola luz con sombras, mapa de 2048, encuadre fijo alrededor de la grúa.
-  const sun = new THREE.DirectionalLight('#fff4e0', 2.4);
+  const sun = new THREE.DirectionalLight('#fff4e0', std ? 2.6 : 2.4);
   sun.position.set(30, 50, 20);
   sun.castShadow = Q.shadowMap > 0;
   sun.shadow.mapSize.set(Q.shadowMap || 512, Q.shadowMap || 512);
@@ -63,7 +71,7 @@ export function createScene(canvas: HTMLCanvasElement, quality: Quality = 'alto'
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(80, 80);
   tex.anisotropy = 4;
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshLambertMaterial({ map: tex }));
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), lit({ map: tex, roughness: 1 }));
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   scene.add(ground);
@@ -85,6 +93,46 @@ export function createScene(canvas: HTMLCanvasElement, quality: Quality = 'alto'
   });
 
   return { renderer, scene, camera, controls, sun };
+}
+
+/**
+ * Mapa de entorno del cielo (fase 16): la cúpula con su degradado y un suelo pardo, filtrados una vez con PMREM. Lo
+ * usan los materiales estándar (calidad alta) para la luz de ambiente y los reflejos. Una textura, sin archivos.
+ */
+function skyEnvironment(renderer: THREE.WebGLRenderer, skyMat: THREE.ShaderMaterial) {
+  const env = new THREE.Scene();
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(50, 24, 12), skyMat);
+  env.add(dome);
+  const floor = new THREE.Mesh(new THREE.CircleGeometry(49, 24), new THREE.MeshBasicMaterial({ color: '#6f6656' }));
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = -2;
+  env.add(floor);
+  const pm = new THREE.PMREMGenerator(renderer);
+  const tex = pm.fromScene(env, 0.02).texture;
+  pm.dispose();
+  dome.geometry.dispose();
+  floor.geometry.dispose();
+  (floor.material as THREE.Material).dispose();
+  return tex;
+}
+
+/**
+ * Niebla de distancia por escena (fase 16): en una obra (nivel) empieza más allá de la diagonal de la parcela, para
+ * que se vea entera y se pierda el borde del suelo; en la prueba libre, la de siempre. `size` = escala de la grúa
+ * (la LR 3000, ~3): más lejos.
+ */
+export function sceneFog(ctx: SceneCtx, site: { w: number; d: number } | null, size = 1) {
+  const fog = ctx.scene.fog;
+  if (!(fog instanceof THREE.Fog)) return;
+  const k = Math.max(1, size);
+  if (site) {
+    const diag = Math.hypot(site.w, site.d);
+    fog.near = Math.max(diag, 60 * k);
+    fog.far = fog.near + 260 + 40 * k;
+  } else {
+    fog.near = size > 2 ? 60 * size : 120;
+    fog.far = size > 2 ? 420 + 40 * size : 420;
+  }
 }
 
 /**

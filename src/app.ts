@@ -1,6 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { createScene, resetView, type SceneCtx } from './render/scene';
+import { useStandard } from './render/models/materials';
 import { SceneMark } from './render/dispose';
 import { loadSettings, pixelRatio, type Settings } from './ui/settings';
 import { AdaptiveScale } from './ui/adaptive';
@@ -70,6 +71,9 @@ export class App {
   constructor(canvas: HTMLCanvasElement, root: HTMLElement) {
     this.root = root;
     this.settings = loadSettings();
+    // fase 16: el material estándar (metal y rugosidad) costaba 0,5–1,5 ms de GPU por cuadro en la laptop y no se veía
+    // mejor: se queda en Lambert. ?estandar=1 lo enciende para comparar (solo en calidad alta).
+    useStandard(this.settings.calidad === 'alto' && new URLSearchParams(location.search).has('estandar'));
     this.ctx = createScene(canvas, this.settings.calidad);
     const params = new URLSearchParams(location.search);
     this.basePr = pixelRatio(this.settings.calidad, devicePixelRatio);

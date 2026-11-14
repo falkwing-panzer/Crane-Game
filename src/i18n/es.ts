@@ -170,6 +170,7 @@ export const es = {
     menu: '☰ Niveles',
     quality: 'Calidad',
     qualities: { bajo: 'bajo', medio: 'medio', alto: 'alto' },
+    rain: 'Lluvia',
   },
 
   levels: {

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { CraneSpec } from '../../crane/cranes';
 import { Parts } from './builder';
 import { ladder, operatorCab, railing } from './details';
-import type { Palette } from './materials';
+import { lit, type Palette } from './materials';
 import { towerDeck, towerParts, type OBox } from './tower';
 import { plateColors, plateGeo } from './plates';
 import type { Seg } from './lattice';
@@ -64,8 +64,8 @@ export class TowerView {
 
     this.chords = new THREE.InstancedMesh(cyl, pal.yellow, MAX_SEGS);
     this.diags = new THREE.InstancedMesh(cyl, pal.yellowDark, MAX_SEGS);
-    this.boxes = new THREE.InstancedMesh(boxG, new THREE.MeshLambertMaterial({ color: '#ffffff' }), MAX_BOXES);
-    this.plates = new THREE.InstancedMesh(plateGeo, new THREE.MeshLambertMaterial({ color: '#ffffff' }), 6);
+    this.boxes = new THREE.InstancedMesh(boxG, lit({ color: '#ffffff' }), MAX_BOXES);
+    this.plates = new THREE.InstancedMesh(plateGeo, lit({ color: '#ffffff' }), 6);
     const pc = plateColors(T);
     this.plateCol = { grey: pc.grey, top: pc.top };
     for (const m of [this.chords, this.diags, this.boxes, this.plates]) {

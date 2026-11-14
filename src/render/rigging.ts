@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { lit, type LitMat } from './models/materials';
 import type { CraneSpec } from '../crane/cranes';
 import { HOOK_HALF_H, type Load, type Physics } from '../physics/world';
 import { hookFalls, hookScale } from './models/layout';
@@ -49,9 +50,9 @@ export class Rigging {
 
   /** drawLoads: dibujar las cargas (en el tándem las dibuja solo el aparejo de la primera grúa) */
   constructor(scene: THREE.Scene, private phys: Physics, private T: CraneSpec, drawLoads = true) {
-    const steel = new THREE.MeshLambertMaterial({ color: '#7c8389' });
-    const block = new THREE.MeshLambertMaterial({ color: '#f2b632' });
-    const dark = new THREE.MeshLambertMaterial({ color: '#2a2e33' });
+    const steel = lit({ color: '#7c8389' });
+    const block = lit({ color: '#f2b632' });
+    const dark = lit({ color: '#2a2e33' });
     const hb = (this.hb = hookScale(T));
     this.nFalls = hookFalls(T);
     this.ropes = Array.from({ length: this.nFalls }, () => new RopeSim(FALL_SEG));
@@ -88,18 +89,18 @@ export class Rigging {
     scene.add(this.hook);
 
     // fase 15: cada ramal en FALL_SEG tramos, para dibujarlo en catenaria cuando el cable está flojo
-    this.falls = new THREE.InstancedMesh(cyl, new THREE.MeshLambertMaterial({ color: '#2a2c2e' }), this.nFalls * FALL_SEG);
+    this.falls = new THREE.InstancedMesh(cyl, lit({ color: '#2a2c2e' }), this.nFalls * FALL_SEG);
     this.falls.castShadow = true;
     this.falls.frustumCulled = false;
     scene.add(this.falls);
 
     // un material por masa (la etiqueta de la textura dice las toneladas); las piezas pesadas, en acero
     // cargas de los niveles: su color y su etiqueta (CT de la referencia)
-    const mats = new Map<string, THREE.MeshLambertMaterial>();
+    const mats = new Map<string, LitMat>();
     for (const l of drawLoads ? phys.loads : []) {
       const key = l.color ? `${l.color}|${l.label}` : String(l.mass);
       let mt = mats.get(key);
-      if (!mt) mats.set(key, (mt = new THREE.MeshLambertMaterial({ map: l.color ? labelTexture(l.label, l.mass, l.color) : crateTexture(l.mass) })));
+      if (!mt) mats.set(key, (mt = lit({ map: l.color ? labelTexture(l.label, l.mass, l.color) : crateTexture(l.mass) })));
       const m = new THREE.Mesh(box, mt);
       m.scale.set(l.half.x * 2, l.half.y * 2, l.half.z * 2);
       m.castShadow = m.receiveShadow = true;

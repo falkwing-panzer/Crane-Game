@@ -5,6 +5,9 @@
 // - alarma de proximidad a líneas eléctricas: pitido agudo y rápido;
 // - golpe sordo al apoyar o golpear la carga.
 // soundTargets() decide qué suena (sin Web Audio, para probarlo); Sound lo sintetiza.
+// Fase 16: sonido 3D (PannerNode). El motor suena desde el chasis, el cabrestante desde la superestructura y los golpes
+// desde la carga; el oyente es la cámara. En el tándem, la otra grúa suena al ralentí desde su sitio. Las alarmas no
+// tienen sitio (son de la cabina).
 
 export interface SoundInput {
   /** velocidad de marcha (m/s, con signo) */
@@ -64,12 +67,39 @@ export function beepOn(kind: keyof typeof BEEP, t: number) {
   return t % p < on;
 }
 
+export interface V3 { x: number; y: number; z: number }
+
+/** Dónde suena cada cosa (mundo, m) */
+export interface SoundAt {
+  engine: V3;
+  winch: V3;
+  /** tándem: la otra grúa (solo motor al ralentí) */
+  other?: V3 | null;
+}
+
+/** Distancia hasta la que un sonido se oye entero (m); más lejos baja como ref / (ref + (d − ref)) */
+export const REF_ENGINE = 25;
+export const REF_WINCH = 18;
+export const REF_THUMP = 20;
+
+/** Ganancia de un sonido a `d` m con el modelo 'inverse' de Web Audio (rolloff 1), para las pruebas */
+export function distanceGain(d: number, ref: number) {
+  return ref / (ref + Math.max(0, d - ref));
+}
+
+function place(p: PannerNode, v: V3) {
+  if (p.positionX) { p.positionX.value = v.x; p.positionY.value = v.y; p.positionZ.value = v.z; } else p.setPosition(v.x, v.y, v.z);
+}
+
 export class Sound {
   private ac: AudioContext | null = null;
   private master!: GainNode;
   private engine!: { a: OscillatorNode; b: OscillatorNode; g: GainNode };
   private winch!: { o: OscillatorNode; g: GainNode };
   private beep!: { o: OscillatorNode; g: GainNode };
+  private other!: { o: OscillatorNode; g: GainNode; p: PannerNode };
+  private pe!: PannerNode;
+  private pw!: PannerNode;
   private t = 0;
 
   constructor(private on: boolean, private volume: number) {
@@ -112,7 +142,8 @@ export class Sound {
     bg.gain.value = 0.5;
     a.connect(lp);
     b.connect(bg).connect(lp);
-    lp.connect(eg).connect(this.master);
+    this.pe = this.panner(REF_ENGINE);
+    lp.connect(eg).connect(this.pe).connect(this.master);
     a.start();
     b.start();
     this.engine = { a, b, g: eg };
@@ -126,9 +157,22 @@ export class Sound {
     wo.type = 'sawtooth';
     wo.frequency.value = 180;
     wg.gain.value = 0;
-    wo.connect(wl).connect(wg).connect(this.master);
+    this.pw = this.panner(REF_WINCH);
+    wo.connect(wl).connect(wg).connect(this.pw).connect(this.master);
     wo.start();
     this.winch = { o: wo, g: wg };
+
+    // tándem: motor de la otra grúa al ralentí, desde su sitio (fase 16)
+    const ol = ac.createBiquadFilter();
+    ol.type = 'lowpass';
+    ol.frequency.value = 280;
+    const oo = ac.createOscillator(), og = ac.createGain(), op = this.panner(REF_ENGINE);
+    oo.type = 'sawtooth';
+    oo.frequency.value = 36;
+    og.gain.value = 0;
+    oo.connect(ol).connect(og).connect(op).connect(this.master);
+    oo.start();
+    this.other = { o: oo, g: og, p: op };
 
     // pitidos: una sola onda cuadrada que se enciende y apaga
     const bo = ac.createOscillator(), bgn = ac.createGain();
@@ -139,12 +183,43 @@ export class Sound {
     this.beep = { o: bo, g: bgn };
   }
 
-  /** Cada cuadro, con el estado de la grúa que se maneja */
-  update(dt: number, i: SoundInput) {
+  private panner(ref: number) {
+    const p = this.ac!.createPanner();
+    p.panningModel = 'equalpower';
+    p.distanceModel = 'inverse';
+    p.refDistance = ref;
+    p.rolloffFactor = 1;
+    p.maxDistance = 5000;
+    return p;
+  }
+
+  /** El oyente: la cámara (posición, hacia dónde mira y su arriba) */
+  listen(pos: V3, fwd: V3, up: V3) {
+    const ac = this.ac;
+    if (!ac) return;
+    const l = ac.listener;
+    if (l.positionX) {
+      l.positionX.value = pos.x; l.positionY.value = pos.y; l.positionZ.value = pos.z;
+      l.forwardX.value = fwd.x; l.forwardY.value = fwd.y; l.forwardZ.value = fwd.z;
+      l.upX.value = up.x; l.upY.value = up.y; l.upZ.value = up.z;
+    } else {
+      l.setPosition(pos.x, pos.y, pos.z);
+      l.setOrientation(fwd.x, fwd.y, fwd.z, up.x, up.y, up.z);
+    }
+  }
+
+  /** Cada cuadro, con el estado de la grúa que se maneja y dónde suena cada cosa */
+  update(dt: number, i: SoundInput, at?: SoundAt) {
     const ac = this.ac;
     if (!ac) return;
     this.t += dt;
     const s = soundTargets(i), now = ac.currentTime;
+    if (at) {
+      place(this.pe, at.engine);
+      place(this.pw, at.winch);
+      if (at.other) place(this.other.p, at.other);
+    }
+    this.other.g.gain.setTargetAtTime(at?.other && !i.off ? 0.05 : 0, now, 0.2);
     this.engine.g.gain.setTargetAtTime(s.engineGain, now, 0.15);
     this.engine.a.frequency.setTargetAtTime(s.engineHz, now, 0.3);
     this.engine.b.frequency.setTargetAtTime(s.engineHz / 2, now, 0.3);
@@ -157,8 +232,8 @@ export class Sound {
     this.beep.g.gain.setTargetAtTime(on ? 0.05 : 0, now, 0.005);
   }
 
-  /** Golpe sordo (v = velocidad del golpe, m/s) */
-  thump(v: number) {
+  /** Golpe sordo (v = velocidad del golpe, m/s), desde `at` si se sabe dónde fue */
+  thump(v: number, at?: V3) {
     const ac = this.ac;
     if (!ac) return;
     const now = ac.currentTime, len = 0.25;
@@ -172,7 +247,12 @@ export class Sound {
     lp.frequency.value = 180;
     const g = ac.createGain();
     g.gain.value = Math.min(0.9, 0.25 + 0.4 * v);
-    src.connect(lp).connect(g).connect(this.master);
+    if (at) {
+      const p = this.panner(REF_THUMP);
+      place(p, at);
+      src.connect(lp).connect(g).connect(p).connect(this.master);
+      src.onended = () => p.disconnect();
+    } else src.connect(lp).connect(g).connect(this.master);
     src.start(now);
   }
 }

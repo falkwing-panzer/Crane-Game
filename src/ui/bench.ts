@@ -1,3 +1,4 @@
+import type * as THREE from 'three';
 import type { App } from '../app';
 import type { InputSource } from '../game/record';
 import { GpuTimer } from './gpuTimer';
@@ -23,6 +24,8 @@ export const BENCH_CASES: BenchCase[] = [
 export interface BenchRow {
   name: string; fps: number; frameMs: number; worstMs: number; p95Ms: number; calls: number; tris: number;
   physMs: number; cpuMs: number; gpuMs: number | null;
+  /** Fase 16: GPU del pase de sombras y del resto de la escena, y CPU del HUD (DOM) por cuadro */
+  shadowMs: number | null; sceneMs: number | null; hudMs: number;
 }
 
 /** Guion: girar la superestructura despacio todo el rato (se mueve la escena, sin riesgo de vuelco) */
@@ -37,13 +40,21 @@ export async function runBench(app: App, cases = BENCH_CASES, warm = 1.5, secs =
   const gl = renderer.getContext() as WebGL2RenderingContext;
   const gpu = new GpuTimer(gl);
   const render = renderer.render.bind(renderer);
-  let cpu = 0;
+  const sm = renderer.shadowMap as THREE.WebGLShadowMap;
+  const shadowRender = sm.render;
+  let cpu = 0, hud = 0;
   renderer.render = (s, c) => {
     const t0 = performance.now();
-    gpu.begin();
+    gpu.begin('escena');
     render(s, c);
     gpu.end();
     cpu += performance.now() - t0;
+  };
+  // el pase de sombras va dentro de render(): se mide aparte (fase 16)
+  sm.render = function (...a: Parameters<typeof shadowRender>) {
+    gpu.push('sombras');
+    shadowRender.apply(this, a);
+    gpu.pop();
   };
   const rows: BenchRow[] = [];
   const note = document.createElement('div');
@@ -66,9 +77,10 @@ export async function runBench(app: App, cases = BENCH_CASES, warm = 1.5, secs =
           gpu.poll();
           t += dt;
           if (phase === 'warm') {
-            if (t >= warm) { phase = 'run'; t = 0; cpu = 0; gpu.take(); }
+            if (t >= warm) { phase = 'run'; t = 0; cpu = 0; hud = 0; gpu.take(); }
             return;
           }
+          hud += m.view.hudMs;
           dts.push(dt);
           phys += physMs;
           steps += n;
@@ -85,12 +97,14 @@ export async function runBench(app: App, cases = BENCH_CASES, warm = 1.5, secs =
       rows.push({
         name: c.name, fps: dts.length / sum, frameMs: (1000 * sum) / dts.length, worstMs: 1000 * sorted[sorted.length - 1],
         p95Ms: 1000 * sorted[Math.floor(sorted.length * 0.95)], calls, tris, physMs: steps ? phys / steps : 0,
-        cpuMs: cpu / dts.length, gpuMs: g.length ? g.reduce((a, b) => a + b, 0) / g.length : null,
+        cpuMs: cpu / dts.length, gpuMs: 'escena' in g ? g.escena + (g.sombras ?? 0) : null,
+        shadowMs: g.sombras ?? null, sceneMs: g.escena ?? null, hudMs: hud / dts.length,
       });
       m.game.source = null;
     }
   } finally {
     renderer.render = render;
+    sm.render = shadowRender;
     app.probe = null;
     note.remove();
   }
@@ -119,10 +133,11 @@ function show(rows: BenchRow[], gpuOk: boolean, gl: WebGL2RenderingContext) {
   el.innerHTML = `<div class="lcard"><div class="eyebrow">Banco de pruebas · ${info.gpu}</div>
     <h2>Informe de rendimiento</h2><p>Pantalla ${info.pantalla} · lienzo ${info.lienzo}${gpuOk ? '' : ' · este navegador no da el tiempo de GPU'}</p>
     <table class="bench-table"><tr><th>Partida</th><th>fps</th><th>ms/cuadro</th><th>peor</th><th>p95</th><th>draw calls</th><th>triángulos</th>
-    <th>física ms/paso</th><th>render CPU ms</th><th>GPU ms</th></tr>
+    <th>física ms/paso</th><th>render CPU ms</th><th>HUD CPU ms</th><th>GPU ms</th><th>sombras</th><th>escena</th></tr>
     ${rows.map((r) => `<tr><td>${r.name}</td><td>${f(r.fps, 0)}</td><td>${f(r.frameMs)}</td><td>${f(r.worstMs)}</td><td>${f(r.p95Ms)}</td>
-      <td>${r.calls}</td><td>${r.tris.toLocaleString('es')}</td><td>${f(r.physMs, 2)}</td><td>${f(r.cpuMs, 2)}</td>
-      <td>${r.gpuMs === null ? '—' : f(r.gpuMs, 2)}</td></tr>`).join('')}</table>
+      <td>${r.calls}</td><td>${r.tris.toLocaleString('es')}</td><td>${f(r.physMs, 2)}</td><td>${f(r.cpuMs, 2)}</td><td>${f(r.hudMs, 2)}</td>
+      <td>${r.gpuMs === null ? '—' : f(r.gpuMs, 2)}</td><td>${r.shadowMs === null ? '—' : f(r.shadowMs, 2)}</td>
+      <td>${r.sceneMs === null ? '—' : f(r.sceneMs, 2)}</td></tr>`).join('')}</table>
     <div class="row"><button class="btn" id="bench-copy">Copiar JSON</button><a class="btn primary" href="${location.pathname}">Menú</a></div></div>`;
   document.getElementById('hud')!.appendChild(el);
   el.querySelector('#bench-copy')!.addEventListener('click', () => { void navigator.clipboard?.writeText(JSON.stringify(report, null, 1)); });

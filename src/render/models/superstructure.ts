@@ -90,7 +90,7 @@ export function buildBoomBase(T: WheeledSpec, L: Layout, P: Parts) {
   P.extX('yellow', boomSection(bw, hu), -L.tail, min);
   P.extX('yellowShade', boomSection(bw, hu, 0.04), min - 0.45, min);
   P.box('dark', 0.5, min - 0.8, hu / 2, hu / 2 + 0.03, -bw * 0.18, bw * 0.18);
-  boomBaseDetails(T, L, P);
+  P.detail(() => boomBaseDetails(T, L, P)); // fase 16: detalle pequeño
 }
 
 /**
@@ -136,8 +136,10 @@ export function buildHead(T: WheeledSpec, L: Layout, P: Parts) {
   P.box('yellow', -1.0, -0.2, 0.4 * hu - 0.06, 0.4 * hu, -zp, zp);
   if (!T.jibDef) {
     const ax = -0.7, ay = 0.4 * hu, az = -zp + 0.05, top = ay + 0.9;
-    P.cyl('greyDeep', [ax, ay, az], [ax, top, az], 0.03, 6);
-    P.cyl('steel', [ax, top, az - 0.2], [ax, top, az + 0.2], 0.012, 4);
-    for (const dz of [-0.2, 0.2]) P.cyl('steel', [ax - 0.06, top, az + dz], [ax + 0.06, top, az + dz], 0.05, 8);
+    P.detail(() => {
+      P.cyl('greyDeep', [ax, ay, az], [ax, top, az], 0.03, 6);
+      P.cyl('steel', [ax, top, az - 0.2], [ax, top, az + 0.2], 0.012, 4);
+      for (const dz of [-0.2, 0.2]) P.cyl('steel', [ax - 0.06, top, az + dz], [ax + 0.06, top, az + dz], 0.05, 8);
+    });
   }
 }
