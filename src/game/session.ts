@@ -8,6 +8,7 @@ import type { CraneView, ModelFactory } from '../render/models/load';
 import { Rigging } from '../render/rigging';
 import { buildSite, TEST_HEAVY, TEST_OBSTACLES, TEST_SOFT } from '../render/site';
 import { buildLevelSite } from '../render/levelSite';
+import { decorFor, type Decor } from '../decor/layout';
 import { TRUCK_IDS } from '../render/models/layout';
 import { Physics } from '../physics/world';
 import { levelBounds, placeCrane, populate } from '../levels/setup';
@@ -105,6 +106,8 @@ export class Session {
   readonly L: Level | null;
   readonly units: Unit[] = [];
   readonly multi: boolean;
+  /** Decorado de fondo (fase 17); lo dibuja el Presenter */
+  readonly decor: Decor;
   readonly bus = new Bus<GameEvents>();
   /** Grúa que se maneja (Tab la cambia en el tándem) */
   act: Unit;
@@ -154,6 +157,9 @@ export class Session {
       site.softs.push(...TEST_SOFT);
       buildSite(scene, site.obstacles, site.softs);
     }
+    // decorado de fondo (fase 17): sus colisionadores (solo para la carga y el gancho), después de la obra
+    this.decor = decorFor(def.nivel, L);
+    site.addDecor(this.decor.kit.solids);
     // el aparejo de la primera grúa dibuja las cargas (después de crearlas)
     this.units.forEach((u, i) => { u.rig = new Rigging(scene, u.phys, u.T, i === 0); });
     this.act = this.units[0];

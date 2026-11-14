@@ -9,7 +9,8 @@ import type { CraneId } from '../crane/cranes';
  */
 
 /** Cambia si cambia la forma de la instantánea: las guardadas de antes se descartan */
-const VERSION = 1;
+// 2 (fase 17): el mundo lleva los colisionadores del decorado; las partidas guardadas antes no valen
+const VERSION = 2;
 const key = (nivel: number) => `gruas-guardado-${nivel}`;
 
 export interface SavedGame { v: number; nivel: number; crane: CraneId; t: number; snap: GameSnap }

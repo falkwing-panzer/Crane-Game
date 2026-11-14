@@ -87,6 +87,11 @@ export class Physics {
   hookCollider: RAPIER.Collider;
   readonly loads: Load[];
   readonly obstacles: Obstacle[];
+  /**
+   * Colisionadores del decorado (fase 17): la carga y el gancho chocan con ellos, pero las comprobaciones de la grúa
+   * (chasis, zapatas, contrapeso, bandeja, plumín, torre) no los miran: así ningún nivel cambia de dificultad.
+   */
+  readonly decor: Set<number>;
   /** Terreno blando (barro, agua): no es un colisionador, solo impide entrar o apoyar zapatas */
   readonly softs: SoftZone[];
   /** Carga enganchada, si la hay */
@@ -170,6 +175,7 @@ export class Physics {
       this.bounds = site.bounds;
       this.loads = site.loads;
       this.obstacles = site.obstacles;
+      this.decor = site.decor;
       this.softs = site.softs;
       this.groundCol = site.groundCol;
       this.crew = site.crew;
@@ -177,6 +183,7 @@ export class Physics {
       this.bounds = opts.bounds ?? { x0: -SITE_HALF, x1: SITE_HALF, z0: -SITE_HALF, z1: SITE_HALF };
       this.loads = [];
       this.obstacles = [];
+      this.decor = new Set();
       this.softs = [];
       this.crew = [];
       world = this.world = new RAPIER.World({ x: 0, y: -G, z: 0 });
@@ -230,6 +237,15 @@ export class Physics {
       RAPIER.ColliderDesc.cuboid(o.half.x, o.half.y, o.half.z).setTranslation(o.pos.x, o.pos.y, o.pos.z).setRotation(q).setFriction(0.8),
     );
     this.obstacles.push(o);
+  }
+
+  /** Fase 17: cajas estáticas del decorado (centro, medios lados y giro alrededor de la vertical) */
+  addDecor(solids: { x: number; y: number; z: number; hx: number; hy: number; hz: number; r: number }[]) {
+    for (const s of solids) {
+      const c = this.world.createCollider(RAPIER.ColliderDesc.cuboid(s.hx, s.hy, s.hz).setTranslation(s.x, s.y, s.z)
+        .setRotation(axisAngle(0, 1, 0, s.r)).setFriction(0.8));
+      this.decor.add(c.handle);
+    }
   }
 
   /**
@@ -415,12 +431,12 @@ export class Physics {
 
   /**
    * Cámara (fase 16): distancia por el rayo o + d·t (d unitario) hasta lo primero que toca, como mucho `max`: obstáculos,
-   * cargas y las grúas. El gancho no cuenta (es pequeño y se mueve) ni el suelo (la cámara ya no baja de él), ni lo
+   * cargas y las grúas. El decorado (fase 17) no cuenta: rodea la obra y la cámara saltaría hacia dentro a cada momento. El gancho no cuenta (es pequeño y se mueve) ni el suelo (la cámara ya no baja de él), ni lo
    * que contiene el origen (el punto al que mira la cámara puede caer dentro de la superestructura).
    */
   rayHit(o: V3, d: V3, max: number): number | null {
     const hit = this.world.castRay(new RAPIER.Ray(o, d), max, true, undefined, undefined, undefined, undefined,
-      (col) => !col.isSensor() && col.handle !== this.hookCollider.handle && col.handle !== this.groundCol.handle && !col.containsPoint(o));
+      (col) => !col.isSensor() && col.handle !== this.hookCollider.handle && col.handle !== this.groundCol.handle && !this.decor.has(col.handle) && !col.containsPoint(o));
     return hit ? hit.timeOfImpact : null;
   }
 
@@ -429,7 +445,7 @@ export class Physics {
     const own = new Set([this.chassisBody?.handle, this.supBody?.handle, this.headBody?.handle]);
     this.world.intersectionsWithShape(pos, rot, shape, () => { hit = true; return false; }, undefined, undefined, undefined, undefined,
       (col) => {
-        if (col.handle === this.hookCollider.handle || col.handle === this.groundCol.handle) return false;
+        if (col.handle === this.hookCollider.handle || col.handle === this.groundCol.handle || this.decor.has(col.handle)) return false;
         if (this.attached && col.handle === this.attached.collider.handle) return false;
         const b = col.parent();
         return !(b && own.has(b.handle));
