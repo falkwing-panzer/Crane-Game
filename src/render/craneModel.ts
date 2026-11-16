@@ -11,7 +11,7 @@ import { buildYGuyBase, YGuyView } from './models/yguy';
 import { JibView } from './models/jib';
 import { TowerView } from './models/towerView';
 import { buildCarrier } from './models/carrier';
-import { buildBoomBase, buildHead, buildSection, buildSuper, sectionTip, sheaves, TELE_N } from './models/superstructure';
+import { buildBoomBase, buildHead, buildSection, buildSuper, sectionTip, sheaves, teleN } from './models/superstructure';
 
 // Grúa de ruedas (fase 4): el modelo sale de cranes.ts con las fórmulas de craneModel() de la referencia
 // (ver models/). Cada grupo rígido (chasis, cabina, superestructura, cada tramo de pluma, cabeza) se fusiona
@@ -144,7 +144,7 @@ export class CraneModel {
     if (T.yguy) buildYGuyBase(L, base);
     base.build(this.boom, pal);
     if (T.yguy) this.yguy = new YGuyView(this.boom, L, pal);
-    for (let k = 1; k <= TELE_N; k++) {
+    for (let k = 1; k <= teleN(T); k++) {
       const g = new THREE.Group(), p = new Parts();
       buildSection(T, L, k, p);
       p.build(g, pal);
@@ -180,7 +180,7 @@ export class CraneModel {
       return;
     }
     this.boom.rotation.z = S.ang;
-    for (let k = 1; k <= TELE_N; k++) this.sections[k - 1].position.x = sectionTip(T, k, S.Lb);
+    for (let k = 1; k <= this.sections.length; k++) this.sections[k - 1].position.x = sectionTip(T, k, S.Lb);
     this.head.position.x = S.Lb;
     this.updateBallast(S.cw);
     this.yguy?.update(S.yg, S.Lb, S.ang);

@@ -7,8 +7,13 @@ import { ladder, operatorCab, railing } from './details';
 // Superestructura: marco con origen en el centro de giro; las alturas son las del chasis (y absoluta).
 // Pluma: marco con origen en el pie, x a lo largo de la pluma, y normal hacia arriba, z lateral.
 
-/** Tramos telescópicos además del base (la referencia dibuja 3) */
-export const TELE_N = 3;
+/** Largo de cada tramo interior (cabe dentro del base con la pluma recogida) */
+export const sectionLen = (T: WheeledSpec) => T.boom.min - 1.2;
+/** Solape mínimo entre tramos con la pluma extendida del todo (aproximación visual) */
+export const TELE_OVERLAP = 1.5;
+/** Tramos telescópicos además del base: la referencia dibuja 3; las plumas largas llevan más para que, extendidas
+ *  del todo, cada tramo siga metido ≥ TELE_OVERLAP en el anterior (con 3, la AT 220 dejaba huecos de casi 4 m). */
+export const teleN = (T: WheeledSpec) => Math.max(3, Math.ceil((T.boom.max - T.boom.min) / (sectionLen(T) - TELE_OVERLAP)));
 
 /** Poleas de la cabeza: número y radio. El radio de la referencia (0,45 + 0,25·ancho) se limita para que, con
  *  la pluma tumbada y recogida, las poleas no bajen de la parte inferior del tramo base (no tocan la cabina). */
@@ -107,14 +112,14 @@ export function boomBaseDetails(T: WheeledSpec, L: Layout, P: Parts) {
 
 /** Tramo interior k (1 = el más grueso). Origen en su extremo delantero. */
 export function buildSection(T: WheeledSpec, L: Layout, k: number, P: Parts) {
-  const len = T.boom.min - 1.2, f = 1 - 0.13 * k, w = T.boom.w * f, h = L.hu * f;
+  const len = sectionLen(T), f = 1 - (0.39 * k) / teleN(T), w = T.boom.w * f, h = L.hu * f;
   P.extX(k % 2 ? 'yellow' : 'yellowDark', boomSection(w, h), -len, 0);
   P.extX('yellowShade', boomSection(w, h, 0.03), -0.35, -0.05);
 }
 
 /** Extremo delantero del tramo k con la pluma a largo Lb (fórmula de la referencia). */
 export function sectionTip(T: WheeledSpec, k: number, Lb: number) {
-  return T.boom.min + ((Lb - T.boom.min) * k) / TELE_N;
+  return T.boom.min + ((Lb - T.boom.min) * k) / teleN(T);
 }
 
 /** Cabeza con poleas. Origen en la cabeza (punto de suspensión del cable, headPos). */

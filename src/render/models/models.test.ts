@@ -6,7 +6,7 @@ import { carrierPose } from '../../crane/pose';
 import { CraneModel } from '../craneModel';
 import { ballastPlates, boomCorners, cwPieces, cwDims, layout, towerOutline, towerPlan, WHEELED_IDS, type Box3 } from './layout';
 import { yGuyGeom } from './yguy';
-import { boomBaseDetails, boomSection, buildHead, sheaves } from './superstructure';
+import { boomBaseDetails, boomSection, buildHead, sectionLen, sectionTip, sheaves, teleN, TELE_OVERLAP } from './superstructure';
 import { Parts } from './builder';
 import { operatorCab } from './details';
 import { palette } from './materials';
@@ -206,3 +206,20 @@ for (const id of WHEELED_IDS) {
     });
   });
 }
+
+describe('pluma telescópica sin huecos', () => {
+  it('con la pluma extendida del todo, cada tramo sigue metido en el anterior; recogida, todo cabe en el base', () => {
+    for (const id of WHEELED_IDS) {
+      const T = CRANES[id] as WheeledSpec, n = teleN(T), len = sectionLen(T);
+      for (const Lb of [T.boom.min, (T.boom.min + T.boom.max) / 2, T.boom.max]) {
+        for (let k = 1; k <= n; k++) {
+          // la cola del tramo k queda dentro del anterior (el base termina en boom.min)
+          const prevTip = k === 1 ? T.boom.min : sectionTip(T, k - 1, Lb);
+          expect(prevTip - (sectionTip(T, k, Lb) - len), `${id} tramo ${k} a ${Lb} m`).toBeGreaterThanOrEqual(TELE_OVERLAP - 1e-9);
+          expect(sectionTip(T, k, Lb) - len).toBeGreaterThan(0);
+        }
+        expect(sectionTip(T, n, Lb)).toBeCloseTo(Lb, 9);
+      }
+    }
+  });
+});
