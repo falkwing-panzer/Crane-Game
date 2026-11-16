@@ -431,6 +431,10 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   equipo de cubierta y apoyo de pluma bajo la pluma tumbada y fuera del radio de cola; sin rotativo en la cabina del
   conductor; escape del chasis horizontal; poleas de la cabeza ≤ 0,45·alto + 3 cm; bastidor y cofres más estrechos si no
   caben entre llantas; cajones de estabilizadores recortados para no tocar los guardabarros.
+- **Tramos telescópicos** (aproximación visual): la referencia dibuja 3 tramos de `min − 1,2` m; con plumas largas
+  quedaban huecos entre tramos al extenderla (AT 220 a 64 m: casi 4 m). `teleN(T)` = los tramos necesarios para que
+  cada uno siga ≥ 1,5 m dentro del anterior: City 25, AT 60 y RT 90 4; AT 220 5; AT 300-6 y AT 450-8 6; AT 500-8 y
+  AT 650-8 3. El último tramo queda siempre al 61 % del grosor del base. AT 220 libre: 79 → 86 draw calls.
 - **Cilindro de elevación**: posiciones de la referencia (base en `front − 0,9`, al 45 % del tramo base). Con la pluma casi
   tumbada queda metido bajo la pluma (no hay altura entre placa y pluma con los `pivH` de la referencia). Aceptado.
 - **Gancho**: colisionador de Rapier escalado en ancho/fondo con `hookScale` (0,55·hb × 0,21·hb); el alto sigue fijo (±0,5 m).
