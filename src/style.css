@@ -206,3 +206,18 @@ kbd { display: inline-block; min-width: 1.1em; text-align: center; font: 600 12p
 .card button.ghost { background: #3a424b; color: #f2f4f6; margin-left: 8px; }
 .card button[hidden] { display: none; }
 .data.other.pip { bottom: 290px; }
+
+/* Fase 22: suavidad, estadísticas y logros */
+.medal { margin-left: 6px; letter-spacing: 0; font-size: 0.95em; }
+.smooth { display: flex; align-items: baseline; gap: 12px; margin: 4px 0 2px; font-size: 1.1em; }
+.dim { color: #aab3bc; }
+.ach-group { margin: 6px 0 10px; }
+.ach-group > small { color: #aab3bc; text-transform: uppercase; letter-spacing: 0.06em; font-size: 11px; }
+.achs { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px; margin-top: 4px; }
+.ach { padding: 6px 8px; border-radius: 6px; background: rgba(255, 255, 255, 0.04); opacity: 0.55; display: flex; flex-direction: column; gap: 2px; }
+.ach.got { opacity: 1; background: rgba(240, 187, 39, 0.14); }
+.ach small { color: #aab3bc; }
+.ach-toast { position: fixed; top: 120px; left: 50%; transform: translateX(-50%); z-index: 40; pointer-events: none;
+  background: rgba(20, 24, 28, 0.92); border: 1px solid #f0bb27; border-radius: 8px; padding: 8px 16px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px; color: #f2f4f6; }
+.ach-toast small { color: #aab3bc; }

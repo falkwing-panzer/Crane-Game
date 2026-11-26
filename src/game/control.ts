@@ -12,6 +12,7 @@ import { stepSuperlift } from '../crane/superlift';
 import { cableAngle } from '../levels/tandemSetup';
 import type { Session, Unit } from './session';
 import { t } from '../i18n';
+import { smoothRest, smoothStep } from './smooth';
 
 /** Mandos sueltos: la grúa que no se maneja se queda quieta */
 export const IDLE: CraneInput = { slew: 0, luff: 0, tele: 0, hoist: 0, fine: false, sl: 0, jib: 0 };
@@ -124,7 +125,17 @@ export function afterUnit(ses: Session, u: Unit, dt: number) {
   // Estabilidad con la tensión real del cable: un balanceo o un tirón también cuentan.
   const md = supportMode(S, T);
   u.dyn = dynamicStability(T, C, S, md, phys.tension, worldToCarrier(S, phys.gp));
-  if (ses.hanging(u)) trackLift(ses, u); // LMI máximo con la carga colgada (maxLmi de la referencia) e izaje más exigente
+  if (ses.hanging(u)) {
+    trackLift(ses, u); // LMI máximo con la carga colgada (maxLmi de la referencia) e izaje más exigente
+    // suavidad (fase 22): balanceo, tirones y frenazos de la carga colgada (en el tándem, la grúa que se maneja)
+    if (u === ses.act) {
+      const v = phys.attached!.body.linvel();
+      smoothStep(ses.run, dt, {
+        swing: u.sideAng, tension: phys.tension,
+        static: phys.attached!.lugs ? 0 : T.hookM + ses.loadOnHook(u), vx: v.x, vz: v.z,
+      });
+    }
+  } else if (u === ses.act) smoothRest(ses.run);
   if (stepTilt(S, u.dyn, dt)) {
     const { p, axis } = edgeAxis(T, md, S.edge);
     const f = carrierFrame(S); // la arista viene en el marco del chasis

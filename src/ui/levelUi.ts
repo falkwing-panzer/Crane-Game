@@ -1,6 +1,9 @@
 import { CRANES, type CraneId } from '../crane/cranes';
 import type { Level } from '../levels/levels';
 import { ALL_LEVELS as LEVELS } from '../levels/tandemSetup';
+import { medalHtml, progressHtml, smoothHtml } from './progressView';
+import { loadSmooth } from './progress';
+import type { SmoothScore } from '../game/smooth';
 import { stickyParams } from './settings';
 import { t } from '../i18n';
 import { withKeys } from './keys';
@@ -137,15 +140,25 @@ export class LevelUi {
 
   /** Menú: los 13 niveles de la referencia y el de tándem (fase 10) con su tipo y sus estrellas, más las pruebas libres */
   menu() {
-    const rec = loadRecords();
+    const rec = loadRecords(), sm = loadSmooth();
     this.show(`<div class="eyebrow">${tl.eyebrow}</div>${schoolMenu()}<h2>${tl.choose}</h2>
       <div class="levels">${LEVELS.map((L, i) => {
         const r = rec[i];
         return `<a class="lvl" href="${levelUrl(i + 1)}"><small>${i + 1} · ${L.type}</small><b>${L.name}</b>
-          <span class="stars">${starText(r?.stars ?? 0)}</span><small>${r ? tl.record(fmt(r.time)) : tl.par(fmt(L.par))}</small></a>`;
+          <span class="stars">${starText(r?.stars ?? 0)}${medalHtml(sm[i])}</span><small>${r ? tl.record(fmt(r.time)) : tl.par(fmt(L.par))}</small></a>`;
       }).join('')}
       <a class="lvl free" href="${levelUrl(0)}"><small>${tl.noGoal}</small><b>${tl.free}</b><small>${tl.freeText}</small></a>
-      <a class="lvl free" href="${homeUrl({ tandem: '1' })}"><small>${tl.noGoal}</small><b>${tl.freeTandem}</b><small>${tl.freeTandemText}</small></a></div>`);
+      <a class="lvl free" href="${homeUrl({ tandem: '1' })}"><small>${tl.noGoal}</small><b>${tl.freeTandem}</b><small>${tl.freeTandemText}</small></a></div>
+      <div class="row"><button class="btn" id="l-progress">${t.progress.menuBtn}</button></div>`);
+    this.card.querySelector<HTMLButtonElement>('#l-progress')!.onclick = () => this.progress();
+  }
+
+  /** Estadísticas y logros (fase 22); Volver, al menú */
+  progress() {
+    this.show(progressHtml());
+    const b = this.card.querySelector<HTMLButtonElement>('#p-back')!;
+    b.onclick = () => this.menu();
+    b.focus({ preventScroll: true });
   }
 
   /**
@@ -203,12 +216,13 @@ export class LevelUi {
   }
 
   /** Nivel completado (checkWin de la referencia) */
-  won(i: number, crane: string, res: { t: number; hard: number; bumps: number; prox: number; maxLmi: number } & Partial<LiftStats>, record: boolean) {
+  won(i: number, crane: string, res: { t: number; hard: number; bumps: number; prox: number; maxLmi: number } & Partial<LiftStats>, record: boolean,
+    smooth?: SmoothScore | null, smoothBest = false) {
     const L = LEVELS[i], n = stars(L, res), next = i + 1 < LEVELS.length;
     this.show(`<div class="eyebrow">${tl.won(i + 1, crane)}</div><h2 class="okh">${L.name}</h2>
       <div class="stars big">${starText(n)}</div>${record ? `<p class="rec">${tl.newRecord}</p>` : ''}
       <div class="stats"><span>${tl.time(fmt(L.par))}</span><b>${fmt(res.t)}</b><span>${tl.hard}</span><b>${res.hard}</b>
-      <span>${tl.bumps}</span><b>${res.bumps}</b><span>${tl.prox}</span><b>${res.prox}</b><span>${tl.maxLmi}</span><b>${Math.round(res.maxLmi * 100)} %</b></div>${liftHtml(res, !!L.tandem)}
+      <span>${tl.bumps}</span><b>${res.bumps}</b><span>${tl.prox}</span><b>${res.prox}</b><span>${tl.maxLmi}</span><b>${Math.round(res.maxLmi * 100)} %</b></div>${smoothHtml(smooth, smoothBest)}${liftHtml(res, !!L.tandem)}
       <div class="row"><a class="btn" href="${homeUrl()}">${tl.menuBtn}</a><a class="btn${next ? '' : ' primary'}" href="${levelUrl(i + 1)}">${tl.retry}</a>
       ${next ? `<a class="btn primary" id="l-next" href="${levelUrl(i + 2)}">${tl.next}</a>` : ''}</div>
       ${next ? '' : `<p>${tl.last}</p>`}`);

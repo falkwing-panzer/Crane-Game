@@ -58,8 +58,11 @@ export interface GameEvents {
   tipping: { unit: number };
   /** Ya cayó: sale el cartel (en un nivel, nivel fallido) */
   tipped: { unit: number; text: string };
-  /** Fin del nivel; stars y record solo con victoria */
-  end: { fail: Failure; stars?: number; record?: boolean };
+  /**
+   * Fin del nivel; stars y record solo con victoria. Fase 22: la suavidad del turno (null si casi no se colgó nada) y
+   * si mejoró la mejor del nivel.
+   */
+  end: { fail: Failure; stars?: number; record?: boolean; smooth?: SmoothScore | null; smoothBest?: boolean };
   /** Grúas reiniciadas (botón Reiniciar) */
   restart: Record<string, never>;
   /** Tab (tándem): ahora se maneja esta grúa (fase 15: la acción entra en un paso de la simulación) */
@@ -68,6 +71,10 @@ export interface GameEvents {
   restored: Record<string, never>;
   /** Escuela (fase 19): se terminó la lección n */
   lessonDone: { n: number };
+  /** Logro conseguido (fase 22) */
+  achievement: { id: string };
 }
+
+import type { SmoothScore } from './smooth';
 
 export type GameBus = Bus<GameEvents>;

@@ -9,6 +9,8 @@ import type { Cmd, StepInput } from '../game/record';
 import { allModels } from '../render/models/allModels';
 import { LESSONS, RING_R } from './lessons';
 import { t } from '../i18n';
+import { StatsTracker } from '../game/stats';
+import { smoothScore } from '../game/smooth';
 import { ACTIONS, withKeys } from '../ui/keys';
 import type { CraneInput } from '../crane/kinematics';
 
@@ -38,6 +40,8 @@ function play(n: number, policy: Policy, maxS = 240) {
   let done = false;
   ses.bus.on('lessonDone', () => { done = true; });
   ses.running = true;
+  // estadísticas (fase 22): el contador del juego no cuenta con un guion; este sí, para probarlo con un izaje de verdad
+  const stats = new StatsTracker(ses, () => true);
   const steps: number[] = [];
   game.source = {
     next(): StepInput {
@@ -49,11 +53,12 @@ function play(n: number, policy: Policy, maxS = 240) {
   for (; i < maxS / FIXED_DT && !done; i++) {
     const s0 = ses.sch!.step;
     game.tick(FIXED_DT);
+    stats.step(FIXED_DT);
     if (ses.sch!.step !== s0) steps.push(+(i * FIXED_DT).toFixed(1));
     if (ses.tipped()) throw new Error(`lección ${n}: la grúa volcó en el paso ${ses.sch!.step}`);
   }
   if (!done) throw new Error(`lección ${n}: no terminó; paso ${ses.sch!.step}, mensajes: ${msgs.slice(-6).join(' | ')}`);
-  return { s: i * FIXED_DT, steps, ses, msgs };
+  return { s: i * FIXED_DT, steps, ses, msgs, stats, game };
 }
 
 /** Conducir hasta (x, z) y parar allí */
@@ -166,6 +171,12 @@ describe('escuela de operadores (fase 19)', () => {
       return { cmds: ++c.n % 20 === 0 ? ['hook'] : [] };
     });
     expect(r.steps.length).toBe(4);
+    // fase 22: un izaje del palé de 2 t, sin golpes, y su nota de suavidad
+    expect(r.stats.st).toMatchObject({ lifts: 1, tons: 2, clean: 1, bumps: 0 });
+    expect(r.game.stats.st.lifts).toBe(0); // el del juego, con el guion, no cuenta
+    const sm = smoothScore(r.ses.run)!;
+    expect(sm.score).toBeGreaterThan(50);
+    expect(sm.swing).toBeGreaterThan(0.2);
   }, 60_000);
 
   it('lección 5: el LMI avisa al 90 % y corta al 100 %; después se deja más cerca', () => {

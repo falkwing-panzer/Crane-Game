@@ -21,6 +21,7 @@ import type { Level } from '../levels/levels';
 import { LESSONS, SCHOOL_CRANE, newSchool, type Lesson, type SchoolState } from '../school/lessons';
 import { Bus, type GameEvents } from './events';
 import { t } from '../i18n';
+import { newSmooth, type SmoothRun } from './smooth';
 
 /** Grúas del menú: las de ruedas (fase 4), la grúa torre sobre camión (fase 8) y las de orugas (fase 6) */
 export const MENU_IDS: CraneId[] = [...TRUCK_IDS, 'crawler', 'lr'];
@@ -60,7 +61,8 @@ export interface Unit {
  * carga colgada. (parte B) bumpCd: espera entre golpes; lineD: margen a la línea eléctrica más cercana; inProx: dentro
  * de la alarma; wind: viento actual (m/s).
  */
-export interface Run {
+/** Turno; fase 22: con la suavidad (`SmoothRun`) */
+export interface Run extends SmoothRun {
   t: number; done: boolean; hard: number; bumps: number; prox: number; maxLmi: number;
   bumpCd: number; lineD: number; inProx: boolean; wind: number;
   /**
@@ -73,7 +75,7 @@ export interface Run {
 }
 
 export const newRun = (): Run => ({ t: 0, done: false, hard: 0, bumps: 0, prox: 0, maxLmi: 0, bumpCd: 0, lineD: Infinity, inProx: false, wind: 0,
-  peakLabel: '', peakMass: 0, peakR: 0, peakCrane: '', maxR: 0, maxRLabel: '', heavy: 0, heavyLabel: '' });
+  peakLabel: '', peakMass: 0, peakR: 0, peakCrane: '', maxR: 0, maxRLabel: '', heavy: 0, heavyLabel: '', ...newSmooth() });
 
 /** Qué se juega, sacado de la URL */
 export interface SessionDef {

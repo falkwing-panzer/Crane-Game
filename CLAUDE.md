@@ -229,6 +229,11 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   `render/hookCam.test.ts`, `game/replay.test.ts`, `crane/loadChart.test.ts` (radio máximo), `ui/settings.test.ts` y
   un caso nuevo en `e2e/juego.e2e.ts` (35).
 
+- **Fase 22, parte A** (plan aprobado por Jesús en 3 partes: A = suavidad, estadísticas y logros; B = reto diario;
+  C = licencias): nota de suavidad por turno con medalla aparte (oro, plata, bronce) en el cartel de nivel completado
+  y en el menú; estadísticas y 27 logros guardados, con aviso al conseguirlos y pantalla "Estadísticas y logros" desde
+  el menú. Pruebas en `game/progress.test.ts` y `school/lessons.test.ts` (lección 4: un izaje real contado).
+
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
   `CraneSpec`, `AT60` (= `CRANES.medium`, tipada `WheeledSpec` para el modelo 3D de la fase 0), `CrawlerSpec`/`isCrawler`.
@@ -406,6 +411,13 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   `Settings`: `recuadro`, `vibracion`, `ayudas`, `experto`, `hud` (`HUD_SIZES`); `--hud-scale` en la raíz de la
   partida (CSS `zoom` en `.panel` y `.msg`). Textos en `t.options`, `t.cab`, `t.replay`, `t.camera.gancho`,
   `t.hud.lmiState`/`lmiIcon`.
+- Fase 22: `game/smooth.ts` (sin three.js ni Rapier: `SmoothRun` = campos `sm*` planos en `Run`, `smoothStep`
+  desde `afterUnit` con la carga colgada de la grúa que se maneja, `smoothRest`, `smoothScore`, `SMOOTH` con los
+  umbrales, `medalFor`), `game/stats.ts` (`StatsTracker` en `GameStep.stats`: cuenta por el bus y por paso; `flush`),
+  `game/achievements.ts` (`ACHIEVEMENTS`, `AchEvent`, `newAchievements`, `familyOf`), `ui/progress.ts`
+  (almacenamiento: `gruas-estadisticas`, `gruas-logros`, `gruas-suavidad`; `hasStorage`), `ui/progressView.ts`
+  (`smoothHtml`, `medalHtml`, `progressHtml`, `AchievementToast`). Eventos nuevos: `achievement`; `end` lleva `smooth`
+  y `smoothBest`. `LevelUi.progress()`, `won(…, smooth, smoothBest)`. Textos en `t.progress`.
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
   cut…, de la grúa que se maneja; `units`, todas) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
   dibuja cuadros; así se puede probar desde la consola).
@@ -905,6 +917,23 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - **Estado del LMI con forma y texto (fase 21)**: ● normal, ▲ cerca del límite (≥ 90 %), ■ sobrecarga (≥ 100 %), con el
   texto debajo de la barra, en el panel de la otra grúa y en la pantalla de la cabina.
 
+- **Suavidad (fase 22)**: medalla **aparte** de las estrellas (decidido con Jesús): `gruas-records` no cambia y los
+  récords de la 1.0 siguen igual. Se mide solo con carga colgada (y 0,25 s después de despegar): balanceo = ángulo
+  del cable con la vertical (media en el tiempo), tirón = peor tensión/estática − 1 (la tensión ya va filtrada 0,3 s;
+  en el tándem no se mide, porque la parte de cada grúa sale de la misma tensión), frenazos = aceleración horizontal
+  de la carga con la velocidad filtrada 0,1 s (media). Nota = 100 − 6·(balanceo − 1,5°) − 1,2·(tirón − 6 %) −
+  4·(frenazos − 0,15 m/s², en décimas); sin nota con menos de 5 s colgada. Oro ≥ 85, plata ≥ 70, bronce ≥ 50.
+  **Umbrales provisionales**, sacados de los alumnos de guion: lección 4 a fondo 75 (balanceo 1,5°, tirón 23 %,
+  0,26 m/s²), lección 5 a fondo 52 (2,3°, 34 %, 0,40), lección 6 con Shift 88 (1,9°, 11 %, 0,22). Se fijarán con
+  partidas de Jesús. Va en el turno (las instantáneas lo copian; no toca la simulación).
+- **Estadísticas y logros (fase 22)**: cuentan lo que hizo el jugador de verdad: van fuera de las instantáneas, así
+  que rebobinar o reiniciar no resta. Con un guion (`GameStep.source`: banco, pruebas) no cuentan. Se guardan al
+  terminar el turno, cada 30 s, al desmontar la partida y al esconder o cerrar la pestaña. Izaje = la carga cuelga y
+  después deja de colgar; cuenta la mayor masa mientras colgó (tándem: la parte de esa grúa); racha sin golpe = izajes
+  seguidos sin golpe (de la carga o del chasis, plumín o torre) mientras colgaba. Horas por grúa: la que se maneja.
+  Con dos pestañas abiertas gana la última que guarda. Logros (27, lista aprobada en el plan con pocos cambios): se
+  miran al terminar un izaje, al ganar un nivel, al volcar, al terminar una lección y cada 5 s.
+
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
   grúas grandes (fases 4–6): cabeza cinemática, izado a velocidad plena, estiramiento máximo del cable.
@@ -1034,6 +1063,8 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   +0,3 ms (1,0–1,7). El tiempo de GPU del banco no vale con el recuadro (el temporizador sale en 2,3–2,7 ms, menos
   que sin él: no mide bien con el pase a la textura). La pantalla de la cabina suma 2 draw calls; las ayudas, 4.
 
+- Fase 22 parte A: sin cambios en draw calls (todo es DOM). Bundle sin medir.
+
 ### Pendientes
 - Rapier: si una versión nueva da las fuerzas de las juntas, cambiar la tensión medida por la real (comparando antes).
 - Posible mejora de carga: el `.wasm` empieza a bajar cuando ya llegó `app.js` (no se puede precargar desde
@@ -1096,4 +1127,8 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - Fase 21: la vibración no se probó con un mando de verdad; Jesús no ha visto la cámara del gancho, el recuadro, la
   pantalla de la cabina ni la repetición en la laptop. La repetición de los fallos del tándem muestra la grúa que se
   manejaba (la cámara gira alrededor de ella).
+- Fase 22: fijar los umbrales de la suavidad con partidas de Jesús (el cartel de nivel completado muestra la nota
+  y las tres medidas). La parte B (reto diario) y la C (licencias) están pendientes; plan en la conversación de la
+  fase: licencias por familia (`familyOf`), niveles bloqueados si ninguna grúa permitida tiene licencia, opción
+  "Todo desbloqueado", y a quien ya tiene récords, las licencias de las familias con las que terminó algún nivel.
 - Vite avisaría que `app.js` pasa de 500 kB (three.js y el juego, ~780 kB): `chunkSizeWarningLimit` = 1200.

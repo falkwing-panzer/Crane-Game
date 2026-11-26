@@ -93,6 +93,9 @@ export class App {
       void this.go(u.search);
     });
     addEventListener('popstate', () => { void this.open(location.search); });
+    // estadísticas (fase 22): lo que queda sin guardar, al cerrar o esconder la pestaña
+    addEventListener('pagehide', () => this.cur?.game.stats.flush());
+    document.addEventListener('visibilitychange', () => { if (document.hidden) this.cur?.game.stats.flush(); });
   }
 
   private draw(dt: number, physMs: number) {

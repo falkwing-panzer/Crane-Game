@@ -9,6 +9,7 @@ import { runCommand } from './commands';
 import { Recording, type Cmd, type InputSource, type StepInput } from './record';
 import { Interp } from './interp';
 import { ReplayBuffer } from './replay';
+import { StatsTracker } from './stats';
 import { newRun, type Run, type Session } from './session';
 import type { CraneConfig } from '../crane/stability';
 import type { CraneState } from '../crane/kinematics';
@@ -68,6 +69,8 @@ export class GameStep {
   readonly interp = new Interp();
   /** Los últimos 8 s de lo que se dibuja, para la repetición del fallo (fase 21) */
   readonly replay = new ReplayBuffer();
+  /** Estadísticas y logros (fase 22): fuera de las instantáneas; no cuentan con un guion */
+  readonly stats: StatsTracker;
   private queue: Cmd[] = [];
   /** Estado inicial (reiniciar) y anillo de instantáneas para rebobinar */
   private start: GameSnap | null = null;
@@ -76,6 +79,7 @@ export class GameStep {
   constructor(private ses: Session, private controls: Controls) {
     this.rules = ses.L ? new LevelRules(ses, ses.L) : ses.lesson ? new SchoolRules(ses, ses.lesson) : null;
     this.interp.reset(ses.units);
+    this.stats = new StatsTracker(ses, () => !this.source);
   }
 
   /** Acción de un toque: entra en el paso siguiente (si el turno no corre, se pierde) */
@@ -84,7 +88,10 @@ export class GameStep {
   tick(dt: number) {
     this.inner(dt);
     this.interp.capture(this.ses.units);
-    if (this.ses.running) this.replay.capture(this.ses.units);
+    if (this.ses.running) {
+      this.replay.capture(this.ses.units);
+      this.stats.step(dt);
+    }
   }
 
   private inner(dt: number) {
@@ -212,5 +219,5 @@ export class GameStep {
     return back;
   }
 
-  dispose() { this.rules?.dispose(); }
+  dispose() { this.rules?.dispose(); this.stats.dispose(); }
 }

@@ -36,6 +36,7 @@ import { Replay } from '../game/replay';
 import { maxReachContour } from '../crane/loadChart';
 import type { HookAnchor } from '../render/camera';
 import { t } from '../i18n';
+import { AchievementToast } from './progressView';
 
 const MODE_TEXT = t.hud.modes;
 const m = t.msg;
@@ -90,6 +91,8 @@ export class Presenter {
   private lastReplay: Replay | null = null;
   /** Fallo del nivel (para volver a poner su cartel después de ver la repetición otra vez) */
   private lastEnd: { title: string; text: string } | null = null;
+  /** Aviso de logro conseguido (fase 22) */
+  private toast: AchievementToast;
   private replayBar: HTMLElement;
   private size: number;
   private readonly off: (() => void)[] = [];
@@ -150,6 +153,7 @@ export class Presenter {
     };
     hud.onCrane = (k) => go(levelUrl(0, k));
     this.chart = new ChartPanel(root);
+    this.toast = new AchievementToast(root);
     // fase 21
     this.size = camSize(specs);
     this.pip = new HookPip(root, t.options.pipTitle);
@@ -216,8 +220,9 @@ export class Presenter {
         if (e.fail) {
           const f = this.lastEnd = e.fail;
           this.startReplay(() => lui.failed(def.li, ses.act.T.name, f.title, f.text, ses.run, this.lastReplay ? () => this.replayAgain() : undefined));
-        } else lui.won(def.li, ses.act.T.name, ses.run, !!e.record);
+        } else lui.won(def.li, ses.act.T.name, ses.run, !!e.record, e.smooth, !!e.smoothBest);
       }),
+      bus.on('achievement', (e) => this.toast.push(e.id)),
       bus.on('restart', () => hud.showTipped(null)),
       bus.on('restored', () => hud.showTipped(null)),
       // Tab en el tándem (fase 15: llega desde el paso de la simulación)
@@ -552,5 +557,6 @@ export class Presenter {
     this.cabScreen.dispose();
     this.aids.dispose();
     this.pip.dispose();
+    this.toast.dispose();
   }
 }

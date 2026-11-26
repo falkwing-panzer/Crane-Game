@@ -7,6 +7,8 @@ import { HARD_LANDING, LANDING_MIN, LINE_WARN, lineMargin, windArea, windForce }
 import type { Level } from '../levels/levels';
 import { saveRecord, stars } from '../ui/levelUi';
 import type { Failure } from './events';
+import { smoothScore } from './smooth';
+import { saveSmooth } from '../ui/progress';
 import type { Session } from './session';
 
 import { t } from '../i18n';
@@ -58,7 +60,10 @@ export class LevelRules {
     ses.running = false;
     if (fail) { ses.bus.emit('end', { fail }); return; }
     const n = stars(L, run);
-    ses.bus.emit('end', { fail: null, stars: n, record: saveRecord(ses.def.li, n, run.t) });
+    // suavidad (fase 22): medalla aparte, en su propia clave; las estrellas y los récords no cambian
+    const sm = smoothScore(run);
+    const smoothBest = !!sm && saveSmooth(ses.def.li, sm.score);
+    ses.bus.emit('end', { fail: null, stars: n, record: saveRecord(ses.def.li, n, run.t), smooth: sm, smoothBest });
   }
 
   /** Golpe (strike de la referencia): cuenta para las estrellas, uno por segundo como mucho */
