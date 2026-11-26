@@ -18,7 +18,7 @@ import { Physics } from '../physics/world';
 import { levelBounds, placeCrane, populate } from '../levels/setup';
 import { ALL_LEVELS as LEVELS, TANDEM_IDS, TEST_COLUMN, placeTandem, tandemColumn } from '../levels/tandemSetup';
 import type { Level } from '../levels/levels';
-import { LESSONS, SCHOOL_CRANE, newSchool, type Lesson, type SchoolState } from '../school/lessons';
+import { SCHOOL_CRANE, lessonByN, newSchool, type Lesson, type SchoolState } from '../school/lessons';
 import { Bus, type GameEvents } from './events';
 import { t } from '../i18n';
 import { newSmooth, type SmoothRun } from './smooth';
@@ -139,7 +139,7 @@ export function sessionDef(search: string): SessionDef {
   const params = new URLSearchParams(search);
   const nivel = Number(params.get('nivel')) || 0;
   const sn = Number(params.get('escuela')) || 0;
-  const school = !nivel && sn >= 1 && sn <= LESSONS.length ? sn : 0;
+  const school = !nivel && lessonByN(sn) ? sn : 0;
   const li = nivel >= 1 && nivel <= LEVELS.length ? nivel - 1 : -1;
   let job: Job | null = null;
   if (li < 0 && !school) for (const f of jobSources) if ((job = f(params))) break;
@@ -149,7 +149,7 @@ export function sessionDef(search: string): SessionDef {
   const showMenu = !L && !freeTandem && !school && !params.has('grua') && !params.has('libre');
   const q = params.get('grua') as CraneId | null;
   const ids: CraneId[] = L?.tandem ? [L.tandem.main.id, L.tandem.tail.id] : freeTandem ? [...TANDEM_IDS]
-    : school ? [SCHOOL_CRANE]
+    : school ? [lessonByN(school)!.crane ?? SCHOOL_CRANE]
     : [L ? (q && L.cranes.includes(q) ? q : L.rec) : q && MENU_IDS.includes(q) ? q : 'medium'];
   return { nivel, li, L, freeTandem, tandem, showMenu, school, ids, job };
 }
@@ -192,7 +192,7 @@ export class Session {
   constructor(def: SessionDef, scene: THREE.Scene, makeModel: ModelFactory) {
     this.def = def;
     const L = (this.L = def.L);
-    const lesson = (this.lesson = def.school ? LESSONS[def.school - 1] : null);
+    const lesson = (this.lesson = def.school ? lessonByN(def.school) : null);
     const site = (this.site = L ?? lesson?.site ?? null);
     this.sch = lesson ? newSchool() : null;
     // Estado de cada grúa y su colocación

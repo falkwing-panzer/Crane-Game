@@ -364,6 +364,39 @@ export const es = {
           'Suelta el gancho con {hook}.',
         ],
       },
+      {
+        title: 'Examen: licencia de ruedas',
+        intro: 'Con la AT 60: apoya la grúa en los estabilizadores y haz un izaje completo de 6 t de un lado al otro. Si la grúa vuelca, empieza otra vez.',
+        steps: [
+          'Saca los estabilizadores con {outriggers}.',
+          'Gira hasta la carga, baja el gancho y engánchala con {hook}.',
+          'Iza la carga 2 m.',
+          'Gira hasta la zona y apóyala dentro, despacio (con {fine} si hace falta).',
+          'Suelta el gancho con {hook}.',
+        ],
+      },
+      {
+        title: 'Examen: licencia de orugas',
+        intro: 'Con la LR 300: las orugas no tienen estabilizadores y la pluma de celosía no telescopa. Un izaje de 12 t girando la superestructura.',
+        steps: [
+          'Gira hasta la carga, baja el gancho y engánchala con {hook}.',
+          'Iza la carga 2 m.',
+          'Gira hasta la zona y apóyala dentro, despacio (con {fine} si hace falta).',
+          'Suelta el gancho con {hook}.',
+        ],
+      },
+      {
+        title: 'Examen: licencia de torre',
+        intro: 'Con la SK 60: apoya el camión, monta la torre con {mount} (unos 45 s) y lleva 1,5 t con el carro. El carro se mueve con {to} y {ti}.',
+        steps: [
+          'Saca los estabilizadores con {outriggers}.',
+          'Monta la torre con {mount} y espera a que termine.',
+          'Saca el carro con {to}, gira hasta la carga, baja el gancho y engánchala con {hook}.',
+          'Iza la carga 2 m.',
+          'Gira hasta la zona y apóyala dentro, despacio (con {fine} si hace falta).',
+          'Suelta el gancho con {hook}.',
+        ],
+      },
     ],
   },
 
@@ -386,6 +419,8 @@ export const es = {
     aidsNote: 'plomada del gancho, marca de la carga en el suelo, radio actual y radio máximo con la carga colgada',
     expert: 'Modo experto',
     expertNote: 'sin porcentaje del LMI ni capacidad en el HUD, solo las alarmas; sin ayudas',
+    unlock: 'Todo desbloqueado',
+    unlockNote: 'todos los niveles y grúas sin licencias de operador',
     hud: 'Tamaño del HUD',
     close: 'Cerrar',
     pipTitle: 'Gancho',
@@ -569,6 +604,25 @@ export const es = {
     steadyTie: 'Estabiliza el gancho antes de amarrarlo',
     tiedUp: 'Gancho amarrado al frente (posición de transporte) · {hook} para soltarlo',
   },
+  /** Licencias de operador (fase 22) */
+  license: {
+    menuHead: 'Licencias de operador',
+    menuText: 'Cada familia de grúas pide su licencia: un examen corto. La escuela completa da la de ruedas; la de tándem llega con ruedas, orugas y el nivel 13.',
+    names: { ruedas: 'Ruedas', orugas: 'Orugas', torre: 'Torre', tandem: 'Tándem' } as Record<string, string>,
+    exam: (f: string) => `Examen de ${f.toLowerCase()}`,
+    has: '✓ con licencia',
+    none: 'sin licencia',
+    tandemHow: 'ruedas + orugas + nivel 13',
+    locked: (f: string) => `🔒 Licencia de ${f.toLowerCase()}`,
+    noLicense: (f: string) => `Sin licencia de ${f.toLowerCase()}`,
+    lockedTitle: 'Nivel bloqueado',
+    lockedText: (f: string) => `Para este trabajo hace falta la licencia de ${f.toLowerCase()}. Puedes sacarla en la escuela, o abrir todo en Opciones (Todo desbloqueado).`,
+    goExam: 'Ir al examen',
+    got: (f: string) => `Licencia de ${f.toLowerCase()} conseguida`,
+    examHead: (f: string) => `Examen de licencia · ${f.toLowerCase()}`,
+    passed: (f: string) => `Licencia de ${f.toLowerCase()} conseguida`,
+  },
+
   /** Reto diario (fase 22) */
   daily: {
     head: (date: string) => `Reto del ${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}`,

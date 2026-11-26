@@ -17,7 +17,8 @@ import { CARD_DELAY } from '../game/control';
 import { MENU_IDS, type Session, type Unit } from '../game/session';
 import { Hud } from './hud';
 import { Help } from './help';
-import { LevelUi, homeUrl, levelUrl } from './levelUi';
+import { LevelUi, examUrl, homeUrl, levelUrl, loadRecords } from './levelUi';
+import { grant, missingFor, craneOk, type Family } from '../game/licenses';
 import type { Sound } from './audio';
 import { bootDone } from './boot';
 import { clearSave, loadSave } from './savegame';
@@ -25,7 +26,7 @@ import { readFrame, type Frame } from '../game/interp';
 import { saveSettings, showFps, QUALITIES, type Quality, type Settings } from './settings';
 import type { Input } from './input';
 import { RingsView } from '../render/ringsView';
-import { SchoolPanel, introHtml, markSchool, passedHtml } from './schoolUi';
+import { SchoolPanel, introHtml, loadSchool, markSchool, passedHtml } from './schoolUi';
 import { ChartPanel } from './chartPanel';
 import { HookPip } from '../render/hookPip';
 import { CAB_LAYER, CabScreen } from '../render/cabScreen';
@@ -192,7 +193,17 @@ export class Presenter {
       rain.addEventListener('change', () => { this.setRain(rain.checked); rain.blur(); });
     }
     lui.job = def.job;
+    lui.unlockAll = settings.desbloquear;
     if (def.showMenu) lui.menu();
+    else if (L && !lui.open_(L)) {
+      // fase 22: sin la licencia de la familia, el nivel está cerrado (se llega con la URL a mano)
+      const f = t.license.names[missingFor(L)];
+      lui.show(`<div class="eyebrow">${L.name}</div><h2>${t.license.lockedTitle}</h2><p>${t.license.lockedText(f)}</p>
+        <div class="row"><a class="btn" href="${homeUrl()}">${t.levels.menuBtn}</a><a class="btn primary" href="${examUrl(missingFor(L))}">${t.license.goExam}</a></div>`);
+    } else if (L && !L.tandem && !craneOk(def.ids[0], lui.lic(), lui.unlockAll) && L.cranes.some((id) => craneOk(id, lui.lic(), false))) {
+      // la grúa pedida (o la recomendada) no tiene licencia, pero otra permitida sí: esa
+      go(lui.url(def.li, L.cranes.find((id) => craneOk(id, lui.lic(), false))));
+    }
     else if (ses.lesson) this.school = this.setupSchool(root);
     else if (L) {
       // partida guardada de este nivel (fase 15): Continuar la monta con su grúa y sigue donde quedó
@@ -221,7 +232,10 @@ export class Presenter {
         if (e.fail) {
           const f = this.lastEnd = e.fail;
           this.startReplay(() => lui.failed(def.li, ses.act.T.name, f.title, f.text, ses.run, this.lastReplay ? () => this.replayAgain() : undefined));
-        } else lui.won(def.li, ses.act.T.name, ses.run, !!e.record, e.smooth, !!e.smoothBest);
+        } else {
+          lui.won(def.li, ses.act.T.name, ses.run, !!e.record, e.smooth, !!e.smoothBest);
+          this.licensed(null); // el nivel 13 puede completar la de tándem
+        }
       }),
       bus.on('achievement', (e) => this.toast.push(e.id)),
       bus.on('restart', () => hud.showTipped(null)),
@@ -260,7 +274,8 @@ export class Presenter {
     start.addEventListener('click', () => { lui.close(); ses.running = true; start.blur(); });
     start.focus({ preventScroll: true });
     this.off.push(ses.bus.on('lessonDone', (e) => {
-      markSchool(e.n);
+      if (!lesson.license) markSchool(e.n);
+      this.licensed(lesson.license ?? null);
       lui.show(passedHtml(lesson, levelUrl(1)));
       lui.card.querySelector<HTMLElement>('#s-next')?.focus({ preventScroll: true });
     }));
@@ -284,7 +299,16 @@ export class Presenter {
   private settings: Settings;
 
   /** Opciones (fase 21): recuadro, modo experto y tamaño del HUD; las ayudas y la vibración se leen cada cuadro */
+  /** Da la licencia del examen (o mira si lo hecho ya da alguna) y lo avisa (fase 22) */
+  private licensed(f: Family | null) {
+    for (const k of grant(this.lui.lic(), f, loadRecords(), loadSchool())) this.hud.say(t.license.got(t.license.names[k]), 4);
+  }
+
   private applyOptions(s: Settings, root: HTMLElement) {
+    if (this.lui && this.lui.unlockAll !== s.desbloquear) {
+      this.lui.unlockAll = s.desbloquear;
+      if (this.ses.def.showMenu && this.lui.open) this.lui.menu();
+    }
     this.pip.setOn(s.recuadro);
     this.hud.expert = s.experto;
     root.style.setProperty('--hud-scale', String(s.hud));

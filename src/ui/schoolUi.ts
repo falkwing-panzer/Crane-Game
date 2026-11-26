@@ -1,5 +1,7 @@
 import type { Lesson, SchoolState } from '../school/lessons';
-import { LESSONS } from '../school/lessons';
+import { EXAMS, LESSONS } from '../school/lessons';
+import { loadLicenses, type Family } from '../game/licenses';
+import { loadRecords } from './levelUi';
 import { stickyParams } from './settings';
 import { keyLabel, activeKeys, withKeys, type Action } from './keys';
 import { t } from '../i18n';
@@ -37,8 +39,21 @@ export function schoolMenu(): string {
   const done = new Set(loadSchool());
   return `<div class="eyebrow">${ts.menuHead}</div><p class="school-text">${ts.menuText}</p>
     <div class="levels school">${LESSONS.map((L) => `<a class="lvl${done.has(L.n) ? ' done' : ''}" href="${schoolUrl(L.n)}">` +
-      `<small>${ts.lessonN(L.n)}</small><b>${ts.lessons[L.n - 1].title}</b><small>${done.has(L.n) ? ts.doneMark : ts.todo}</small></a>`).join('')}</div>`;
+      `<small>${ts.lessonN(L.n)}</small><b>${ts.lessons[L.n - 1].title}</b><small>${done.has(L.n) ? ts.doneMark : ts.todo}</small></a>`).join('')}</div>
+    ${licenseMenu()}`;
 }
+
+/** Licencias en el menú (fase 22): un examen por familia y la de tándem */
+export function licenseMenu(): string {
+  const tl = t.license, lic = loadLicenses(loadRecords(), loadSchool());
+  const card = (f: Family, href: string | null, sub: string) => `<${href ? `a href="${href}"` : 'div'} class="lvl${lic[f] ? ' done' : ''}">` +
+    `<small>${tl.names[f]}</small><b>${href ? tl.exam(tl.names[f]) : tl.names[f]}</b><small>${lic[f] ? tl.has : sub}</small></${href ? 'a' : 'div'}>`;
+  return `<div class="eyebrow">${tl.menuHead}</div><p class="school-text">${tl.menuText}</p><div class="levels school">` +
+    EXAMS.map((e) => card(e.license!, schoolUrl(e.n), tl.none)).join('') + card('tandem', null, tl.tandemHow) + '</div>';
+}
+
+/** Cabecera de una lección o de un examen */
+const headOf = (lesson: Lesson) => (lesson.license ? t.license.examHead(t.license.names[lesson.license]) : ts.head(lesson.n, LESSONS.length));
 
 /** Teclas de un paso como chips (la tecla que tenga el jugador) */
 const chips = (keys: Action[]) => keys.map((a) => `<kbd>${keyLabel(activeKeys()[a])}</kbd>`).join('');
@@ -74,7 +89,7 @@ export class SchoolPanel {
     if (!visible) return;
     const i = Math.min(sch.step, n - 1);
     const dots = lesson.steps.map((_, k) => `<i class="${k < sch.step ? 'ok' : k === sch.step ? 'now' : ''}"></i>`).join('');
-    this.el.innerHTML = `<small>${ts.head(lesson.n, LESSONS.length)} · <b>${tx.title}</b><span class="wind"></span></small>` +
+    this.el.innerHTML = `<small>${headOf(lesson)} · <b>${tx.title}</b><span class="wind"></span></small>` +
       `<div class="dots">${dots}<small>${ts.stepOf(i + 1, n)}</small></div>` +
       `<p>${withKeys(tx.steps[i])}</p><div class="chips">${chips(lesson.steps[i].keys)}</div>`;
   }
@@ -83,15 +98,20 @@ export class SchoolPanel {
 /** Presentación de la lección (antes de empezar) */
 export function introHtml(lesson: Lesson): string {
   const tx = ts.lessons[lesson.n - 1];
-  return `<div class="eyebrow">${ts.head(lesson.n, LESSONS.length)}</div><h2>${tx.title}</h2><p>${withKeys(tx.intro)}</p>
+  return `<div class="eyebrow">${headOf(lesson)}</div><h2>${tx.title}</h2><p>${withKeys(tx.intro)}</p>
     <ol>${tx.steps.map((s) => `<li>${withKeys(s)}</li>`).join('')}</ol><p class="hint">${withKeys(ts.rewindTip)}</p>
     <div class="row"><a class="btn" href="${location.pathname}${menuQuery()}">${ts.menu}</a><button class="btn primary" id="s-start">${ts.start}</button></div>`;
 }
 
 /** Cartel de lección superada: siguiente lección o, al terminar la escuela, el nivel 1 */
 export function passedHtml(lesson: Lesson, level1: string): string {
+  if (lesson.license) {
+    const f = t.license.names[lesson.license];
+    return `<div class="eyebrow">${headOf(lesson)}</div><h2 class="okh">${t.license.passed(f)}</h2>
+      <div class="row"><a class="btn" href="${schoolUrl(lesson.n)}">${ts.repeat}</a><a class="btn primary" id="s-next" href="${location.pathname}${menuQuery()}">${ts.menu}</a></div>`;
+  }
   const last = lesson.n >= LESSONS.length;
-  return `<div class="eyebrow">${ts.head(lesson.n, LESSONS.length)}</div><h2 class="okh">${ts.passed(lesson.n)}</h2>
+  return `<div class="eyebrow">${headOf(lesson)}</div><h2 class="okh">${ts.passed(lesson.n)}</h2>
     ${last ? `<p>${ts.allDone}</p>` : ''}
     <div class="row"><a class="btn" href="${location.pathname}${menuQuery()}">${ts.menu}</a><a class="btn" href="${schoolUrl(lesson.n)}">${ts.repeat}</a>` +
     `<a class="btn primary" id="s-next" href="${last ? level1 : schoolUrl(lesson.n + 1)}">${last ? ts.level1 : ts.next}</a></div>`;

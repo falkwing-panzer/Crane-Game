@@ -5,8 +5,8 @@
 // Las posiciones de las cargas, zonas y aros salen de la cinemática de la grúa (headPos con su pose), así quedan
 // justo debajo de la cabeza o donde llega con un giro dado. Aproximación del juego: la referencia no tiene escuela.
 
-import { CRANES, type CraneSpec } from '../crane/cranes';
-import { headPos, initialState, type CraneState } from '../crane/kinematics';
+import { CRANES, type CraneId, type CraneSpec } from '../crane/cranes';
+import { headPos, initialState, tipPos, type CraneState } from '../crane/kinematics';
 import { baseConfig, type CraneConfig } from '../crane/stability';
 import { supportMode } from '../crane/ops';
 import { apply, carrierPose, type V3 } from '../crane/pose';
@@ -54,6 +54,9 @@ export interface Lesson {
   /** Estado inicial de la grúa (ya colocada en site.start) */
   setup(T: CraneSpec, S: CraneState, C: CraneConfig): void;
   steps: LessonStep[];
+  /** Exámenes de licencia (fase 22): la grúa del examen y la familia que da */
+  crane?: CraneId;
+  license?: 'ruedas' | 'orugas' | 'torre';
 }
 
 /** Grúa de la escuela */
@@ -226,6 +229,68 @@ function lesson6(T: CraneSpec): Lesson {
 
 const T60 = CRANES[SCHOOL_CRANE];
 export const LESSONS: Lesson[] = [lesson1(), lesson2(), lesson3(T60), lesson4(T60), lesson5(T60), lesson6(T60)];
+
+// --- exámenes de licencia (fase 22) ---
+// Cortos: lo que distingue a la familia y un izaje completo (enganchar, izar, girar, apoyar en la zona y soltar).
+// Aproximación del juego: masas y radios elegidos para quedar lejos del corte del LMI (la prueba lo comprueba).
+
+/** Izaje de examen: carga bajo la cabeza con el giro `from`, zona con el giro `to` (grados) */
+function examLift(T: CraneSpec, S: CraneState, L: Level, from: number, to: number, m: number, label: string, zw = 5) {
+  // donde cuelga el cable (en la grúa torre, el carro; en las demás, la cabeza)
+  const tip = (slew: number) => { const s = { ...S, slew: slew * D2R }; return apply(carrierPose(T, s, supportMode(s, T)), tipPos(T, s)); };
+  const p = tip(from), q = tip(to);
+  L.crates = [crate(p.x, p.z, 1.6, 1.6, 1.2, m, label, '#8d9196', 'block')];
+  L.zones = [zone(q, zw, zw)];
+  const z = L.zones[0];
+  return [
+    { keys: ['sll', 'slr', 'hd', 'hook'], done: (v: SchoolView) => v.attached === label },
+    { keys: ['hu'], done: (v: SchoolView) => liftedAbove(v, label, 2) },
+    { keys: ['sll', 'slr', 'hd', 'fine'], done: (v: SchoolView) => setDownIn(v, label, z) },
+    { keys: ['hook'], done: (v: SchoolView) => !v.attached && setDownIn(v, label, z) },
+  ] as LessonStep[];
+}
+
+/** Ruedas (AT 60): estabilizadores y un izaje de 6 t a un lado y al otro */
+function examWheels(): Lesson {
+  const T = CRANES.medium, ang = 50, Lb = 16;
+  const setup: Lesson['setup'] = (_T, S) => { S.ang = ang * D2R; S.Lb = Lb; S.slew = 0; S.cable = 6; };
+  const L = site({ x: 30, z: 30 });
+  const S = preview(T, L, setup);
+  S.out = 1;
+  const steps = examLift(T, S, L, 90, -90, 6, 'EXAMEN');
+  return { n: 7, site: L, rings: [], setup, crane: 'medium', license: 'ruedas',
+    steps: [{ keys: ['outriggers'], done: (v) => v.S.out >= 1 }, ...steps] };
+}
+
+/** Orugas (LR 300): sin estabilizadores; girar en el sitio y un izaje de 12 t con la pluma de celosía */
+function examCrawler(): Lesson {
+  const T = CRANES.crawler, ang = 62;
+  const setup: Lesson['setup'] = (_T, S) => { S.ang = ang * D2R; S.slew = 0; S.cable = Math.max(1, S.cable); };
+  const L = site({ x: 20, z: 28 });
+  const S = preview(T, L, setup);
+  const steps = examLift(T, S, L, 0, 120, 12, 'EXAMEN');
+  return { n: 8, site: L, rings: [], setup, crane: 'crawler', license: 'orugas', steps };
+}
+
+/** Torre (SK 60): estabilizadores, montaje (M) y un izaje de 1,5 t con el carro */
+function examTower(): Lesson {
+  const T = CRANES.sk;
+  const setup: Lesson['setup'] = () => {};
+  const L = site({ x: 20, z: 28 });
+  const S = preview(T, L, setup);
+  // montada, con el carro a 20 m (después de montar hay que sacarlo con el telescopio)
+  S.out = S.outT = 1; S.er = 1; S.erT = 1; S.Lb = 20;
+  // zona más grande: con 35 m de cable la carga tarda mucho en dejar de balancearse
+  const steps = examLift(T, S, L, 90, -90, 1.5, 'EXAMEN', 9);
+  steps[0].keys = ['to', 'ti', 'sll', 'slr', 'hd', 'hook'];
+  return { n: 9, site: L, rings: [], setup, crane: 'sk', license: 'torre',
+    steps: [{ keys: ['outriggers'], done: (v) => v.S.out >= 1 }, { keys: ['mount'], done: (v) => v.S.er >= 1 }, ...steps] };
+}
+
+/** Exámenes de licencia: van detrás de las lecciones (?escuela=7…9) */
+export const EXAMS: Lesson[] = [examWheels(), examCrawler(), examTower()];
+/** Lecciones y exámenes por número */
+export const lessonByN = (n: number) => [...LESSONS, ...EXAMS].find((l) => l.n === n) ?? null;
 
 /** Estado de la lección en la partida (va en las instantáneas: rebobinar lo devuelve atrás también) */
 export interface SchoolState {

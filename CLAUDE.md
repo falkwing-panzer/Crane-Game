@@ -233,6 +233,11 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   C = licencias): nota de suavidad por turno con medalla aparte (oro, plata, bronce) en el cartel de nivel completado
   y en el menú; estadísticas y 27 logros guardados, con aviso al conseguirlos y pantalla "Estadísticas y logros" desde
   el menú. Pruebas en `game/progress.test.ts` y `school/lessons.test.ts` (lección 4: un izaje real contado).
+- **Fase 22, partes B y C** (Jesús pidió hacer hasta la fase 25 sin esperar aprobaciones; se siguió el plan con lo
+  recomendado): reto diario (`?reto=AAAA-MM-DD`, obra generada con la fecha, récord aparte, enlace con el tiempo
+  `&t=`) y licencias de operador (exámenes en la escuela `?escuela=7…9`, niveles cerrados, "Todo desbloqueado" en
+  Opciones). Pruebas en `levels/generate.test.ts`, `game/licenses.test.ts` y `school/lessons.test.ts` (el alumno de
+  guion aprueba los tres exámenes).
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -418,6 +423,13 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   (almacenamiento: `gruas-estadisticas`, `gruas-logros`, `gruas-suavidad`; `hasStorage`), `ui/progressView.ts`
   (`smoothHtml`, `medalHtml`, `progressHtml`, `AchievementToast`). Eventos nuevos: `achievement`; `end` lleva `smooth`
   y `smoothBest`. `LevelUi.progress()`, `won(…, smooth, smoothBest)`. Textos en `t.progress`.
+- Fase 22 B/C: `levels/generate.ts` (`generateSite(semilla, opts)`, `doable`, `dailySite`, `hashSeed`, `todayUTC`,
+  `GEN_CRANES`), `Level.env`/`seed` (decorado de los niveles que no son de la referencia), `Job` en `SessionDef.job`
+  (`kind`, `L`, `key`, `head`, `url`, `rival`, `date`; `jobSources` para añadir más, la carrera lo usará),
+  `LevelUi.job`/`lvl`/`rec`/`url`, `loadJobRecords`/`saveJobRecord` (clave `gruas-reto`). `game/licenses.ts`
+  (`Family`, `earned`, `loadLicenses` con la migración, `grant`, `craneOk`, `levelOpen`, `missingFor`; clave
+  `gruas-licencias`), `EXAMS`/`lessonByN` y `Lesson.crane`/`license` en `school/lessons.ts`, `licenseMenu` en
+  `schoolUi.ts`, `examUrl` en `levelUi.ts`, `Settings.desbloquear`, `Presenter.licensed`.
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
   cut…, de la grúa que se maneja; `units`, todas) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
   dibuja cuadros; así se puede probar desde la consola).
@@ -934,6 +946,23 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   Con dos pestañas abiertas gana la última que guarda. Logros (27, lista aprobada en el plan con pocos cambios): se
   miran al terminar un izaje, al ganar un nivel, al volcar, al terminar una lección y cada 5 s.
 
+- **Reto diario (fase 22)**: la fecha en UTC (el mismo reto en todo el mundo a la vez). La obra se genera solo con
+  `rng` (mulberry32) y aritmética básica; se acepta si el plan de izaje dice que la grúa recomendada, desde donde
+  empieza, tiene sitio y llega con cada carga a alguna zona (verde o ámbar); si no, prueba la siguiente (hasta 60).
+  El plan usa trigonometría: dos navegadores solo podrían diferir en una obra justo en el límite (la prueba fija una
+  fecha con una instantánea). Grúas: City 25, AT 60, AT 220, AT 300-6 y AT 500-8 (las permitidas = las que también
+  pueden desde el mismo sitio), 1–3 cargas a 8–22 m, 2–5 obstáculos. Sin guardar a mitad; la suavidad no se guarda
+  (es por nivel fijo); cuenta para estadísticas y logros. El tiempo del enlace no se puede comprobar (se dice).
+- **Licencias (fase 22)**: ruedas, orugas y torre con examen (AT 60, LR 300, SK 60: un izaje completo; ruedas con
+  estabilizadores, torre con montaje); la escuela completa da ruedas. **Tándem sin examen**: se da con ruedas + orugas
+  + el nivel 13 (un examen con dos grúas no cabía en la escuela). Nivel cerrado si ninguna grúa permitida tiene
+  licencia (el 14 pide tándem); si la grúa pedida no tiene licencia y otra permitida sí, se cambia a esa. El reto
+  diario pide ruedas. La prueba libre y la escuela nunca se cierran. Quien ya tenía récords recibe las familias de
+  las grúas permitidas de cada nivel que terminó (los récords no guardan la grúa). Por defecto **cerrado** (un
+  jugador nuevo empieza por la escuela o los exámenes); "Todo desbloqueado" en Opciones.
+- **Examen de torre**: zona de 9 × 9 m. Con 35 m de cable la carga queda girando en cono y casi no se amortigua
+  (el guion de la prueba no consiguió calmarla en 5 min): con una zona de 5 m solo un experto lo aprobaría.
+
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
   grúas grandes (fases 4–6): cabeza cinemática, izado a velocidad plena, estiramiento máximo del cable.
@@ -1128,7 +1157,6 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   pantalla de la cabina ni la repetición en la laptop. La repetición de los fallos del tándem muestra la grúa que se
   manejaba (la cámara gira alrededor de ella).
 - Fase 22: fijar los umbrales de la suavidad con partidas de Jesús (el cartel de nivel completado muestra la nota
-  y las tres medidas). La parte B (reto diario) y la C (licencias) están pendientes; plan en la conversación de la
-  fase: licencias por familia (`familyOf`), niveles bloqueados si ninguna grúa permitida tiene licencia, opción
-  "Todo desbloqueado", y a quien ya tiene récords, las licencias de las familias con las que terminó algún nivel.
+  y las tres medidas). Revisar si la carga de la grúa torre con cable largo debería amortiguarse más (gira en cono).
+  Jesús no ha probado el reto diario, los exámenes ni el bloqueo en la laptop.
 - Vite avisaría que `app.js` pasa de 500 kB (three.js y el juego, ~780 kB): `chunkSizeWarningLimit` = 1200.

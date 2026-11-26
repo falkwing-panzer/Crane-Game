@@ -5,12 +5,15 @@ import { medalHtml, progressHtml, smoothHtml } from './progressView';
 import { loadSmooth } from './progress';
 import type { SmoothScore } from '../game/smooth';
 import type { Job } from '../game/session';
+import { craneOk, levelOpen, loadLicenses, missingFor, type Licenses } from '../game/licenses';
+import { familyOf } from '../game/achievements';
+import { EXAMS } from '../school/lessons';
 import { loadJobRecords } from './progress';
 import { todayUTC } from '../levels/generate';
 import { stickyParams } from './settings';
 import { t } from '../i18n';
 import { withKeys } from './keys';
-import { schoolMenu } from './schoolUi';
+import { loadSchool, schoolMenu } from './schoolUi';
 import { PlanView } from './planView';
 import { placeCrane } from '../levels/setup';
 import type { Ghost } from '../levels/liftPlan';
@@ -93,6 +96,12 @@ function jobBrief(_job: Job, L: Level) {
   return L.brief || t.daily.brief(L.crates.length, CRANES[L.rec].name);
 }
 
+/** URL del examen de una familia (tándem: el nivel 13) */
+export function examUrl(f: string) {
+  const e = EXAMS.find((x) => x.license === f);
+  return e ? `${location.pathname}?escuela=${e.n}` : levelUrl(13);
+}
+
 const starText = (n: number) => `${'★'.repeat(n)}<span class="off">${'★'.repeat(3 - n)}</span>`;
 
 /** URL de un nivel (1…13) con una grúa, o de la prueba libre (nivel 0); conserva ?fps= */
@@ -127,6 +136,12 @@ export class LevelUi {
   private planView: PlanView | null = null;
   /** Trabajo con obra propia (reto diario, contratos): su nivel, su cabecera y su récord */
   job: Job | null = null;
+  /** Opción "Todo desbloqueado" (fase 22) */
+  unlockAll = false;
+  /** Licencias de operador (se leen cada vez: un examen aprobado en otra partida cuenta) */
+  lic(): Licenses { return loadLicenses(loadRecords(), loadSchool()); }
+  /** ¿Abierto este nivel con las licencias? */
+  open_(L: Level) { return levelOpen(L, this.lic(), this.unlockAll); }
   /** El nivel i, o el del trabajo */
   private lvl(i: number) { return this.job?.L ?? LEVELS[i]; }
   private rec(i: number) { return this.job ? loadJobRecords()[this.job.key] : loadRecords()[i]; }
@@ -162,12 +177,18 @@ export class LevelUi {
 
   /** Menú: los 13 niveles de la referencia y el de tándem (fase 10) con su tipo y sus estrellas, más las pruebas libres */
   menu() {
+    const lic = this.lic();
     const rec = loadRecords(), sm = loadSmooth(), today = todayUTC(), dr = loadJobRecords()[`reto-${today}`];
     this.show(`<div class="eyebrow">${tl.eyebrow}</div>${schoolMenu()}<h2>${tl.choose}</h2>
-      <div class="levels"><a class="lvl daily" href="${location.pathname}?reto=${today}"><small>${t.daily.head(today)}</small><b>${t.daily.menu}</b>
-        <span class="stars">${starText(dr?.stars ?? 0)}</span><small>${t.daily.today(dr ? fmt(dr.time) : null)}</small></a></div>
+      <div class="levels">${lic.ruedas || this.unlockAll ? `<a class="lvl daily" href="${location.pathname}?reto=${today}"><small>${t.daily.head(today)}</small><b>${t.daily.menu}</b>
+        <span class="stars">${starText(dr?.stars ?? 0)}</span><small>${t.daily.today(dr ? fmt(dr.time) : null)}</small></a>`
+        : `<a class="lvl daily locked" href="${examUrl('ruedas')}"><small>${t.daily.head(today)}</small><b>${t.daily.menu}</b><small>${t.license.locked(t.license.names.ruedas)}</small></a>`}</div>
       <div class="levels">${LEVELS.map((L, i) => {
         const r = rec[i];
+        if (!levelOpen(L, lic, this.unlockAll)) {
+          const f = t.license.names[missingFor(L)];
+          return `<a class="lvl locked" href="${examUrl(missingFor(L))}"><small>${i + 1} · ${L.type}</small><b>${L.name}</b><small>${t.license.locked(f)}</small></a>`;
+        }
         return `<a class="lvl" href="${levelUrl(i + 1)}"><small>${i + 1} · ${L.type}</small><b>${L.name}</b>
           <span class="stars">${starText(r?.stars ?? 0)}${medalHtml(sm[i])}</span><small>${r ? tl.record(fmt(r.time)) : tl.par(fmt(L.par))}</small></a>`;
       }).join('')}
@@ -190,16 +211,16 @@ export class LevelUi {
    * sirven, desactivadas con el motivo). onPick recarga con otra grúa; onStart empieza el turno.
    */
   brief(i: number, current: CraneId, onPick: (id: CraneId) => void, onStart: () => void, cont?: { t: number; crane: string; go: () => void }) {
-    const L = this.lvl(i), r = this.rec(i), job = this.job;
+    const L = this.lvl(i), r = this.rec(i), job = this.job, lic = this.lic();
     const list = Object.values(CRANES).sort((a, b) => a.structMax - b.structMax);
     this.show(`<div class="eyebrow"><span class="tag">${L.type}</span>${job ? jobHead(job, L, r) : tl.briefHead(i + 1, LEVELS.length, L.wind[0], fmt(L.par), L.time ? fmt(L.time) : null, r ? ` · ${tl.record(fmt(r.time))} ${starText(r.stars)}` : '')}</div>
       <h2>${L.name}</h2><p>${job ? jobBrief(job, L) : text3d(L.brief)}</p>${job?.rival ? `<p class="rec">${t.daily.rival(fmt(job.rival))}</p><p class="dim">${t.daily.rivalNote}</p>` : ''}
       <ul>${(job ? [t.daily.tip1, t.daily.tip2] : L.tips).map((t) => `<li>${text3d(t)}</li>`).join('')}</ul>
       ${L.tandem ? tandemCranes(L) : `<div class="eyebrow">${tl.pick}</div>
       <div class="cranes">${list.map((c) => {
-        const ok = L.cranes.includes(c.id as CraneId);
+        const allowed = L.cranes.includes(c.id as CraneId), lok = craneOk(c.id as CraneId, lic, this.unlockAll), ok = allowed && lok;
         const boom = c.boom.min === c.boom.max ? tl.boomFixed(c.boom.min) : tl.boomRange(c.boom.min, c.boom.max);
-        const why = L.why[c.id as CraneId] || (c.structMax >= 300 ? tl.tooBig : tl.tooSmall);
+        const why = !allowed ? L.why[c.id as CraneId] || (c.structMax >= 300 ? tl.tooBig : tl.tooSmall) : t.license.noLicense(t.license.names[familyOf(c.id)]);
         return `<button class="copt" data-c="${c.id}" aria-pressed="${c.id === current}" ${ok ? '' : 'disabled'}>
           <small>${c.size}${c.id === L.rec ? tl.recommended : ''}</small><b>${c.name}</b>
           <small>${tl.craneLine(c.structMax, boom)}</small><em class="${ok ? '' : 'why'}">${ok ? c.note : why}</em></button>`;

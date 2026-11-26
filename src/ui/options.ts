@@ -21,7 +21,7 @@ export class OptionsPanel {
     root.insertAdjacentHTML('beforeend', `<div class="overlay" id="opts" hidden><div class="lcard opts" role="dialog" aria-label="${to.title}">
       <h2>${to.title}</h2>
       ${box('recuadro', to.pip, to.pipNote)}${box('vibracion', to.vibration, to.vibrationNote)}
-      ${box('ayudas', to.aids, to.aidsNote)}${box('experto', to.expert, to.expertNote)}
+      ${box('ayudas', to.aids, to.aidsNote)}${box('experto', to.expert, to.expertNote)}${box('desbloquear', to.unlock, to.unlockNote)}
       <label><span>${to.hud} <select id="opts-hud">${sizes}</select></span></label>
       <div class="row"><button class="btn primary" id="opts-close">${to.close}</button></div></div></div>`);
     this.el = root.querySelector('#opts')!;

@@ -7,7 +7,7 @@ import { Session, sessionDef, type Unit } from '../game/session';
 import { GameStep } from '../game/step';
 import type { Cmd, StepInput } from '../game/record';
 import { allModels } from '../render/models/allModels';
-import { LESSONS, RING_R } from './lessons';
+import { EXAMS, LESSONS, RING_R } from './lessons';
 import { t } from '../i18n';
 import { StatsTracker } from '../game/stats';
 import { smoothScore } from '../game/smooth';
@@ -57,7 +57,11 @@ function play(n: number, policy: Policy, maxS = 240) {
     if (ses.sch!.step !== s0) steps.push(+(i * FIXED_DT).toFixed(1));
     if (ses.tipped()) throw new Error(`lección ${n}: la grúa volcó en el paso ${ses.sch!.step}`);
   }
-  if (!done) throw new Error(`lección ${n}: no terminó; paso ${ses.sch!.step}, mensajes: ${msgs.slice(-6).join(' | ')}`);
+  if (!done) {
+    const u = ses.act, l = u.phys.loads[0], p = l ? u.phys.footprint(l) : null;
+    throw new Error(`lección ${n}: no terminó; paso ${ses.sch!.step}, mensajes: ${msgs.slice(-6).join(' | ')}; ` +
+      `giro ${(u.S.slew / D2R).toFixed(1)}°, carga ${JSON.stringify(p)}, zona ${JSON.stringify(ses.site?.zones[0])}, enganchada ${!!u.phys.attached}, cuelga ${ses.hanging()}, cable ${u.S.cable.toFixed(2)}, gancho ${u.phys.hookBody.translation().y.toFixed(2)}, cabeza ${JSON.stringify(u.phys.headWorld())}, ang ${(u.S.ang / D2R).toFixed(1)} Lb ${u.S.Lb.toFixed(1)} cut ${u.cut}`);
+  }
   return { s: i * FIXED_DT, steps, ses, msgs, stats, game };
 }
 
@@ -106,8 +110,9 @@ describe('escuela de operadores (fase 19)', () => {
   beforeAll(async () => { await RAPIER.init(); });
 
   it('textos: una entrada por lección y por paso, con teclas que existen', () => {
-    expect(t.school.lessons.length).toBe(LESSONS.length);
-    LESSONS.forEach((L, i) => {
+    // fase 22: detrás de las lecciones, los exámenes de licencia
+    expect(t.school.lessons.length).toBe(LESSONS.length + EXAMS.length);
+    [...LESSONS, ...EXAMS].forEach((L, i) => {
       const tx = t.school.lessons[i];
       expect(tx.steps.length).toBe(L.steps.length);
       for (const s of [tx.intro, ...tx.steps]) {
@@ -212,6 +217,40 @@ describe('escuela de operadores (fase 19)', () => {
     expect(r.steps.length).toBe(4);
     expect(r.msgs.some((m) => m.startsWith('Demasiado'))).toBe(false);
   }, 60_000);
+
+  // fase 22: los tres exámenes de licencia, jugados de verdad por el alumno de guion
+  for (const [n, from, to, pre] of [[7, 90, -90, 1], [8, 0, 120, 0], [9, 90, -90, 2]] as const) {
+    it(`examen ${n}: se aprueba con un izaje completo`, () => {
+      const c = { n: 0 };
+      const r = play(n, (u, ses, st) => {
+        if (st < pre) {
+          const want = st === 0 ? !u.S.outT : !u.S.erT;
+          return { cmds: want && ++c.n % 30 === 0 ? [st === 0 ? 'outriggers' : 'mount'] as Cmd[] : [] };
+        }
+        const k = st - pre, Lb = u.T.tower ? 20 : u.S.Lb, ang = u.S.ang / D2R;
+        if (k === 0) {
+          const b = boomTo(u, from, ang, Lb);
+          if (b.slew || b.tele || hookV(u) > 0.15) return { crane: b };
+          return hookOn(u, 'EXAMEN', c);
+        }
+        if (k === 1) return { crane: { hoist: -1 } };
+        if (k === 2) {
+          // giro fino (con 35 m de cable, la grúa torre es un péndulo largo): se baja hasta 1,5 m, se espera a que
+          // se calme y se apoya despacio
+          const err = Math.abs(wrap(to * D2R - u.S.slew));
+          if (err > 0.6 * D2R) return { crane: { ...boomTo(u, to, ang, Lb, err < 15 * D2R), slew: Math.sign(wrap(to * D2R - u.S.slew)) * (err < 15 * D2R ? 1 : clamp(err * 3)) } };
+          const bot = bottomOf(u, 'EXAMEN');
+          if (bot > 1.5) return { crane: { hoist: 1 } };
+          // con el cable largo de la grúa torre la carga sigue girando en un cono: se apoya igual (zona grande)
+          const z = ses.site!.zones[0], lp = loadOf(u, 'EXAMEN').body.translation();
+          if (hookV(u) > 0.2 && Math.hypot(lp.x - z.x, lp.z - z.z) > z.w / 2 - 1.2) return {};
+          return { crane: { hoist: 1 } };
+        }
+        return { cmds: ++c.n % 20 === 0 ? ['hook'] : [] };
+      }, 300);
+      expect(r.steps.length).toBe(pre + 4);
+    }, 120_000);
+  }
 
   it('el progreso va en las instantáneas: rebobinar devuelve el paso anterior', () => {
     const ses = new Session(sessionDef('?escuela=2'), new THREE.Scene(), allModels);
