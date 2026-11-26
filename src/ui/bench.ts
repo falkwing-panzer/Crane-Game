@@ -19,6 +19,10 @@ export const BENCH_CASES: BenchCase[] = [
   { name: 'LR 3000 · libre', search: '?grua=lr' },
   { name: 'AT 650-8 · libre', search: '?grua=at650' },
   { name: 'SK 60 · libre', search: '?grua=sk' },
+  // fase 27: escenarios nuevos
+  { name: 'Nivel 24 · loma', search: '?nivel=24' },
+  { name: 'Nivel 25 · noche', search: '?nivel=25' },
+  { name: 'Nivel 26 · atardecer', search: '?nivel=26' },
 ];
 
 export interface BenchRow {

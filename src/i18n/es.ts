@@ -512,6 +512,9 @@ export const es = {
     rollTitle: 'Columna ladeada',
     roll: (deg: number) => `La columna se ladeó ${deg}° sobre su eje (máximo 10°). Las dos grúas deben tirar en el mismo plano: no gires una mientras la otra sostiene el otro extremo.`,
     gustWarn: (v: number) => `Anemómetro: ráfaga de unos ${Math.round(v)} m/s en 10 s. No empieces un izaje.`,
+    windLimit: (v: number, max: number) => `¡Viento ${Math.round(v)} m/s con la carga colgada (máximo ${max})! Apóyala.`,
+    windLimitTitle: 'Viento por encima del límite',
+    windLimitFail: (label: string, max: number) => `${label} siguió colgada con más de ${max} m/s de viento. Las piezas grandes se izan en calma: espera a que pase la ráfaga.`,
     event: {
       storm: '⚡ Tormenta: deja la carga y baja la pluma por debajo de 30° en 20 s; espera a que pase.',
       fog: 'Niebla: se ve poco. Despacio.',

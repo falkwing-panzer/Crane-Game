@@ -46,11 +46,11 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('menú: los 23 trabajos, las dos pruebas libres, las 6 lecciones y los 3 exámenes', async ({ page }) => {
+test('menú: los 26 trabajos, las dos pruebas libres, las 6 lecciones y los 3 exámenes', async ({ page }) => {
   const log = watchConsole(page);
   await open(page);
   await ready(page);
-  await expect(page.locator(JOBS)).toHaveCount(25);
+  await expect(page.locator(JOBS)).toHaveCount(28);
   await expect(page.locator('.levels.school a.lvl')).toHaveCount(9);
   await expect(page.locator('a.lvl.daily')).toHaveCount(2);
   await expect(page.locator('#lcard h2')).toHaveText('Elige un trabajo');
@@ -67,7 +67,7 @@ test('ir a un nivel desde el menú no recarga la página', async ({ page }) => {
   await expect(page.locator('#l-start')).toBeVisible();
   expect(await page.evaluate(() => (window as unknown as { marca?: number }).marca)).toBe(1);
   await page.goBack();
-  await expect(page.locator(JOBS)).toHaveCount(25);
+  await expect(page.locator(JOBS)).toHaveCount(28);
   expect(log).toEqual([]);
 });
 

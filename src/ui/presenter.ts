@@ -1,3 +1,4 @@
+import { Daylight } from '../render/daylight';
 import * as THREE from 'three';
 import { CRANES, isCrawler, type CraneSpec } from '../crane/cranes';
 import { reach, ratedCap } from '../crane/stability';
@@ -112,6 +113,7 @@ export class Presenter {
   readonly decor: DecorView;
   /** Intensidad del sol sin lluvia (con lluvia se oscurece; se repone al desmontar) */
   private sunI: number;
+  private daylight: Daylight | null = null;
   /** Escuela (fase 19): panel del paso, aros y teclas resaltadas */
   private school: { panel: SchoolPanel; rings: RingsView; hl: string } | null = null;
 
@@ -136,6 +138,11 @@ export class Presenter {
     // cuadrícula de 5 m solo en la prueba libre (fase 17)
     const grid = ctx.scene.getObjectByName('cuadricula');
     if (grid) grid.visible = ses.decor.grid;
+    // fase 27: atardecer o noche, con focos de trabajo
+    if (ses.site?.light) {
+      this.daylight = new Daylight(ctx, ses.site.light, ses.site.lamps ?? [], (x, z) => ses.terrain.height(x, z));
+      this.cam.setSunDir(this.daylight.sunDir);
+    }
     this.sunI = ctx.sun.intensity;
     // tándem: cámara libre en el centro de las grúas (V), que no salta al cambiar de grúa con Tab
     if (multi) this.cam.enableFree(() => {
@@ -639,6 +646,7 @@ export class Presenter {
     this.off.length = 0;
     if (this.fx?.raining) this.setRain(false);
     this.fx?.dispose();
+    this.daylight?.dispose();
     this.cabScreen.dispose();
     this.aids.dispose();
     this.pip.dispose();

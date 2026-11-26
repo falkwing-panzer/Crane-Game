@@ -136,7 +136,10 @@ export function sessionSignal(ses: Session): Signal | null {
   let goal: { x: number; z: number; y: number };
   let slack: number | undefined;
   if (a) {
-    const z = L.zones.reduce((p, q) => (Math.hypot(q.x - at.x, q.z - at.z) < Math.hypot(p.x - at.x, p.z - at.z) ? q : p));
+    // la zona libre más cercana (fase 27: en una zona ya ocupada por otra carga no cabe; las pilas, la de arriba)
+    const taken = (z: (typeof L.zones)[number]) => phys.loads.some((l) => l !== a && (() => { const p = phys.placed(l); return !!p && inZone(p, z); })());
+    const free = L.zones.filter((z) => !taken(z));
+    const z = (free.length ? free : L.zones).reduce((p, q) => (Math.hypot(q.x - at.x, q.z - at.z) < Math.hypot(p.x - at.x, p.z - at.z) ? q : p));
     goal = { x: z.x, z: z.z, y: z.y };
     // la carga puede llegar girada: se cuenta su lado mayor en las dos direcciones
     const big = Math.max(a.half.x, a.half.z);

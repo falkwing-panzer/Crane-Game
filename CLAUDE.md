@@ -265,6 +265,12 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   Rendimiento). Pruebas en `physics/sling.test.ts` y `levels/flip.test.ts` (un guion pone el depósito de pie y lo deja
   en la cimentación).
 
+- **Fase 27** (escenarios nuevos, sin esperar aprobación): nivel 24 "Aerogenerador en la loma" (dos tramos de torre,
+  góndola, buje y tres palas; límite de viento de las piezas grandes), 25 "Descarga nocturna" (barco en el puerto,
+  de noche con focos) y 26 "Enfriadora en la azotea" (avenida al atardecer, señalero). Pruebas en
+  `levels/scenarios.test.ts` (plan de izaje con cada grúa permitida, sin choques, el 25 y el 26 terminados por un
+  operador que solo obedece al señalero, victoria del 24, límite de viento).
+
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
   `CraneSpec`, `AT60` (= `CRANES.medium`, tipada `WheeledSpec` para el modelo 3D de la fase 0), `CrawlerSpec`/`isCrawler`.
@@ -482,6 +488,11 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   `boomCol`/`jibCol`/`boomAt` y `rig`/`rigJoints`/`beam`/`beamHalf`/`trBeam` (opcionales: partidas guardadas antes).
   `Rigging` dibuja `p.rig` (hasta `MAX_LEGS` = 6) y el balancín relativo a la carga interpolada. `levels/flip.ts`
   (`FLIP_LEVEL`, nivel 23, al final de `ALL_LEVELS`). `signals.ts`: `LUFF_MAX`, `boomClearCable`, `SignalIn.slack`.
+- Fase 27: `levels/scenarios.ts` (`SCENARIO_LEVELS` = 24–26, detrás del 23 en `ALL_LEVELS`), `Level.windLimit`/
+  `ridge`/`light`/`lamps`, `LevelRules.windLimit()` (`WIND_LIMIT_T`, `Run.wlT`), `Hills.ridge` y
+  `terrainFor(D, libre, ridge)`, `render/daylight.ts` (`Daylight`: sol, hemisferio, cielo, niebla y focos;
+  `MAX_LAMPS` = 3; `Presenter.daylight`, `CameraRig.setSunDir`), formas de carga en `rigging.ts` (`LOAD_GEO`:
+  `wtower`, `hub`, `blade`), señalero hacia la zona libre más cercana, casos nuevos en `BENCH_CASES`.
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
   cut…, de la grúa que se maneja; `units`, todas) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
   dibuja cuadros; así se puede probar desde la consola).
@@ -1097,6 +1108,20 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   en vertical sobre la cabeza y la de cola lleva el pie hacia debajo de la cabeza sin dejar que toque las cunas;
   de pie, la de cola baja hasta no llevar nada y suelta. Reglas del tándem de siempre (LMI, 6°, 10°, doble bloqueo).
 
+- **Escenarios (fase 27)**, todo aproximación del juego (la fase pedía preguntar medidas y pesos; Jesús pidió no
+  esperar): aerogenerador con tramos de 15 m × Ø 4,2 m de 42 y 36 t, góndola de 8 × 3,6 × 3,6 m y 40 t, buje de
+  18 t y palas de 28 m y 6 t; AT 450-8 (o AT 650-8, LR 3000). El rotor no se monta arriba: buje y palas van a la zona
+  de premontaje en el suelo (montarlo arriba pediría piezas que no son cajas). Viento 5 m/s con ráfagas anunciadas de
+  +7 m/s durante 70 s cada 4 min; con la góndola, el buje o una pala colgando y más de 10 m/s, aviso y a los 3 s falla.
+  Barco: casco de 64 × 12 m (caja fija), agua como terreno blando, cuatro contenedores de 18–26 t, cuatro huecos en
+  el muelle; AT 500-8. Azotea: enfriadora de 12 t a +26 m, AT 220 o AT 300-6, señalero, lista y gente en la acera.
+- **Loma**: solo decorado. Desde lo último del decorado el suelo baja 45 m en 260 m (`Hills.ridge`); la obra sigue
+  plana y en y = 0.
+- **Atardecer y noche**: sigue habiendo una luz con sombras (sol bajo y anaranjado; de noche, luna azulada al 16 %).
+  Focos = `PointLight` sin sombra (como mucho 3) con poste y cabezal que brilla. Cielo, niebla y fondo del color del
+  horizonte. Se restaura todo al desmontar la partida. Solo en los niveles 25 (noche) y 26 (atardecer).
+- **Señalero (fase 27)**: lleva la carga a la zona libre más cercana (una zona con otra carga dentro no cuenta).
+
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
   grúas grandes (fases 4–6): cabeza cinemática, izado a velocidad plena, estiramiento máximo del cable.
@@ -1235,6 +1260,11 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   la AT 220 0,0 → 0,0 cm, 97–104 → 101–103 %, en reposo 100 → 101,8 % (balancín). Nivel 23 en el panel: 157 draw
   calls, 60 fps. El aterrizaje de la prueba de las reglas sale algo más lento con los ramales (se baja a 2,4 m/s).
 
+- Fase 27 (`?bench=1`, Chromium sin ventana sobre la Intel, 1920×1080, calidad alta): los 9 casos a 60 fps y peor
+  cuadro 16,8 ms; nivel 24 104 draw calls (GPU 9,6 ms), nivel 25 de noche 101 (10,9 ms), nivel 26 al atardecer 90
+  (10,8 ms); los de antes, iguales (nivel 14 145, nivel 11 92, nivel 9 93, LR 3000 78, AT 650-8 95, SK 60 70). GPU con
+  la gráfica a baja frecuencia (ver la nota de la fase 16). Bundle `app.js` 963 kB (251 kB comprimido).
+
 ### Pendientes
 - Rapier: si una versión nueva da las fuerzas de las juntas, cambiar la tensión medida por la real (comparando antes).
 - Posible mejora de carga: el `.wasm` empieza a bajar cuando ya llegó `app.js` (no se puede precargar desde
@@ -1311,4 +1341,7 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - Fase 26: el volteo solo lo jugó el guion (en Node). El balancín no se interpola (se dibuja donde está respecto de
   la carga en el último paso). Las cuerdas guía no van en el mando. Con la pluma muy empinada y poco cable la carga
   ahora toca la pluma: algún nivel podría pedir más cable que antes (los guiones de los niveles 15–22 pasan).
+- Fase 27: el aerogenerador no lo terminó ningún guion (solo la victoria con las piezas puestas a mano y el plan de
+  izaje); los guiones del 25 y el 26 tardan bastante más que el par (el operador de guion obedece señales con
+  movimientos finos). Jesús no ha revisado los pesos, el límite de viento ni la luz en la laptop.
 - Vite avisaría que `app.js` pasa de 500 kB (three.js y el juego, ~780 kB): `chunkSizeWarningLimit` = 1200.

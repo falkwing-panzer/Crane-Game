@@ -105,7 +105,7 @@ export class Rigging {
       const key = l.color ? `${l.color}|${l.label}` : String(l.mass);
       let mt = mats.get(key);
       if (!mt) mats.set(key, (mt = lit({ map: l.color ? labelTexture(l.label, l.mass, l.color) : crateTexture(l.mass) })));
-      const m = new THREE.Mesh(box, mt);
+      const m = new THREE.Mesh(loadGeo(l.kind), mt);
       m.scale.set(l.half.x * 2, l.half.y * 2, l.half.z * 2);
       m.castShadow = m.receiveShadow = true;
       // sombra sin la textura de la etiqueta (fase 14): el material de profundidad compartido de three.js guarda la
@@ -243,6 +243,34 @@ export class Rigging {
       P[j++] = u.x; P[j++] = u.y; P[j++] = u.z; P[j++] = v.x; P[j++] = v.y; P[j++] = v.z;
     }
   }
+}
+
+/**
+ * Fase 27: forma de algunas cargas (solo dibujo; en la física siguen siendo cajas): tramo de torre cilíndrico, buje
+ * redondeado y pala afilada hacia la punta (+x). Geometrías de 1 × 1 × 1 que se escalan con la carga.
+ */
+const LOAD_GEO: Record<string, () => THREE.BufferGeometry> = {
+  wtower: () => new THREE.CylinderGeometry(0.5, 0.5, 1, 24),
+  hub: () => new THREE.SphereGeometry(0.5, 16, 10),
+  blade: () => {
+    const g = new THREE.BoxGeometry(1, 1, 1, 10, 1, 1), p = g.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < p.count; i++) {
+      const k = p.getX(i) + 0.5; // 0 en la raíz, 1 en la punta
+      p.setY(i, p.getY(i) * (1 - 0.75 * k));
+      p.setZ(i, p.getZ(i) * (k < 0.15 ? 0.7 + 2 * k : 1 - 0.85 * (k - 0.15)));
+    }
+    g.computeVertexNormals();
+    return g;
+  },
+};
+const loadGeos = new Map<string, THREE.BufferGeometry>();
+function loadGeo(kind?: string) {
+  const f = kind ? LOAD_GEO[kind] : undefined;
+  if (!f) return box;
+  let g = loadGeos.get(kind!);
+  // las geometrías compartidas se liberan al desmontar la partida (fase 14): se rehacen si hace falta
+  if (!g || !g.attributes.position) { g = f(); loadGeos.set(kind!, g); }
+  return g;
 }
 
 /** Profundidad para las sombras, sin texturas (las cargas son opacas: la etiqueta no cambia la sombra) */

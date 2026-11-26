@@ -73,6 +73,13 @@ export interface Level {
   ballastZone?: string;
   /** Fase 24 B: clima que cambia y averías durante el turno */
   events?: import('./events').LevelEvent[];
+  /** Fase 27: con más de `v` m/s no se puede llevar colgada una carga de estos tipos (mucha superficie) */
+  windLimit?: { v: number; kinds: string[] };
+  /** Obra en lo alto de una loma: el terreno baja alrededor (solo decorado) */
+  ridge?: boolean;
+  /** Luz: atardecer o noche (por defecto, de día) y focos de trabajo (x, z, alto) */
+  light?: 'atardecer' | 'noche';
+  lamps?: [number, number, number][];
 }
 
 const B = (x: number, z: number, w: number, d: number, h: number, kind: BoxKind = 'building', extra: { color?: string } = {}): LevelBox => ({ x, z, w, d, h, kind, ...extra });

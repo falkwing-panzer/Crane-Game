@@ -81,10 +81,12 @@ export interface Run extends SmoothRun {
   excl: number; inExcl: boolean; exclT: number; skips: number; checked: number; lifted: number; bkT: number;
   /** Fase 24: camiones que ya entraron (máscara de bits) y retraso acumulado esperando muelle (s) */
   tDone: number; late: number;
+  /** Fase 27: segundos seguidos con una carga grande colgada por encima del límite de viento */
+  wlT: number;
 }
 
 export const newRun = (): Run => ({ t: 0, done: false, hard: 0, bumps: 0, prox: 0, maxLmi: 0, bumpCd: 0, lineD: Infinity, inProx: false, wind: 0,
-  peakLabel: '', peakMass: 0, peakR: 0, peakCrane: '', maxR: 0, maxRLabel: '', heavy: 0, heavyLabel: '', excl: 0, inExcl: false, exclT: 0, skips: 0, checked: 0, lifted: 0, bkT: 0, tDone: 0, late: 0, ...newSmooth() });
+  peakLabel: '', peakMass: 0, peakR: 0, peakCrane: '', maxR: 0, maxRLabel: '', heavy: 0, heavyLabel: '', excl: 0, inExcl: false, exclT: 0, skips: 0, checked: 0, lifted: 0, bkT: 0, tDone: 0, late: 0, wlT: 0, ...newSmooth() });
 
 /** Qué se juega, sacado de la URL */
 export interface SessionDef {
@@ -222,7 +224,7 @@ export class Session {
     this.place(states);
     // decorado de fondo (fase 17) y terreno (fase 18): el terreno sale del decorado (colinas más allá de todo)
     this.decor = decorFor(def.nivel, site);
-    this.terrain = terrainFor(this.decor, !site && !def.freeTandem);
+    this.terrain = terrainFor(this.decor, !site && !def.freeTandem, !!site?.ridge);
     for (const { T, S } of states) Object.assign(S, groundState(T, S, this.terrain));
 
     // Física: la primera grúa crea el mundo; la segunda lo comparte

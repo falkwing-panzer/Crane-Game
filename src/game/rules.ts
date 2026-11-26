@@ -18,6 +18,8 @@ import { t } from '../i18n';
 
 const deg = (r: number) => Math.round((r * 180) / Math.PI);
 const tr = t.rules;
+/** Fase 27: segundos con una pieza grande colgada por encima del límite de viento antes de fallar */
+export const WIND_LIMIT_T = 3;
 
 /**
  * Reglas de un nivel (fases 9 y 10): tiempo, victoria, viento, aterrizajes, vidrio roto, golpes, líneas eléctricas,
@@ -116,6 +118,24 @@ export class LevelRules {
       }
       run.wind = w.v;
       u.phys.wind = { x: w.x, z: w.z };
+    }
+    if (L.windLimit && !this.windLimit(dt)) return false;
+    return true;
+  }
+
+  /**
+   * Fase 27: límite de viento de las piezas grandes (góndola, buje, palas): colgada con más de `v` m/s, aviso; más
+   * de WIND_LIMIT_T s seguidos, falla. Devuelve false si falló.
+   */
+  private windLimit(dt: number): boolean {
+    const { ses, L } = this, run = ses.run, lim = L.windLimit!;
+    const u = ses.units.find((v) => v.phys.attached && lim.kinds.includes(v.phys.attached.kind ?? '') && ses.hanging(v));
+    if (!u || run.wind <= lim.v) { run.wlT = 0; return true; }
+    if (run.wlT === 0) ses.bus.emit('say', { text: tr.windLimit(run.wind, lim.v), s: 2.5 });
+    run.wlT += dt;
+    if (run.wlT > WIND_LIMIT_T) {
+      this.finish({ title: tr.windLimitTitle, text: tr.windLimitFail(u.phys.attached!.label, lim.v) });
+      return false;
     }
     return true;
   }
