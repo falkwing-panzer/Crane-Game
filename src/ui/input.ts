@@ -136,6 +136,18 @@ export class Input {
     this.padPrev = pressedList(gp.buttons);
   }
 
+  /**
+   * Vibración del mando (fase 21): efecto 'dual-rumble' en el primer mando conectado que la tenga (sin mando o sin
+   * motor de vibración, no hace nada).
+   */
+  rumble(fx: { strong: number; weak: number; ms: number }) {
+    if (typeof navigator === 'undefined' || !navigator.getGamepads) return;
+    const gp = [...navigator.getGamepads()].find((g) => g && g.connected) as (Gamepad & { vibrationActuator?: { playEffect?: (t: string, p: object) => Promise<unknown> } }) | undefined;
+    const act = gp?.vibrationActuator;
+    if (!act?.playEffect) return;
+    act.playEffect('dual-rumble', { startDelay: 0, duration: fx.ms, strongMagnitude: fx.strong, weakMagnitude: fx.weak }).catch(() => {});
+  }
+
   state(): CraneInput {
     const k = this.k, p = this.pad;
     // la tecla manda; si no hay tecla, el mando (proporcional)

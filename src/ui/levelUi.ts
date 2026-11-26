@@ -216,9 +216,11 @@ export class LevelUi {
   }
 
   /** Nivel fallido (fail de la referencia) */
-  failed(i: number, crane: string, title: string, text: string, res?: { maxLmi: number } & Partial<LiftStats>) {
+  failed(i: number, crane: string, title: string, text: string, res?: { maxLmi: number } & Partial<LiftStats>, onReplay?: () => void) {
     this.show(`<div class="eyebrow">${tl.failed(i + 1, crane)}</div><h2>${title}</h2><p>${withKeys(text)}</p>${res ? liftHtml(res, !!LEVELS[i].tandem, true) : ''}
-      <div class="row"><a class="btn" href="${homeUrl()}">${tl.menuBtn}</a><a class="btn primary" id="l-retry" href="${location.href}">${tl.retry}</a></div>`, true);
+      <div class="row"><a class="btn" href="${homeUrl()}">${tl.menuBtn}</a>${onReplay ? `<button class="btn" id="l-replay">${t.replay.again}</button>` : ''}<a class="btn primary" id="l-retry" href="${location.href}">${tl.retry}</a></div>`, true);
+    const rb = this.card.querySelector<HTMLButtonElement>('#l-replay');
+    if (rb && onReplay) rb.onclick = () => onReplay();
     this.card.querySelector<HTMLElement>('#l-retry')?.focus({ preventScroll: true });
   }
 

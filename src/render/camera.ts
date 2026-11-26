@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { CraneState } from '../crane/kinematics';
-import { apply, type Pose } from '../crane/pose';
+import { apply, type Pose, type V3 } from '../crane/pose';
 import type { SceneCtx } from './scene';
 import type { Eye } from './craneModel';
 import { t } from '../i18n';
@@ -17,8 +17,8 @@ import { t } from '../i18n';
 // - el encuadre de sombras se ajusta a lo que se ve (de cerca, más pequeño y más nítido), por escalones y con el centro
 //   ajustado a los texels del mapa para que las sombras no tiemblen al moverse.
 
-export type CamMode = 'orbita' | 'seguir' | 'cabina' | 'libre';
-const ORDER: CamMode[] = ['orbita', 'seguir', 'cabina', 'libre'];
+export type CamMode = 'orbita' | 'seguir' | 'cabina' | 'gancho' | 'libre';
+const ORDER: CamMode[] = ['orbita', 'seguir', 'cabina', 'gancho', 'libre'];
 const TEXT: Record<CamMode, string> = t.camera;
 const SUN_OFFSET = new THREE.Vector3(30, 50, 20);
 /** Duración de la transición entre modos (s) */
@@ -31,6 +31,27 @@ const PULL_GAP = 0.6;
 const RAY_START = 2.5;
 /** Escalones del medio lado del encuadre de sombras (m) */
 export const SHADOW_STEPS = [20, 28, 40, 56, 80, 112];
+
+/** Ancla del cable (cabeza o punta del plumín; en la grúa torre, el carro) y eje de giro en el mundo */
+export interface HookAnchor { head: V3; piv: V3 }
+/** Debajo de la cabeza: la cámara del gancho cuelga bajo las poleas (m) */
+export const HOOK_CAM_DROP = 0.9;
+
+/**
+ * Cámara del gancho (fase 21): bajo la cabeza de la pluma mirando hacia abajo, como las cámaras de las grúas grandes.
+ * Arriba de la imagen = hacia donde apunta la pluma (del eje de giro a la cabeza), así girar la grúa gira la imagen.
+ */
+export function hookCamPose(a: HookAnchor) {
+  let dx = a.head.x - a.piv.x, dz = a.head.z - a.piv.z;
+  const n = Math.hypot(dx, dz);
+  if (n < 1e-6) { dx = 1; dz = 0; } else { dx /= n; dz /= n; }
+  return {
+    pos: { x: a.head.x, y: a.head.y - HOOK_CAM_DROP, z: a.head.z },
+    // casi vertical: un poco hacia delante para que lookAt no quede indefinido
+    at: { x: a.head.x + dx * 0.01, y: a.head.y - 50, z: a.head.z + dz * 0.01 },
+    up: { x: dx, y: 0, z: dz },
+  };
+}
 
 /** Rayo contra el mundo: distancia a lo primero que toca, o null (`Physics.rayHit`) */
 export type RayFn = (o: { x: number; y: number; z: number }, d: { x: number; y: number; z: number }, max: number) => number | null;
@@ -136,6 +157,7 @@ export class CameraRig {
     this.allow = Infinity;
     this.shown.set(NaN, 0, 0);
     controls.enabled = this.mode === 'orbita' || this.mode === 'libre';
+    camera.up.set(0, 1, 0); // la cámara del gancho lo cambia
     for (const m of this.cab) m.visible = this.mode !== 'cabina';
     if (this.mode === 'orbita') {
       // vuelve a una vista libre desde fuera, mirando a la grúa
@@ -167,7 +189,8 @@ export class CameraRig {
     return _v.set(pose.t.x, 0, pose.t.z);
   }
 
-  update(dt: number, S: CraneState, pose: Pose) {
+  /** hook = ancla del cable y eje de giro, para la cámara del gancho (fase 21) */
+  update(dt: number, S: CraneState, pose: Pose, hook?: HookAnchor) {
     const { camera, controls } = this.ctx;
     // lo que se mostró el cuadro anterior no es lo pedido: los controles siguen con lo pedido (si nadie movió la
     // cámara entre medias: el banco, warmUp o resetView la ponen a mano)
@@ -195,6 +218,12 @@ export class CameraRig {
       this.look.lerp(new THREE.Vector3(c.x + 3 * z * Math.cos(this.yaw), 5 * z, c.z - 3 * z * Math.sin(this.yaw)), k);
       camera.position.copy(this.fpos);
       camera.lookAt(this.look);
+    } else if (this.mode === 'gancho' && hook) {
+      const p = hookCamPose(hook);
+      camera.position.set(p.pos.x, p.pos.y, p.pos.z);
+      camera.up.set(p.up.x, p.up.y, p.up.z);
+      camera.lookAt(p.at.x, p.at.y, p.at.z);
+      this.look.set(p.pos.x, 0, p.pos.z);
     } else {
       const e = this.eye(S);
       const eye = apply(pose, e);
@@ -206,7 +235,7 @@ export class CameraRig {
     this.last.copy(c);
     this.want.copy(camera.position);
 
-    if (this.mode !== 'cabina') this.avoid(dt);
+    if (this.mode !== 'cabina' && this.mode !== 'gancho') this.avoid(dt);
     if (this.blend < 1) {
       // transición: de la vista anterior a la nueva, con arranque y frenado suaves
       this.blend = Math.min(1, this.blend + dt / BLEND_T);
@@ -216,7 +245,7 @@ export class CameraRig {
       camera.quaternion.slerpQuaternions(this.fromQ, _q, e);
     }
     this.shown.copy(camera.position);
-    this.fitShadow(this.mode === 'cabina' ? 15 : camera.position.distanceTo(this.look));
+    this.fitShadow(this.mode === 'cabina' ? 15 : this.mode === 'gancho' ? Math.max(15, camera.position.y * 0.6) : camera.position.distanceTo(this.look));
   }
 
   /** Acerca la cámara si algo la tapa (y no la deja bajo el suelo) */

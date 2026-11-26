@@ -165,6 +165,30 @@ test('tabla de cargas (C) y plan de izaje en la ficha', async ({ page }) => {
   expect(log).toEqual([]);
 });
 
+test('opciones del operador: recuadro del gancho, cámara del gancho con V y modo experto', async ({ page }) => {
+  const log = watchConsole(page);
+  await open(page, 'grua=medium');
+  await ready(page);
+  await page.locator('#opts-btn').click();
+  await page.locator('#opts input[data-k="recuadro"]').check();
+  await page.locator('#opts input[data-k="experto"]').check();
+  await page.locator('#opts-close').click();
+  await expect(page.locator('.pip-frame')).toBeVisible();
+  // modo experto: sin porcentaje del LMI ni capacidad
+  await expect(page.locator('#data')).toContainText('Modo experto');
+  await expect(page.locator('#data')).not.toContainText('Capacidad');
+  // V: orbital → seguimiento → cabina (sin panel de datos) → gancho
+  await page.keyboard.press('KeyV');
+  await page.keyboard.press('KeyV');
+  await expect(page.locator('#data')).toBeHidden();
+  await page.keyboard.press('KeyV');
+  await expect(page.locator('#msg')).toContainText('Cámara del gancho');
+  await expect(page.locator('#data')).toBeVisible();
+  // se guarda
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('gruas-ajustes') || '{}'))).toMatchObject({ recuadro: true, experto: true });
+  expect(log).toEqual([]);
+});
+
 test('pausa al perder el foco: no se acumulan pasos de física', async ({ page }) => {
   const log = watchConsole(page);
   await open(page, 'grua=medium');

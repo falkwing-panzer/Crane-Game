@@ -47,7 +47,7 @@ const setV = (o: V3, v: { x: number; y: number; z: number }) => { o.x = v.x; o.y
 const setQ = (o: Quat, q: { x: number; y: number; z: number; w: number }) => { o.x = q.x; o.y = q.y; o.z = q.z; o.w = q.w; };
 
 /** Lee lo que se dibuja sobre un cuadro ya creado con la misma forma (sin crear objetos en cada paso) */
-function readInto(f: Frame, units: Unit[]) {
+export function readInto(f: Frame, units: Unit[]) {
   units.forEach((u, i) => {
     const fu = f.units[i];
     copyInto(fu.S, u.S);
@@ -103,6 +103,20 @@ function mixBody(a: BodyT, b: BodyT, k: number, o: BodyT) {
   nlerp(a.q, b.q, k, o.q);
 }
 
+/** Mezcla de dos cuadros con la misma forma sobre `out` (fase 21: también la usa la repetición) */
+export function mixFrame(a: Frame, b: Frame, k: number, out: Frame) {
+  b.units.forEach((bu, i) => {
+    const au = a.units[i], ou = out.units[i];
+    mixInto(ou.S, au.S, bu.S, k);
+    lerpV(au.pose.t, bu.pose.t, k, ou.pose.t);
+    nlerp(au.pose.q, bu.pose.q, k, ou.pose.q);
+    mixBody(au.hook, bu.hook, k, ou.hook);
+    lerpV(au.head, bu.head, k, ou.head);
+  });
+  b.loads.forEach((bl, i) => mixBody(a.loads[i], bl, k, out.loads[i]));
+  return out;
+}
+
 /** Pares de cuadros (anterior y último paso) y la mezcla, sin crear objetos en cada cuadro */
 export class Interp {
   private prev: Frame | null = null;
@@ -134,16 +148,6 @@ export class Interp {
     const a = this.prev!, b = this.cur!, k = Math.max(0, Math.min(1, alpha));
     const o = (this.out ??= structuredClone(b));
     if (o.loads.length !== b.loads.length) this.out = structuredClone(b);
-    const out = this.out!;
-    b.units.forEach((bu, i) => {
-      const au = a.units[i], ou = out.units[i];
-      mixInto(ou.S, au.S, bu.S, k);
-      lerpV(au.pose.t, bu.pose.t, k, ou.pose.t);
-      nlerp(au.pose.q, bu.pose.q, k, ou.pose.q);
-      mixBody(au.hook, bu.hook, k, ou.hook);
-      lerpV(au.head, bu.head, k, ou.head);
-    });
-    b.loads.forEach((bl, i) => mixBody(a.loads[i], bl, k, out.loads[i]));
-    return out;
+    return mixFrame(a, b, k, this.out!);
   }
 }

@@ -1,5 +1,5 @@
 import type { CraneSpec } from './cranes';
-import { ratedCap, reach, type CraneConfig, type SupportMode } from './stability';
+import { lmiStatic, ratedCap, reach, type CraneConfig, type SupportMode } from './stability';
 
 // Tabla de cargas (fase 20; no está en la referencia): ratedCap por radio y largo de pluma para la configuración
 // actual, como las tablas de un operador real. Solo usa el modelo de estabilidad que ya existe (ratedCap, reach):
@@ -107,4 +107,35 @@ export function loadChart(T: CraneSpec, C: CraneConfig, md: SupportMode, slew: n
 export function chartMark(ch: LoadChart, R: number, Lb: number, ang: number) {
   const near = (list: number[], v: number) => list.reduce((b, x, i) => (Math.abs(x - v) < Math.abs(list[b] - v) ? i : b), 0);
   return { row: near(ch.radii, R), col: near(ch.cols, ch.kind === 'tower' ? ang / D : Lb) };
+}
+
+/**
+ * Radio máximo (fase 21, ayuda "radio máximo para la carga colgada"): con el largo de pluma actual Lb (grúa torre: con
+ * el ángulo actual ang, sacando el carro), hasta dónde se puede bajar la pluma con la masa m (gancho incluido) en el
+ * giro slew antes de que el LMI llegue a 1. null si ni siquiera en la posición más corta se puede.
+ */
+export function maxReach(T: CraneSpec, C: CraneConfig, md: SupportMode, Lb: number, ang: number, slew: number, m: number): number | null {
+  if (T.tower) {
+    const ok = (L: number) => lmiStatic(T, C, md, L, ang, slew, m) < 1;
+    if (!ok(T.boom.min)) return null;
+    if (ok(T.boom.max)) return reach(T, C, T.boom.max, ang);
+    let lo = T.boom.min, hi = T.boom.max;
+    for (let k = 0; k < 24; k++) { const x = (lo + hi) / 2; if (ok(x)) lo = x; else hi = x; }
+    return reach(T, C, lo, ang);
+  }
+  const ok = (a: number) => lmiStatic(T, C, md, Lb, a, slew, m) < 1;
+  const { angMin, angMax } = T.boom;
+  if (!ok(angMax)) return null;
+  if (ok(angMin)) return reach(T, C, Lb, angMin);
+  let lo = angMin, hi = angMax; // lo: no aguanta; hi: aguanta
+  for (let k = 0; k < 24; k++) { const x = (lo + hi) / 2; if (ok(x)) hi = x; else lo = x; }
+  return reach(T, C, Lb, hi);
+}
+
+/** Contorno del radio máximo en n giros (marco del chasis, desde el eje de giro); null donde no se puede */
+export function maxReachContour(T: CraneSpec, C: CraneConfig, md: SupportMode, Lb: number, ang: number, m: number, n = 36) {
+  return Array.from({ length: n }, (_, i) => {
+    const slew = (i / n) * 2 * Math.PI;
+    return { slew, R: maxReach(T, C, md, Lb, ang, slew, m) };
+  });
 }

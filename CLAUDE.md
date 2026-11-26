@@ -71,6 +71,9 @@ Fase 15: **Retroceso** rebobina 10 s (solo en la prueba libre); botón **Guardar
 Fase 16: casilla **Lluvia** en el HUD (solo en la prueba libre, no en calidad baja).
 Fase 19: en la **escuela** (`?escuela=1…6`) valen X y Retroceso, pero no P.
 Fase 20: **C** abre / cierra la tabla de cargas (solo interfaz; se puede manejar con ella abierta).
+Fase 21: **V** tiene un modo más, **cámara del gancho** (orbital → seguimiento → cabina → gancho → libre del tándem).
+Botón **Opciones** (columna izquierda): recuadro del gancho, vibración del mando, ayudas, modo experto, tamaño del HUD.
+**Esc** también salta la repetición del fallo.
 
 ## Estado y decisiones
 Se trabaja por fases (ver `FASES.md`), con `/clear` entre fases. **Al cerrar cada fase, actualizar esta sección**
@@ -218,6 +221,13 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   izaje más exigente en los carteles de nivel completado y fallido. Pruebas en `crane/loadChart.test.ts`,
   `levels/liftPlan.test.ts` (también contra los choques de Rapier), `game/trackLift.test.ts` y un caso nuevo en
   `e2e/juego.e2e.ts` (34).
+
+- **Fase 21** (vista y tacto del operador, hecha de una tanda por pedido de Jesús, sin plan previo): cámara del
+  gancho como modo de V y como recuadro; pantalla del LMI en la cabina (el panel de datos se oculta en esa vista);
+  vibración del mando; ayudas (plomada, marca de la carga, radio actual y radio máximo con la carga colgada); modo
+  experto; repetición del fallo a cámara lenta; estado del LMI con forma y texto; tamaño del HUD. Pruebas en
+  `render/hookCam.test.ts`, `game/replay.test.ts`, `crane/loadChart.test.ts` (radio máximo), `ui/settings.test.ts` y
+  un caso nuevo en `e2e/juego.e2e.ts` (35).
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -384,6 +394,18 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   se recuerdan por nivel y grúa mientras dura la visita), `liftHtml` y `LiftStats` en `levelUi.ts`, `trackLift` en
   `control.ts`; `Run` con `peakLabel`/`peakMass`/`peakR`/`peakCrane`/`maxR`/`maxRLabel`/`heavy`/`heavyLabel`.
   Acción `chart` en `keys.ts` (`Input.onChart`), textos en `t.chart`, `t.plan` y `t.levels`.
+- Fase 21: `CamMode` `'gancho'`, `hookCamPose`/`HookAnchor`/`HOOK_CAM_DROP` en `render/camera.ts`
+  (`CameraRig.update(…, hook)`), `render/hookPip.ts` (`HookPip`: textura de `PIP_W` × `PIP_H` redibujada uno de cada
+  `EVERY` cuadros y copiada a la esquina), `render/cabScreen.ts` (`CabScreen`, `cabLines`, capa `CAB_LAYER` = 3 que
+  solo ve la cámara principal), `render/aids.ts` (`Aids`: 4 líneas), `maxReach`/`maxReachContour` en
+  `crane/loadChart.ts`, `ui/rumble.ts` (`Rumble`: qué vibración toca, sin DOM; `Input.rumble` la manda),
+  `ui/options.ts` (`OptionsPanel`; `Input.block('opciones')` mientras está abierto), `game/replay.ts`
+  (`ReplayBuffer` en `GameStep.replay`, `Replay`; `readInto` y `mixFrame` exportados de `interp.ts`),
+  `Presenter.takeReplay` (lo pone `bindCommands`), `startReplay`/`skipReplay`/`replaying`, `Hud.expert`/`setCabin`/
+  `tippedText`/`showTipped(texto, onReplay)`, `lmiRow`/`lmiCls` en `hud.ts`, `LevelUi.failed(…, onReplay)`.
+  `Settings`: `recuadro`, `vibracion`, `ayudas`, `experto`, `hud` (`HUD_SIZES`); `--hud-scale` en la raíz de la
+  partida (CSS `zoom` en `.panel` y `.msg`). Textos en `t.options`, `t.cab`, `t.replay`, `t.camera.gancho`,
+  `t.hud.lmiState`/`lmiIcon`.
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
   cut…, de la grúa que se maneja; `units`, todas) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
   dibuja cuadros; así se puede probar desde la consola).
@@ -855,6 +877,34 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   planos en `Run` (las instantáneas copian `{ ...run }`); al restaurar, `{ ...newRun(), ...s.run }` para partidas
   guardadas antes.
 
+- **Cámara del gancho (fase 21)**: 0,9 m bajo el ancla del cable (cabeza, punta del plumín o carro de la SK 60),
+  mirando hacia abajo; arriba de la imagen = hacia donde apunta la pluma (`camera.up` horizontal; al cambiar de modo se
+  repone (0, 1, 0), que OrbitControls necesita). Sin rayo de choques ni altura mínima. **Recuadro**: se dibuja en una
+  textura de 284 × 212 (sin la escala de la pantalla) uno de cada 2 cuadros, sin rehacer el mapa de sombras, con
+  `far` 220 m, y en cada cuadro se copia a la esquina (1 llamada). En la vista del gancho no se dibuja (sería la misma
+  imagen). En el tándem, el panel de la otra grúa sube encima del recuadro.
+- **Pantalla de la cabina (fase 21)**: pegada a la cámara (abajo en el centro, la esquina derecha es del recuadro),
+  `depthTest` apagado y su propia capa (`CAB_LAYER`), así no la tapa nada ni sale en el recuadro ni en las sombras.
+  Canvas de 512 × 288 redibujado como mucho 6 veces por segundo y solo si cambia lo que muestra. La vista de cabina
+  es la del conductor (la de siempre); en la RT, la del operador.
+- **Repetición del fallo (fase 21)**: no vuelve a simular con la grabación de la fase 15 (habría que apartar reglas,
+  bus y sonido mientras tanto): guarda lo que se dibuja de cada paso con el turno en marcha (lo mismo que la
+  interpolación) en un anillo de 8 s y lo dibuja a ×0,35 (~23 s), mezclando pasos, con una cámara que da vueltas a
+  34·`camSize` m de la grúa. Sale antes del cartel de vuelco (prueba libre, escuela) y del de nivel fallido; los dos
+  tienen "Ver la repetición". Restaurar una instantánea (reiniciar, rebobinar, continuar) vacía el anillo. Mientras se
+  ve, el sonido y la vibración callan; la simulación sigue (con la grúa volcada no hay nada que mover).
+- **Vibración (fase 21)**: `dual-rumble` en el primer mando conectado. Desde el 90 % de LMI, cada 0,18 s 220 ms del
+  motor débil al 15–70 % (más cerca del corte, más fuerte; con sobrecarga también el fuerte); línea eléctrica: pulsos
+  cada 0,5 s; aterrizaje ≥ 0,6 m/s medio, ≥ 1,4 (`HARD_LANDING`) fuerte; golpe de costado > 0,25 m/s; vuelco 0,7 s.
+  Solo la grúa que se maneja. **No se probó con un mando de verdad** (no hay mando aquí).
+- **Ayudas y modo experto (fase 21)**: ayudas por defecto apagadas; el radio máximo (naranja) es con el largo de pluma
+  actual (bajando la pluma; en la SK 60, sacando el carro) y el apoyo actual, en 36 giros, recalculado como mucho cada
+  0,3 s si cambia algo. Experto: sin fila del LMI, sin "cerca del límite" ni capacidad en el HUD y en la pantalla de
+  la cabina; quedan el corte (cartel CORTE LMI) y las alarmas de sonido; sin ayudas. La tabla de cargas (C) sigue
+  (es una herramienta real del operador).
+- **Estado del LMI con forma y texto (fase 21)**: ● normal, ▲ cerca del límite (≥ 90 %), ■ sobrecarga (≥ 100 %), con el
+  texto debajo de la barra, en el panel de la otra grúa y en la pantalla de la cabina.
+
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
   grúas grandes (fases 4–6): cabeza cinemática, izado a velocidad plena, estiramiento máximo del cable.
@@ -977,6 +1027,13 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   al mover el fantasma (nivel 11 con el plumín), contorno ≤ ~70 ms al elegir carga (en Node). Bundle `app.js` 875 kB
   (219 kB comprimido).
 
+- Fase 21 (`?bench=1`, Chromium sin ventana sobre la Intel, 1920×1080, calidad alta): sin recuadro, todo igual que
+  antes (60 fps, peor cuadro 16,8 ms; nivel 14 145 draw calls, nivel 11 92, nivel 9 93, LR 3000 78, AT 650-8 95,
+  SK 60 70; render CPU 0,9–1,4 ms). Con el recuadro: los 6 a 60 fps y peor cuadro 16,8 ms; en los cuadros en que se
+  redibuja, nivel 14 223 draw calls, nivel 11 144, nivel 9 144, LR 3000 127, AT 650-8 148, SK 60 104; render CPU
+  +0,3 ms (1,0–1,7). El tiempo de GPU del banco no vale con el recuadro (el temporizador sale en 2,3–2,7 ms, menos
+  que sin él: no mide bien con el pase a la textura). La pantalla de la cabina suma 2 draw calls; las ayudas, 4.
+
 ### Pendientes
 - Rapier: si una versión nueva da las fuerzas de las juntas, cambiar la tensión medida por la real (comparando antes).
 - Posible mejora de carga: el `.wasm` empieza a bajar cuando ya llegó `app.js` (no se puede precargar desde
@@ -1036,4 +1093,7 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - Plan de izaje: en el nivel 2 solo hay sitio para la City 25 justo en el centro de la calle (z = 25); el nivel 7 (pick
   & carry) sale en rojo desde cualquier sitio fijo, porque se recoge en un sitio y se deja en otro. Jesús no ha
   probado la tabla ni el plan en la laptop.
+- Fase 21: la vibración no se probó con un mando de verdad; Jesús no ha visto la cámara del gancho, el recuadro, la
+  pantalla de la cabina ni la repetición en la laptop. La repetición de los fallos del tándem muestra la grúa que se
+  manejaba (la cámara gira alrededor de ella).
 - Vite avisaría que `app.js` pasa de 500 kB (three.js y el juego, ~780 kB): `chunkSizeWarningLimit` = 1200.

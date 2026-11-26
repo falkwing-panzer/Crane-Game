@@ -177,3 +177,32 @@ kbd { display: inline-block; min-width: 1.1em; text-align: center; font: 600 12p
 .plan-table small { color: #aab3bc; margin-left: 4px; }
 .plan-table .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
 .plan-legend { display: block; color: #aab3bc; margin: 0 0 12px; }
+
+/* fase 21: estado del LMI con forma y texto (no solo color), modo experto, tamaño del HUD, opciones, recuadro del
+   gancho y repetición */
+.lmi .shape { font-style: normal; margin-right: 4px; }
+.lmi-state { font-size: 11px; margin: -2px 0 3px; text-transform: uppercase; letter-spacing: 0.04em; }
+.lmi-state.ok { color: #7ee0ad; }
+.lmi-state.warn { color: #f5c542; }
+.lmi-state.bad { color: #ff6b5a; font-weight: 700; }
+.data .expert { margin: 6px 0 4px; color: #aab3bc; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+.data[hidden], .data.other.cabin { display: none; }
+#hud .panel, #hud .msg { zoom: var(--hud-scale, 1); }
+.opts-btn { pointer-events: auto; font: inherit; font-weight: 700; color: #f2f4f6; background: rgba(22, 26, 31, 0.72); border: 0; border-radius: 6px;
+  padding: 8px 11px; cursor: pointer; text-align: left; zoom: var(--hud-scale, 1); }
+.opts-btn:hover { color: #f0bb27; }
+.opts label { display: flex; gap: 10px; align-items: flex-start; margin: 8px 0; cursor: pointer; }
+.opts label small { display: block; color: #aab3bc; }
+.opts select { font: inherit; background: #2a3038; color: #f2f4f6; border: 1px solid #4a525c; border-radius: 4px; padding: 2px 4px; }
+.pip-frame { position: absolute; right: 10px; bottom: 56px; border: 2px solid rgba(240, 187, 39, 0.8); border-radius: 4px; box-sizing: border-box;
+  pointer-events: none; }
+.pip-frame[hidden] { display: none; }
+.pip-frame span { position: absolute; left: 4px; top: 2px; font-size: 11px; font-weight: 700; color: #f0bb27; text-shadow: 0 0 3px #000; }
+.replay-bar { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; align-items: center;
+  padding: 8px 14px; border-radius: 6px; background: rgba(160, 30, 20, 0.85); font-weight: 700; pointer-events: auto; z-index: 4; }
+.replay-bar[hidden] { display: none; }
+.replay-bar b::before { content: '\25CF  '; animation: blink 1s steps(2, start) infinite; }
+.replay-bar button { font: inherit; font-size: 12px; padding: 3px 10px; border: 0; border-radius: 4px; background: #f2f4f6; color: #1b1d20; cursor: pointer; }
+.card button.ghost { background: #3a424b; color: #f2f4f6; margin-left: 8px; }
+.card button[hidden] { display: none; }
+.data.other.pip { bottom: 290px; }

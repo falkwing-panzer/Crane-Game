@@ -153,6 +153,11 @@ export const es = {
     over: 'LMI por encima del 100 %',
     near: 'Aviso LMI: cerca del límite',
     capacity: 'Capacidad',
+    /** Fase 21: estado del LMI con forma y texto, además del color */
+    lmiState: { ok: 'normal', warn: 'cerca del límite', bad: 'sobrecarga' } as Record<'ok' | 'warn' | 'bad', string>,
+    lmiIcon: { ok: '●', warn: '▲', bad: '■' } as Record<'ok' | 'warn' | 'bad', string>,
+    expert: 'Modo experto',
+    options: 'Opciones',
     support: (mode: string) => `Apoyo: ${mode} · masa y capacidad con gancho`,
     ballast: (t: number, of: number, moving: string) => `Lastre ${t} / ${of} t${moving}`,
     mounting: ' · montando',
@@ -367,6 +372,40 @@ export const es = {
     seguir: 'Cámara de seguimiento',
     cabina: 'Vista desde la cabina del conductor',
     libre: 'Cámara libre: no sigue a ninguna grúa ni cambia con {switch} (ratón; botón derecho para desplazarla)',
+    gancho: 'Cámara del gancho: desde la cabeza de la pluma, mirando hacia abajo',
+  },
+
+  /** Fase 21: opciones del operador */
+  options: {
+    title: 'Opciones',
+    pip: 'Recuadro con la cámara del gancho',
+    pipNote: 'otra vista de la escena: cuesta algo de rendimiento',
+    vibration: 'Vibración del mando',
+    vibrationNote: 'suave desde el 90 % de LMI, fuerte en golpes y aterrizajes duros, pulsos con la alarma de la línea',
+    aids: 'Ayudas',
+    aidsNote: 'plomada del gancho, marca de la carga en el suelo, radio actual y radio máximo con la carga colgada',
+    expert: 'Modo experto',
+    expertNote: 'sin porcentaje del LMI ni capacidad en el HUD, solo las alarmas; sin ayudas',
+    hud: 'Tamaño del HUD',
+    close: 'Cerrar',
+    pipTitle: 'Gancho',
+  },
+
+  /** Fase 21: pantalla del LMI en la cabina y repetición del fallo */
+  cab: {
+    title: 'LMI',
+    radius: 'Radio',
+    load: 'Carga',
+    cap: 'Capacidad',
+    boom: 'Pluma',
+    angle: 'Ángulo',
+    trolley: 'Carro',
+    free: 'libre',
+  },
+  replay: {
+    banner: (speed: string) => `Repetición · ×${speed}`,
+    skip: 'Saltar (Esc)',
+    again: 'Ver la repetición',
   },
 
   /** Avisos de las teclas y de la partida */

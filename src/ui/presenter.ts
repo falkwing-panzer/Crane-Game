@@ -27,6 +27,14 @@ import type { Input } from './input';
 import { RingsView } from '../render/ringsView';
 import { SchoolPanel, introHtml, markSchool, passedHtml } from './schoolUi';
 import { ChartPanel } from './chartPanel';
+import { HookPip } from '../render/hookPip';
+import { CAB_LAYER, CabScreen } from '../render/cabScreen';
+import { Aids } from '../render/aids';
+import { Rumble } from './rumble';
+import { OptionsPanel } from './options';
+import { Replay } from '../game/replay';
+import { maxReachContour } from '../crane/loadChart';
+import type { HookAnchor } from '../render/camera';
 import { t } from '../i18n';
 
 const MODE_TEXT = t.hud.modes;
@@ -68,6 +76,22 @@ export class Presenter {
   readonly sound: Sound;
   /** Tabla de cargas (fase 20, tecla C) */
   readonly chart: ChartPanel;
+  /** Fase 21: recuadro de la cámara del gancho, pantalla de la cabina, ayudas, vibración, opciones y repetición */
+  readonly pip: HookPip;
+  private cabScreen: CabScreen;
+  private aids: Aids;
+  private rumble = new Rumble();
+  readonly opts: OptionsPanel;
+  private inCab = false;
+  private maxRing: { key: string; at: number; pts: { slew: number; R: number | null }[] | null } = { key: '', at: -Infinity, pts: null };
+  /** Lo grabado para la repetición (lo pone bindCommands: `GameStep.replay.take`) */
+  takeReplay: () => import('../game/interp').Frame[] = () => [];
+  private rp: { play: Replay; then: () => void; cam: { p: THREE.Vector3; q: THREE.Quaternion; up: THREE.Vector3; target: THREE.Vector3; enabled: boolean }; a0: number; t: number } | null = null;
+  private lastReplay: Replay | null = null;
+  /** Fallo del nivel (para volver a poner su cartel después de ver la repetición otra vez) */
+  private lastEnd: { title: string; text: string } | null = null;
+  private replayBar: HTMLElement;
+  private size: number;
   private readonly off: (() => void)[] = [];
   /** Detalles de las grúas que se ocultan de lejos (fase 16) */
   readonly lod: DetailLod;
@@ -126,6 +150,21 @@ export class Presenter {
     };
     hud.onCrane = (k) => go(levelUrl(0, k));
     this.chart = new ChartPanel(root);
+    // fase 21
+    this.size = camSize(specs);
+    this.pip = new HookPip(root, t.options.pipTitle);
+    this.cabScreen = new CabScreen(ctx.scene);
+    ctx.camera.layers.enable(CAB_LAYER);
+    this.aids = new Aids(ctx.scene);
+    this.opts = new OptionsPanel(root, hud.left, settings);
+    this.opts.onToggle = (open) => input.block('opciones', open);
+    this.opts.onChange = (s) => this.applyOptions(s, root);
+    this.applyOptions(settings, root);
+    root.insertAdjacentHTML('beforeend', `<div class="replay-bar" hidden><b></b><button type="button">${t.replay.skip}</button></div>`);
+    this.replayBar = root.querySelector('.replay-bar')!;
+    this.replayBar.querySelector('button')!.addEventListener('click', (e) => { this.skipReplay(); (e.currentTarget as HTMLElement).blur(); });
+    this.input = input;
+    this.settings = settings;
 
     // Niveles: menú, ficha, carteles y reloj. El turno empieza en pausa hasta "Empezar turno".
     const lui = this.lui = new LevelUi(root);
@@ -164,13 +203,20 @@ export class Presenter {
     this.off.push(
       bus.on('say', (e) => { const t = name(e.unit, e.text); if (e.once) hud.sayOnce(t); else hud.say(t, e.s); }),
       bus.on('cut', (e) => hud.say(name(e.unit, e.overload ? m.cutOverload : m.cut))),
-      bus.on('tipping', (e) => hud.say(name(e.unit, m.tipping), CARD_DELAY)),
-      // en la prueba libre, el cartel con Reiniciar (en un nivel, el de nivel fallido: lo pide el fin del nivel)
-      bus.on('tipped', (e) => { if (!L) hud.showTipped(multi ? m.named(units[e.unit].T.name, e.text) : e.text); }),
+      bus.on('tipping', (e) => { hud.say(name(e.unit, m.tipping), CARD_DELAY); this.vibrate(this.rumble.hit('tip')); }),
+      // en la prueba libre, el cartel con Reiniciar (en un nivel, el de nivel fallido: lo pide el fin del nivel);
+      // fase 21: antes, la repetición de los últimos segundos a cámara lenta
+      bus.on('tipped', (e) => {
+        if (L) return;
+        const text = multi ? m.named(units[e.unit].T.name, e.text) : e.text;
+        this.startReplay(() => hud.showTipped(text, () => this.replayAgain()));
+      }),
       bus.on('end', (e) => {
         clearSave(def.nivel);
-        if (e.fail) lui.failed(def.li, ses.act.T.name, e.fail.title, e.fail.text, ses.run);
-        else lui.won(def.li, ses.act.T.name, ses.run, !!e.record);
+        if (e.fail) {
+          const f = this.lastEnd = e.fail;
+          this.startReplay(() => lui.failed(def.li, ses.act.T.name, f.title, f.text, ses.run, this.lastReplay ? () => this.replayAgain() : undefined));
+        } else lui.won(def.li, ses.act.T.name, ses.run, !!e.record);
       }),
       bus.on('restart', () => hud.showTipped(null)),
       bus.on('restored', () => hud.showTipped(null)),
@@ -178,8 +224,14 @@ export class Presenter {
       bus.on('switch', (e) => this.follow(units[e.unit])),
       // golpe sordo al apoyar o golpear la carga (los mismos umbrales que las reglas de los niveles)
       // fase 16: desde donde está la carga (o el gancho)
-      bus.on('land', (e) => { if (e.v >= LANDING_MIN) this.sound.thump(e.v, this.loadAt(units[e.unit])); }),
-      bus.on('strike', (e) => { if (e.v > 0.25) this.sound.thump(e.v, this.loadAt(units[e.unit])); }),
+      bus.on('land', (e) => {
+        if (e.v >= LANDING_MIN) this.sound.thump(e.v, this.loadAt(units[e.unit]));
+        if (units[e.unit] === ses.act) this.vibrate(this.rumble.hit('land', e.v));
+      }),
+      bus.on('strike', (e) => {
+        if (e.v > 0.25) this.sound.thump(e.v, this.loadAt(units[e.unit]));
+        if (units[e.unit] === ses.act) this.vibrate(this.rumble.hit('strike', e.v));
+      }),
     );
 
     if (def.freeTandem) hud.say(m.freeTandem, 5);
@@ -222,6 +274,96 @@ export class Presenter {
     if (hl !== sc.hl) { sc.hl = hl; this.hud.setKeys(keys); }
   }
 
+  private input: Input;
+  private settings: Settings;
+
+  /** Opciones (fase 21): recuadro, modo experto y tamaño del HUD; las ayudas y la vibración se leen cada cuadro */
+  private applyOptions(s: Settings, root: HTMLElement) {
+    this.pip.setOn(s.recuadro);
+    this.hud.expert = s.experto;
+    root.style.setProperty('--hud-scale', String(s.hud));
+    root.querySelector('#other')?.classList.toggle('pip', s.recuadro);
+  }
+
+  /** Manda una vibración al mando, si está encendida */
+  private vibrate(fx: { strong: number; weak: number; ms: number } | null) {
+    if (fx && this.settings.vibracion) this.input.rumble(fx);
+  }
+
+  /** Ancla del cable y eje de giro de una grúa en un cuadro (cámara del gancho) */
+  private anchor(u: Unit, fu: { head: { x: number; y: number; z: number }; pose: import('../crane/pose').Pose }): HookAnchor {
+    return { head: fu.head, piv: apply(fu.pose, { x: u.T.piv, y: 0, z: 0 }) };
+  }
+
+  /** ¿Se está viendo la repetición? */
+  get replaying() { return !!this.rp; }
+
+  /**
+   * Repetición del fallo (fase 21): los últimos segundos grabados a cámara lenta desde una cámara que da vueltas
+   * alrededor de la grúa; al terminar (o al saltarla), then() muestra el cartel.
+   */
+  private startReplay(then: () => void) {
+    const frames = this.takeReplay();
+    if (frames.length < 30) { this.lastReplay = null; then(); return; }
+    this.lastReplay = new Replay(frames);
+    this.playReplay(this.lastReplay, then);
+  }
+
+  private playReplay(play: Replay, then: () => void) {
+    const { camera, controls } = this.ctx;
+    play.rewind();
+    const c = this.ses.act.pose.t;
+    this.rp = {
+      play, then, t: 0,
+      a0: Math.atan2(camera.position.z - c.z, camera.position.x - c.x),
+      cam: { p: camera.position.clone(), q: camera.quaternion.clone(), up: camera.up.clone(), target: controls.target.clone(), enabled: controls.enabled },
+    };
+    controls.enabled = false;
+    camera.up.set(0, 1, 0);
+    this.lui.close();
+    this.hud.showTipped(null);
+    this.replayBar.hidden = false;
+    this.replayBar.querySelector('b')!.textContent = t.replay.banner(play.speed.toFixed(2).replace('.', ','));
+  }
+
+  /** Esc o el botón: termina la repetición y sale el cartel */
+  skipReplay() {
+    const rp = this.rp;
+    if (!rp) return;
+    this.rp = null;
+    const { camera, controls } = this.ctx;
+    camera.position.copy(rp.cam.p);
+    camera.quaternion.copy(rp.cam.q);
+    camera.up.copy(rp.cam.up);
+    controls.target.copy(rp.cam.target);
+    controls.enabled = rp.cam.enabled;
+    this.replayBar.hidden = true;
+    rp.then();
+  }
+
+  /** Botón "Ver la repetición" del cartel */
+  private replayAgain() {
+    const play = this.lastReplay;
+    if (!play || this.rp) return;
+    const tipped = this.hud.tippedText;
+    const end = this.lastEnd, ses = this.ses;
+    this.playReplay(play, () => {
+      // vuelve el mismo cartel, con sus botones
+      if (end) this.lui.failed(ses.def.li, ses.act.T.name, end.title, end.text, ses.run, () => this.replayAgain());
+      else if (tipped !== null) this.hud.showTipped(tipped, () => this.replayAgain());
+    });
+  }
+
+  /** Cámara de la repetición: da vueltas despacio alrededor de la grúa, mirando la grúa entera */
+  private replayCam(fa: { pose: import('../crane/pose').Pose }, dt: number) {
+    const rp = this.rp!, { camera } = this.ctx, k = this.size;
+    rp.t += dt;
+    const a = rp.a0 + rp.t * 0.12, c = fa.pose.t;
+    const R = 34 * k, H = 15 * k;
+    camera.position.set(c.x + R * Math.cos(a), c.y + H, c.z + R * Math.sin(a));
+    camera.lookAt(c.x, c.y + 5 * k, c.z);
+  }
+
   /** Dónde está la carga enganchada de una grúa (o su gancho) */
   private loadAt(u: Unit) {
     const b = u.phys.attached?.body ?? u.phys.hookBody;
@@ -254,14 +396,17 @@ export class Presenter {
     const act = ses.act;
     const t1 = performance.now();
     // fase 15: se dibuja la mezcla de los dos últimos pasos (frame); sin frame, el último paso tal cual
-    const f = frame ?? readFrame(units);
+    // fase 21: en la repetición, el cuadro grabado que toca
+    const rp = this.rp;
+    const f = rp ? rp.play.frame(dt) : frame ?? readFrame(units);
     units.forEach((u, i) => {
       const fu = f.units[i];
       u.crane.update(fu.S, fu.pose, u.C.slR);
       u.rig.update(u.crane.lateral(_lat), fu, f.loads, dt);
     });
     const fa = f.units[units.indexOf(act)];
-    this.cam.update(dt, fa.S, fa.pose);
+    if (rp) this.replayCam(fa, dt);
+    else this.cam.update(dt, fa.S, fa.pose, this.anchor(act, fa));
     this.lod.update(ctx.camera, ctx.renderer.domElement.height);
     const work = Math.max(Math.abs(ki.slew), Math.abs(ki.luff), Math.abs(ki.tele), Math.abs(ki.jib ?? 0), Math.abs(ki.sl ?? 0),
       act.S.cw !== act.S.cwT || act.S.yg !== act.S.ygT || act.S.jg !== act.S.jgT || act.S.er !== act.S.erT || (act.S.out > 0 && act.S.out < 1) ? 1 : 0);
@@ -270,7 +415,20 @@ export class Presenter {
       ctx.camera, ctx.renderer.domElement.height);
     this.decor.update(paused ? 0 : dt, run.wind, ctx.camera, ctx.renderer.domElement.height);
     updateWater(performance.now() / 1000);
+    // fase 21: pantalla del LMI en la cabina (y el panel de datos se oculta en esa vista) y ayudas
+    const cabin = this.cam.mode === 'cabina' && !rp;
+    if (cabin !== this.inCab) { this.inCab = cabin; hud.setCabin(cabin); }
+    this.drawAids(fa, f);
+    this.cabScreen.update(ctx.camera, cabin, cabin ? this.cabData() : null);
     ctx.renderer.render(ctx.scene, ctx.camera);
+    // recuadro de la cámara del gancho (no en la vista del gancho: sería la misma imagen)
+    if (this.pip.on && (this.cam.mode !== 'gancho' || rp)) {
+      const info = ctx.renderer.info.render, c0 = info.calls, t0 = info.triangles;
+      const add = this.pip.render(ctx.renderer, ctx.scene, this.anchor(act, fa));
+      info.calls = c0 + add.calls;
+      info.triangles = t0 + add.triangles;
+    }
+    if (rp && rp.play.done) this.skipReplay();
     bootDone(); // primer cuadro dibujado: se quita la pantalla de carga
     // sonido 3D (fase 16): el oyente es la cámara; el motor en el chasis y el cabrestante en la superestructura
     const cam = ctx.camera;
@@ -284,7 +442,7 @@ export class Presenter {
       lmi: act.dyn.lmi,
       cut: act.cut,
       prox: run.inProx,
-      off: !ses.running || ses.tipped() || paused,
+      off: !ses.running || ses.tipped() || paused || !!rp,
     }, {
       engine: apply(fa.pose, { x: 0, y: 1.5, z: 0 }),
       winch: apply(fa.pose, { x: act.T.piv, y: act.T.pivH, z: 0 }),
@@ -340,7 +498,49 @@ export class Presenter {
     const o = multi ? units.find((u) => u !== act)! : null;
     hud.other(o ? { name: o.T.name, lmi: o.dyn.lmi, tension: o.phys.tension, share: o.phys.slingShare(), tiltDeg: (o.S.phi * 180) / Math.PI, tipped: ses.tipped(o),
       sideDeg: o.phys.slingShare() !== null ? (o.sideAng * 180) / Math.PI : null } : null);
+    // vibración del mando (fase 21): continua desde el 90 % de LMI y pulsos con la alarma de la línea
+    this.vibrate(this.rumble.frame(dt, { lmi: act.dyn.lmi, prox: run.inProx, off: !ses.running || ses.tipped() || paused || !!rp || !this.settings.vibracion }));
     this.hudMs = performance.now() - t2;
+  }
+
+  /** Ayudas (fase 21): plomada, marca de la carga, radio actual y radio máximo con la carga colgada */
+  private drawAids(fa: Frame['units'][number], f: Frame) {
+    const { ses, settings } = this;
+    const act = ses.act, on = settings.ayudas && !settings.experto && !ses.tipped();
+    if (!on) { this.aids.update(false, null); return; }
+    const { T, S, C, phys } = act;
+    const att = phys.attached, li = att ? phys.loads.indexOf(att) : -1;
+    const lb = li >= 0 ? f.loads[li] : null;
+    const from = lb && att ? { x: lb.t.x, y: lb.t.y - att.half.y, z: lb.t.z } : { x: fa.hook.t.x, y: fa.hook.t.y - 0.5, z: fa.hook.t.z };
+    const piv = apply(fa.pose, { x: T.piv, y: 0, z: 0 });
+    // radio máximo: se recalcula si cambia algo (como mucho cada 0,3 s)
+    let ring: { x: number; z: number }[] | null = null;
+    if (ses.hanging(act)) {
+      const md = supportMode(S, T), m = T.hookM + ses.loadOnHook(act);
+      const key = [md, S.Lb.toFixed(1), T.tower ? S.ang.toFixed(2) : '', m.toFixed(1), C.mCw, C.yOn, C.jib ? C.jibRel.toFixed(2) : '', C.slR.toFixed(1)].join('|');
+      const now = performance.now();
+      if (key !== this.maxRing.key && now - this.maxRing.at > 300) this.maxRing = { key, at: now, pts: maxReachContour(T, C, md, S.Lb, S.ang, m) };
+      ring = (this.maxRing.pts ?? []).map((p) => {
+        const w = apply(fa.pose, { x: T.piv + (p.R ?? 0) * Math.cos(p.slew), y: 0, z: -(p.R ?? 0) * Math.sin(p.slew) });
+        return { x: w.x, z: w.z };
+      });
+    }
+    this.aids.update(true, {
+      from, piv, radius: Math.max(0, reach(T, C, fa.S.Lb, fa.S.ang)), maxRing: ring,
+      load: lb && att ? { t: lb.t, q: lb.q, half: att.half } : null,
+      ground: (x, z) => ses.terrain.height(x, z),
+    });
+  }
+
+  /** Lo que muestra la pantalla de la cabina */
+  private cabData() {
+    const { ses, settings } = this, u = ses.act, { T, S, C, phys } = u;
+    const md = supportMode(S, T);
+    return {
+      name: T.name, radius: Math.max(0, reach(T, C, S.Lb, S.ang)), load: phys.attached ? ses.loadOnHook(u) : null,
+      rated: ratedCap(T, C, md, S.Lb, S.ang, S.slew), lmi: u.dyn.lmi, Lb: S.Lb, angDeg: (S.ang * 180) / Math.PI,
+      tower: !!T.tower, cut: u.cut, expert: settings.experto,
+    };
   }
 
   /** Quita los oyentes del bus y deja la cámara sin piezas ocultas de esta partida */
@@ -349,5 +549,8 @@ export class Presenter {
     this.off.length = 0;
     if (this.fx?.raining) this.setRain(false);
     this.fx?.dispose();
+    this.cabScreen.dispose();
+    this.aids.dispose();
+    this.pip.dispose();
   }
 }

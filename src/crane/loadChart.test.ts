@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CRANES } from './cranes';
 import { baseConfig, lmiStatic, ratedCap, reach, type CraneConfig, type SupportMode } from './stability';
-import { SLEW_SAMPLES, angleFor, cellPose, chartMark, loadChart, niceSteps } from './loadChart';
+import { SLEW_SAMPLES, angleFor, cellPose, chartMark, loadChart, maxReach, maxReachContour, niceSteps } from './loadChart';
 
 const D = Math.PI / 180;
 
@@ -95,5 +95,27 @@ describe('tabla de cargas', () => {
     }
     console.log(`tabla de 360°: peor ${worst.toFixed(1)} ms`);
     expect(worst).toBeLessThan(400);
+  });
+});
+
+describe('radio máximo para la carga colgada (fase 21)', () => {
+  it('justo dentro el LMI es < 1 y un poco más afuera ya no', () => {
+    const T = CRANES.medium, C = baseConfig(T);
+    for (const [Lb, slew, m] of [[20, 0, 4], [30, 90 * D, 2.5], [11, 180 * D, 12]]) {
+      const R = maxReach(T, C, 'out', Lb, 0, slew, m);
+      expect(R).not.toBeNull();
+      const a = angleFor(T, C, Lb, R!)!;
+      expect(lmiStatic(T, C, 'out', Lb, a, slew, m)).toBeLessThan(1);
+      if (a > T.boom.angMin + 1e-6) expect(lmiStatic(T, C, 'out', Lb, a - 0.01, slew, m)).toBeGreaterThanOrEqual(1);
+    }
+    expect(maxReach(T, C, 'out', 42, 0, 90 * D, 500)).toBeNull();
+    expect(maxReachContour(T, C, 'out', 20, 0, 4).length).toBe(36);
+  });
+
+  it('grúa torre: saca el carro', () => {
+    const T = CRANES.sk, C = baseConfig(T);
+    const R = maxReach(T, C, 'out', 10, 0, 0, 3)!;
+    expect(lmiStatic(T, C, 'out', R, 0, 0, 3)).toBeLessThan(1);
+    expect(lmiStatic(T, C, 'out', R + 0.05, 0, 0, 3)).toBeGreaterThanOrEqual(1);
   });
 });

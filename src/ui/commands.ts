@@ -22,7 +22,9 @@ export function bindCommands(ses: Session, game: GameStep, input: Input, view: P
 
   help.onToggle = (open) => input.pause(open);
   input.onHelp = () => help.toggle();
-  input.onEscape = () => help.toggle(false);
+  // Esc: cierra la ayuda y las opciones, y salta la repetición del fallo (fase 21)
+  input.onEscape = () => { help.toggle(false); if (view.opts.open) view.opts.toggle(false); view.skipReplay(); };
+  view.takeReplay = () => game.replay.take();
 
   input.onHook = push('hook');
   input.onReset = push('reset');
