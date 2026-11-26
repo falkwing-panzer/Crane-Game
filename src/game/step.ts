@@ -3,6 +3,8 @@ import type { DriveInput } from '../crane/drive';
 import { Physics, type PhysSnap } from '../physics/world';
 import { afterUnit, controlUnit, IDLE, IDLE_DRIVE } from './control';
 import { LevelRules } from './rules';
+import { SchoolRules } from './schoolRules';
+import type { SchoolState } from '../school/lessons';
 import { runCommand } from './commands';
 import { Recording, type Cmd, type InputSource, type StepInput } from './record';
 import { Interp } from './interp';
@@ -41,6 +43,8 @@ export interface GameSnap {
   running: boolean;
   run: Run;
   winClock: number;
+  /** Progreso de la lección (escuela, fase 19) */
+  sch?: SchoolState | null;
 }
 
 /**
@@ -53,7 +57,7 @@ export interface GameSnap {
  * dibuja para la interpolación (`interp`).
  */
 export class GameStep {
-  readonly rules: LevelRules | null;
+  readonly rules: LevelRules | SchoolRules | null;
   /** Pasos dados con el turno en marcha (los de la grabación) */
   steps = 0;
   /** Entradas de cada paso desde el principio del turno */
@@ -67,7 +71,7 @@ export class GameStep {
   private ring: GameSnap[] = [];
 
   constructor(private ses: Session, private controls: Controls) {
-    this.rules = ses.L ? new LevelRules(ses, ses.L) : null;
+    this.rules = ses.L ? new LevelRules(ses, ses.L) : ses.lesson ? new SchoolRules(ses, ses.lesson) : null;
     this.interp.reset(ses.units);
   }
 
@@ -136,6 +140,7 @@ export class GameStep {
       running: ses.running,
       run: { ...ses.run },
       winClock: this.rules?.winClock ?? 0,
+      sch: ses.sch ? { ...ses.sch } : null,
     };
   }
 
@@ -163,6 +168,7 @@ export class GameStep {
     ses.running = s.running;
     ses.run = { ...s.run };
     if (this.rules) this.rules.winClock = s.winClock;
+    if (ses.sch && s.sch) ses.sch = { ...s.sch };
     this.steps = s.step;
     this.rec.truncate(s.step);
     this.ring = this.ring.filter((r) => r.step <= s.step);

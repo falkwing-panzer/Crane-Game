@@ -24,6 +24,8 @@ import { clearSave, loadSave } from './savegame';
 import { readFrame, type Frame } from '../game/interp';
 import { saveSettings, showFps, QUALITIES, type Quality, type Settings } from './settings';
 import type { Input } from './input';
+import { RingsView } from '../render/ringsView';
+import { SchoolPanel, introHtml, markSchool, passedHtml } from './schoolUi';
 import { t } from '../i18n';
 
 const MODE_TEXT = t.hud.modes;
@@ -74,6 +76,8 @@ export class Presenter {
   readonly decor: DecorView;
   /** Intensidad del sol sin lluvia (con lluvia se oscurece; se repone al desmontar) */
   private sunI: number;
+  /** Escuela (fase 19): panel del paso, aros y teclas resaltadas */
+  private school: { panel: SchoolPanel; rings: RingsView; hl: string } | null = null;
 
   /**
    * root = contenedor de esta partida dentro de #hud (se quita entero al desmontarla); sound = el de la app (uno solo);
@@ -88,11 +92,11 @@ export class Presenter {
     this.cam.ray = (o, d, max) => ses.act.phys.rayHit(o, d, max);
     this.cam.groundY = (x, z) => ses.terrain.height(x, z);
     // niebla según la obra (fase 16) y detalles que se ocultan de lejos
-    const site = L ? levelSize(L) : null;
+    const site = ses.site ? levelSize(ses.site) : null;
     sceneFog(ctx, site ? { w: site[0], d: site[1] } : null, camSize(specs));
     this.lod = new DetailLod(units.map((u) => u.crane.root), settings.calidad === 'bajo' ? LOD_DIST / 2 : LOD_DIST);
     this.fx = settings.calidad === 'bajo' ? null : new Effects(ctx.scene);
-    this.decor = new DecorView(ctx.scene, ses.decor, L?.wind[2] ?? 0, settings.calidad === 'bajo', ses.terrain.hills);
+    this.decor = new DecorView(ctx.scene, ses.decor, ses.site?.wind[2] ?? 0, settings.calidad === 'bajo', ses.terrain.hills);
     // cuadrícula de 5 m solo en la prueba libre (fase 17)
     const grid = ctx.scene.getObjectByName('cuadricula');
     if (grid) grid.visible = ses.decor.grid;
@@ -110,16 +114,19 @@ export class Presenter {
       tele: any((T) => !T.tower && T.boom.max > T.boom.min), tower: any((T) => !!T.tower), outriggers: any((T) => !!T.out),
       crawler: any((T) => isCrawler(T)), wheels: any((T) => !isCrawler(T)), tie: any((T) => canTie(T)),
       ballast: any((T) => !!T.ballast), yguy: any((T) => !!T.yguy), jib: any((_, u) => u.jibOk), superlift: any((T) => !!T.superlift),
-      tandem: multi, free: !L,
+      tandem: multi, free: !L && !ses.lesson, school: !!ses.lesson,
     }, hud.helpBtn, input);
     // teclas cambiadas en la ayuda: la línea de abajo las muestra
-    this.help.onKeys = () => hud.setKeys();
+    this.help.onKeys = () => {
+      hud.setKeys();
+      if (this.school && ses.sch) this.school.panel.update(ses.sch, ses.running, true);
+    };
     hud.onCrane = (k) => go(levelUrl(0, k));
 
     // Niveles: menú, ficha, carteles y reloj. El turno empieza en pausa hasta "Empezar turno".
     const lui = this.lui = new LevelUi(root);
     hud.left.insertAdjacentHTML('beforeend', `<a class="panel menu-btn" href="${homeUrl()}">${t.hud.menu}</a>`);
-    if (L) root.querySelector<HTMLElement>('.pick')!.hidden = true;
+    if (L || ses.lesson) root.querySelector<HTMLElement>('.pick')!.hidden = true;
     // Ajustes (fase 11): calidad gráfica (recarga la página: el antialias no cambia en marcha) y sonido
     const qOpts = QUALITIES.map((q) => `<option value="${q}"${q === settings.calidad ? ' selected' : ''}>${t.hud.qualities[q]}</option>`).join('');
     hud.left.insertAdjacentHTML('beforeend', `<label class="panel pick prefs">${t.hud.quality} <select id="quality">${qOpts}</select></label>`);
@@ -132,12 +139,13 @@ export class Presenter {
     });
     qSel.addEventListener('keydown', (e) => { if (e.key !== 'Enter') { e.preventDefault(); qSel.blur(); } });
     // lluvia (fase 16): solo en la prueba libre y sin calidad baja (no hay niveles con lluvia en la referencia)
-    if (!L && !def.showMenu && this.fx) {
+    if (!L && !ses.lesson && !def.showMenu && this.fx) {
       hud.left.insertAdjacentHTML('beforeend', `<label class="panel pick prefs"><input type="checkbox" id="rain"> ${t.hud.rain}</label>`);
       const rain = root.querySelector('#rain') as HTMLInputElement;
       rain.addEventListener('change', () => { this.setRain(rain.checked); rain.blur(); });
     }
     if (def.showMenu) lui.menu();
+    else if (ses.lesson) this.school = this.setupSchool(root);
     else if (L) {
       // partida guardada de este nivel (fase 15): Continuar la monta con su grúa y sigue donde quedó
       const sv = loadSave(def.nivel);
@@ -171,10 +179,43 @@ export class Presenter {
     );
 
     if (def.freeTandem) hud.say(m.freeTandem, 5);
-    else if (!L && !def.showMenu) {
+    else if (!L && !ses.lesson && !def.showMenu) {
       const T = act.T;
       hud.say(T.tower ? m.introTower(T.name) : T.superlift ? m.introSuperlift(T.name) : T.crawler ? m.introCrawler(T.name) : m.intro(T.name), 4);
     }
+  }
+
+  /**
+   * Escuela (fase 19): presentación de la lección (el turno empieza al pulsar Empezar), panel del paso actual, aros y
+   * cartel de lección superada (se guarda como hecha).
+   */
+  private setupSchool(root: HTMLElement) {
+    const { ses, lui } = this, lesson = ses.lesson!;
+    const panel = new SchoolPanel(root, lesson);
+    const rings = new RingsView(this.ctx.scene, lesson.rings, lesson.site.zones);
+    lui.show(introHtml(lesson));
+    const start = lui.card.querySelector<HTMLButtonElement>('#s-start')!;
+    start.addEventListener('click', () => { lui.close(); ses.running = true; start.blur(); });
+    start.focus({ preventScroll: true });
+    this.off.push(ses.bus.on('lessonDone', (e) => {
+      markSchool(e.n);
+      lui.show(passedHtml(lesson, levelUrl(1)));
+      lui.card.querySelector<HTMLElement>('#s-next')?.focus({ preventScroll: true });
+    }));
+    // los enlaces del cartel (siguiente lección, repetir, menú) cambian de partida sin recargar: los toma la App
+    return { panel, rings, hl: '' };
+  }
+
+  /** Panel de la escuela, aros y teclas resaltadas (cada cuadro; solo repinta si cambia algo) */
+  private drawSchool() {
+    const sc = this.school, sch = this.ses.sch;
+    if (!sc || !sch) return;
+    sc.panel.update(sch, this.ses.running);
+    sc.panel.wind(this.ses.run.wind);
+    sc.rings.update(sch.step, this.ctx.camera);
+    const keys = this.ses.running ? sc.panel.keys(sch) : [];
+    const hl = keys.join(',');
+    if (hl !== sc.hl) { sc.hl = hl; this.hud.setKeys(keys); }
   }
 
   /** Dónde está la carga enganchada de una grúa (o su gancho) */
@@ -253,6 +294,7 @@ export class Presenter {
     const share = phys.slingShare();
     const hp = phys.headWorld();
     hud.frame(dt, physMs, t2 - t1, ctx.renderer.info);
+    this.drawSchool();
     if (L) {
       // flecha del viento en pantalla: dirección del nivel respecto de hacia dónde mira la cámara
       ctx.camera.getWorldDirection(_wd);

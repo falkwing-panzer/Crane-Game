@@ -962,6 +962,11 @@ export class Physics {
     if (this.crew.some((c) => c.attached === load)) return null;
     const v = load.body.linvel();
     if (Math.hypot(v.x, v.y, v.z) > 0.05) return null;
+    return this.footprint(load);
+  }
+
+  /** Envolvente en planta, fondo e inclinación de una carga, esté como esté (escuela, fase 19) */
+  footprint(load: Load): { x: number; z: number; hx: number; hz: number; bottom: number; tilt: number } {
     const t = load.body.translation(), q = load.body.rotation(), h = load.half;
     // columnas de la matriz de giro: ejes x, y, z del cuerpo en el mundo
     const ax = rotate(q, { x: 1, y: 0, z: 0 }), ay = rotate(q, { x: 0, y: 1, z: 0 }), az = rotate(q, { x: 0, y: 0, z: 1 });

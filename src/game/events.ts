@@ -66,6 +66,8 @@ export interface GameEvents {
   switch: { unit: number };
   /** Se volvió a una instantánea (fase 15): rebobinar o continuar una partida guardada */
   restored: Record<string, never>;
+  /** Escuela (fase 19): se terminó la lección n */
+  lessonDone: { n: number };
 }
 
 export type GameBus = Bus<GameEvents>;

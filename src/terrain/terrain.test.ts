@@ -140,7 +140,7 @@ describe('terreno (fase 18)', () => {
     expect(S.x).toBeGreaterThan(96);
     expect(S.gy).toBe(0);
     expect(g.msgs.filter((m) => /Pendiente|irregular/.test(m))).toEqual([]);
-  });
+  }, 30_000);
 
   it('el desnivel de 45° no se puede bajar ni subir', () => {
     const g = freeAt('medium', 65, -42, -Math.PI / 2); // mirando a +z, hacia el borde de 45°

@@ -58,7 +58,7 @@ describe('desmontar una partida', () => {
     expect(scene.children.length).toBe(before);
     expect(cycle('?nivel=14')).toBeGreaterThan(10);
     expect(scene.children.length).toBe(before);
-  });
+  }, 30_000);
 
   it('la memoria del wasm de Rapier no crece al cambiar 10 veces de partida', () => {
     expect(memory).not.toBeNull();

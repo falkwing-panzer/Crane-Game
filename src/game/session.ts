@@ -18,6 +18,7 @@ import { Physics } from '../physics/world';
 import { levelBounds, placeCrane, populate } from '../levels/setup';
 import { ALL_LEVELS as LEVELS, TANDEM_IDS, TEST_COLUMN, placeTandem, tandemColumn } from '../levels/tandemSetup';
 import type { Level } from '../levels/levels';
+import { LESSONS, SCHOOL_CRANE, newSchool, type Lesson, type SchoolState } from '../school/lessons';
 import { Bus, type GameEvents } from './events';
 import { t } from '../i18n';
 
@@ -79,26 +80,32 @@ export interface SessionDef {
   tandem: boolean;
   /** Menú de niveles (sin parámetros) */
   showMenu: boolean;
+  /** Lección de la escuela (fase 19): 1…6, o 0 */
+  school: number;
   ids: CraneId[];
 }
 
 /**
  * ?nivel=1…14: un nivel (con ?grua= una de las permitidas; si no, la recomendada).
  * ?grua=id o ?libre=1: prueba libre con los obstáculos de prueba. ?tandem=1: prueba libre del tándem (dos grúas).
+ * ?escuela=1…6: una lección de la escuela de operadores (fase 19), con la AT 60.
  * Sin parámetros: menú de niveles (con la AT 60 de fondo).
  */
 export function sessionDef(search: string): SessionDef {
   const params = new URLSearchParams(search);
   const nivel = Number(params.get('nivel')) || 0;
+  const sn = Number(params.get('escuela')) || 0;
+  const school = !nivel && sn >= 1 && sn <= LESSONS.length ? sn : 0;
   const li = nivel >= 1 && nivel <= LEVELS.length ? nivel - 1 : -1;
   const L = li >= 0 ? LEVELS[li] : null;
   const freeTandem = !L && params.has('tandem');
   const tandem = freeTandem || !!L?.tandem;
-  const showMenu = !L && !freeTandem && !params.has('grua') && !params.has('libre');
+  const showMenu = !L && !freeTandem && !school && !params.has('grua') && !params.has('libre');
   const q = params.get('grua') as CraneId | null;
   const ids: CraneId[] = L?.tandem ? [L.tandem.main.id, L.tandem.tail.id] : freeTandem ? [...TANDEM_IDS]
+    : school ? [SCHOOL_CRANE]
     : [L ? (q && L.cranes.includes(q) ? q : L.rec) : q && MENU_IDS.includes(q) ? q : 'medium'];
-  return { nivel, li, L, freeTandem, tandem, showMenu, ids };
+  return { nivel, li, L, freeTandem, tandem, showMenu, school, ids };
 }
 
 /** Suelo bajo el chasis en su sitio (gy, gb, gc, gspread de CraneState) */
@@ -114,6 +121,12 @@ export function groundState(T: CraneSpec, S: CraneState, terrain: Terrain) {
 export class Session {
   readonly def: SessionDef;
   readonly L: Level | null;
+  /** Lección de la escuela (fase 19) o null. No es un nivel: L sigue en null (sin estrellas, récords ni guardar). */
+  readonly lesson: Lesson | null;
+  /** Obra con sus cargas y zonas: la del nivel o la de la lección (null en la prueba libre) */
+  readonly site: Level | null;
+  /** Progreso de la lección (va en las instantáneas) */
+  sch: SchoolState | null;
   readonly units: Unit[] = [];
   readonly multi: boolean;
   /** Decorado de fondo (fase 17); lo dibuja el Presenter */
@@ -133,6 +146,9 @@ export class Session {
   constructor(def: SessionDef, scene: THREE.Scene, makeModel: ModelFactory) {
     this.def = def;
     const L = (this.L = def.L);
+    const lesson = (this.lesson = def.school ? LESSONS[def.school - 1] : null);
+    const site = (this.site = L ?? lesson?.site ?? null);
+    this.sch = lesson ? newSchool() : null;
     // Estado de cada grúa y su colocación
     const states = def.ids.map((id) => {
       const T = CRANES[id];
@@ -140,8 +156,8 @@ export class Session {
     });
     this.place(states);
     // decorado de fondo (fase 17) y terreno (fase 18): el terreno sale del decorado (colinas más allá de todo)
-    this.decor = decorFor(def.nivel, L);
-    this.terrain = terrainFor(this.decor, !L && !def.freeTandem);
+    this.decor = decorFor(def.nivel, site);
+    this.terrain = terrainFor(this.decor, !site && !def.freeTandem);
     for (const { T, S } of states) Object.assign(S, groundState(T, S, this.terrain));
 
     // Física: la primera grúa crea el mundo; la segunda lo comparte
@@ -149,7 +165,7 @@ export class Session {
       const { T, S } = st;
       const pose = carrierPose(T, S, supportMode(S, T));
       const phys = this.units.length ? new Physics(T, S, pose, { site: this.units[0].phys })
-        : new Physics(T, S, pose, L ? { testLoad: false, bounds: levelBounds(L) } : def.freeTandem ? { testLoad: false } : {});
+        : new Physics(T, S, pose, site ? { testLoad: false, bounds: levelBounds(site) } : def.freeTandem ? { testLoad: false } : {});
       const crane = makeModel(T);
       scene.add(crane.root);
       this.units.push({
@@ -157,31 +173,32 @@ export class Session {
         cutMsg: false, tipClock: -1, tipText: '', jibOk: !!T.jibDef && !def.tandem && (!L || !!L.jib), over: 0, side: 0, sideAng: 0,
       });
     }
-    const site = this.units[0].phys;
-    site.addTerrain(this.terrain);
+    const world = this.units[0].phys;
+    world.addTerrain(this.terrain);
     for (const m of terrainMeshes(this.terrain)) scene.add(m);
-    if (L) {
-      populate(site, L);
-      buildLevelSite(scene, L);
+    if (site) {
+      populate(world, site);
+      buildLevelSite(scene, site);
     } else if (def.freeTandem) {
       const c = TEST_COLUMN;
-      site.addLoad(c.label, c.mass, c.half, c.pos, { lugs: c.lugs, color: '#9aa3aa', kind: 'vessel' });
-      buildSite(scene, site.obstacles, site.softs);
+      world.addLoad(c.label, c.mass, c.half, c.pos, { lugs: c.lugs, color: '#9aa3aa', kind: 'vessel' });
+      buildSite(scene, world.obstacles, world.softs);
     } else {
       const T = this.units[0].T;
-      for (const o of TEST_OBSTACLES) site.addObstacle(o);
+      for (const o of TEST_OBSTACLES) world.addObstacle(o);
       // carga pesada de prueba para la LR 3000
-      if (T.superlift) site.addLoad(TEST_HEAVY.label, TEST_HEAVY.mass, TEST_HEAVY.half, TEST_HEAVY.pos);
-      site.softs.push(...TEST_SOFT);
-      buildSite(scene, site.obstacles, site.softs);
+      if (T.superlift) world.addLoad(TEST_HEAVY.label, TEST_HEAVY.mass, TEST_HEAVY.half, TEST_HEAVY.pos);
+      world.softs.push(...TEST_SOFT);
+      buildSite(scene, world.obstacles, world.softs);
     }
     // decorado de fondo (fase 17): sus colisionadores (solo para la carga y el gancho), después de la obra
-    site.addDecor(this.decor.kit.solids);
+    world.addDecor(this.decor.kit.solids);
     // el aparejo de la primera grúa dibuja las cargas (después de crearlas)
     this.units.forEach((u, i) => { u.rig = new Rigging(scene, u.phys, u.T, i === 0); });
     this.act = this.units[0];
     this.multi = this.units.length > 1;
-    this.running = !L && !def.showMenu;
+    // niveles y lecciones empiezan en pausa (ficha o presentación de la lección)
+    this.running = !site && !def.showMenu;
   }
 
   /** Coloca las grúas (niveles y tándem; en el tándem, con los montajes hechos) */
@@ -190,6 +207,11 @@ export class Session {
     if (L?.tandem) placeTandem(states[0], states[1], L.tandem, tandemColumn(L));
     else if (freeTandem) placeTandem(states[0], states[1]);
     else if (L) placeCrane(states[0].T, states[0].S, L);
+    else if (this.lesson) {
+      const { T, S, C } = states[0];
+      placeCrane(T, S, this.lesson.site);
+      this.lesson.setup(T, S, C);
+    }
   }
 
   /** La grúa volcó */
@@ -231,6 +253,7 @@ export class Session {
       u.tipClock = -1;
     }
     this.bypass = false;
+    if (this.sch) this.sch = newSchool();
     this.bus.emit('restart', {});
     this.bus.emit('say', { text: t.msg.restarted, s: 1.5 });
   }

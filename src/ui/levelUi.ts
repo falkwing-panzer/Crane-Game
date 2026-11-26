@@ -4,6 +4,7 @@ import { ALL_LEVELS as LEVELS } from '../levels/tandemSetup';
 import { stickyParams } from './settings';
 import { t } from '../i18n';
 import { withKeys } from './keys';
+import { schoolMenu } from './schoolUi';
 
 const tl = t.levels;
 
@@ -78,7 +79,8 @@ export function homeUrl(extra: Record<string, string> = {}) {
 
 export class LevelUi {
   private overlay: HTMLElement;
-  private card: HTMLElement;
+  /** Tarjeta del cartel abierto (la escuela le busca sus botones) */
+  readonly card: HTMLElement;
   private clock: HTMLElement;
   private clockText: HTMLElement;
   private saveBtn: HTMLButtonElement;
@@ -99,7 +101,8 @@ export class LevelUi {
 
   get open() { return !this.overlay.hidden; }
 
-  private show(html: string, fail = false) {
+  /** Muestra un cartel (también los de la escuela, fase 19) */
+  show(html: string, fail = false) {
     this.card.innerHTML = html;
     this.card.classList.toggle('fail', fail);
     this.overlay.hidden = false;
@@ -111,7 +114,7 @@ export class LevelUi {
   /** Menú: los 13 niveles de la referencia y el de tándem (fase 10) con su tipo y sus estrellas, más las pruebas libres */
   menu() {
     const rec = loadRecords();
-    this.show(`<div class="eyebrow">${tl.eyebrow}</div><h2>${tl.choose}</h2>
+    this.show(`<div class="eyebrow">${tl.eyebrow}</div>${schoolMenu()}<h2>${tl.choose}</h2>
       <div class="levels">${LEVELS.map((L, i) => {
         const r = rec[i];
         return `<a class="lvl" href="${levelUrl(i + 1)}"><small>${i + 1} · ${L.type}</small><b>${L.name}</b>
