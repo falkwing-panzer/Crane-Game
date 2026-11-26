@@ -104,6 +104,8 @@ export interface SessionDef {
   ids: CraneId[];
   /** Trabajo que no es uno de los niveles fijos (fase 22: reto diario; fase 25: contratos de la carrera) */
   job: Job | null;
+  /** Pantalla de la carrera (?carrera=1) */
+  career?: boolean;
 }
 
 /** Un trabajo con obra propia: récords aparte, sin guardar a mitad */
@@ -120,6 +122,9 @@ export interface Job {
   rival?: number;
   /** Fecha del reto */
   date?: string;
+  /** Contrato de la carrera (fase 25): índice de la oferta y texto con el pago y la grúa */
+  offer?: number;
+  note?: string;
 }
 
 /** ?reto=AAAA-MM-DD (o ?reto=1: hoy): el reto diario de esa fecha */
@@ -134,7 +139,7 @@ function dailyJob(params: URLSearchParams): Job | null {
     rival: Number.isFinite(rival) && rival > 0 ? rival : undefined };
 }
 
-/** Trabajos de otros módulos (la carrera, fase 25) */
+/** Trabajos de otros módulos (la carrera, fase 25, se añade desde career/job.ts) */
 export const jobSources: ((p: URLSearchParams) => Job | null)[] = [dailyJob];
 
 /**
@@ -154,12 +159,14 @@ export function sessionDef(search: string): SessionDef {
   const L = li >= 0 ? LEVELS[li] : job?.L ?? null;
   const freeTandem = !L && params.has('tandem');
   const tandem = freeTandem || !!L?.tandem;
+  // fase 25: la pantalla de la carrera va sobre el menú (sin partida)
   const showMenu = !L && !freeTandem && !school && !params.has('grua') && !params.has('libre');
+  const career = showMenu && params.has('carrera');
   const q = params.get('grua') as CraneId | null;
   const ids: CraneId[] = L?.tandem ? [L.tandem.main.id, L.tandem.tail.id] : L?.crew ? L.crew.map((c) => c.id) : freeTandem ? [...TANDEM_IDS]
     : school ? [lessonByN(school)!.crane ?? SCHOOL_CRANE]
     : [L ? (q && L.cranes.includes(q) ? q : L.rec) : q && MENU_IDS.includes(q) ? q : 'medium'];
-  return { nivel, li, L, freeTandem, tandem, showMenu, school, ids, job };
+  return { nivel, li, L, freeTandem, tandem, showMenu, school, ids, job, career };
 }
 
 /** Suelo bajo el chasis en su sitio (gy, gb, gc, gspread de CraneState) */

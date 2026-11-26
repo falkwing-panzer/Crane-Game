@@ -251,6 +251,12 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - **Fase 24, parte B** (clima y averías): nivel 21 "Tormenta en el puerto" (ráfagas anunciadas, niebla, tormenta
   con rayos) y 22 "Turno con averías" (anemómetro, fuga hidráulica, cable dañado). Solo en niveles nuevos. Pruebas en
   `levels/events.test.ts`.
+- **Fase 25** (modo carrera; la fase pedía enseñar antes el equilibrio de dinero: se hizo sin esperar, está abajo en
+  Decisiones para revisarlo): `?carrera=1` (caja, día, contratos, flota, compra, venta, mantenimiento, exportar e
+  importar a un archivo, carrera nueva), contratos `?contrato=k` (niveles fijos u obras generadas) que se juegan como
+  un nivel y se cobran al terminar. Pruebas en `career/career.test.ts` (30 minutos de contratos simulados; ofertas
+  siempre posibles 15 días). Playwright: las pruebas abren todas las licencias (`beforeEach`) y cuentan las tarjetas
+  nuevas del menú.
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -457,6 +463,11 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - Fase 24 B: `levels/events.ts` (sin three.js: `LevelEvent`, `gustAt`, `active`, `gustWarnings`, `starting`,
   `capFactor`, constantes), `Level.events`, `LevelRules.events()`, `Session.capK` (los cortes de `controlUnit` usan
   la masa / capK), `Presenter.weather` (niebla, lluvia y rayos), viento `NaN` = anemómetro averiado en el reloj.
+- Fase 25: `career/career.ts` (sin DOM: `Career`, `Offer`, `newCareer`, `rentOf`/`priceOf`/`maintenanceOf`,
+  `payFor`, `offersFor`, `offerLevel` con `wearFaults`, `settle`/`finish`, `buy`/`sell`/`maintain`, `offerDoable`,
+  guardado `gruas-carrera`, `exportCareer`/`importCareer`), `career/job.ts` (`contractJob` en `jobSources`,
+  `careerLic`; lo importa `app.ts`), `career/careerUi.ts` (`showCareer`, `settleContract`, `settleHtml`),
+  `SessionDef.career`, `Job.offer`/`note`, `Presenter.contract`/`showContract`. Textos en `t.career`.
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
   cut…, de la grúa que se maneja; `units`, todas) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
   dibuja cuadros; así se puede probar desde la consola).
@@ -1037,6 +1048,18 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   colgada más de 45 s desde que empieza, falla. Cable dañado: capacidad al 50 % en los cortes del LMI (`mEval /
   capK`; `stability.ts` no se tocó), el HUD sigue mostrando el LMI normal (el aviso lo dice).
 
+- **Equilibrio de la carrera (fase 25)**, valores del juego: empiezas con 15 000 € y la City 25. Alquiler por
+  contrato R = 400 + 15 · carga máxima (t) redondeado a 50 € (City 25 800, AT 60 1 300, AT 220 3 700, AT 300-6 4 900,
+  AT 500-8 7 150); compra 30 · R (AT 60 39 000 €); venta al 60 % menos el desgaste. Pago = 1 200 + 25 · toneladas
+  + 1,5 · R de la recomendada, × (0,7 + 0,1 · estrellas), + 5/10/15 % con medalla. Multas: golpe y aterrizaje duro
+  300, alarma de línea 1 000, carga sobre personas 800, izaje sin lista 500, retraso 20 €/s; fallar 1 500 y sin
+  pago; volcar, 25 % del precio (propia) o 5 000 de franquicia (alquilada). Desgaste +10 por contrato en la propia;
+  mantener cuesta 0,06 % del precio por punto; con 60 o más, una avería en el contrato (fuga o cable), con 90, dos.
+  Simulado (8 contratos de unos 4 min, 2 estrellas, un golpe, uno fallado): de 15 000 a ~43 000 € y se puede comprar
+  la AT 60. Contratos: 2 niveles fijos (sin el tándem ni el de grúa auxiliar) y 2 obras generadas por día, todas
+  posibles con una grúa de una familia con licencia (la carrera da siempre la de ruedas). Abandonar un contrato no lo
+  cobra ni lo gasta.
+
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
   grúas grandes (fases 4–6): cabeza cinemática, izado a velocidad plena, estiramiento máximo del cable.
@@ -1236,4 +1259,9 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - Fase 23: Jesús no ha revisado la lista de señales ni sus posturas, ni los límites de la cesta. La voz depende de
   las voces en español que tenga el sistema (sin comprobar en la laptop). Los trabajadores atraviesan las cargas
   apoyadas (no tienen colisionador) y no esquivan a nadie.
+- Fase 25: Jesús no ha revisado el equilibrio de dinero (la fase pedía enseñárselo antes). Un contrato abandonado a
+  mitad sigue en la lista; repetir no está (el cartel solo vuelve a la carrera). Las obras generadas de los contratos
+  usan el mismo generador que el reto diario.
+- `crane/loadChart.test.ts` "se calcula rápido": con toda la batería en paralelo pasó una vez de su límite de
+  tiempo (sola, bien).
 - Vite avisaría que `app.js` pasa de 500 kB (three.js y el juego, ~780 kB): `chunkSizeWarningLimit` = 1200.

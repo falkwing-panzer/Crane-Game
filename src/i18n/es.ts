@@ -10,6 +10,8 @@
 const f1 = (v: number) => v.toFixed(1).replace('.', ',');
 const f2 = (v: number) => v.toFixed(2).replace('.', ',');
 
+const eurs = (v: number) => `${Math.round(v).toLocaleString('es-ES')} €`;
+
 export const es = {
   /** Separador decimal (los números se muestran con coma) */
   decimal: ',',
@@ -677,6 +679,44 @@ export const es = {
     got: (f: string) => `Licencia de ${f.toLowerCase()} conseguida`,
     examHead: (f: string) => `Examen de licencia · ${f.toLowerCase()}`,
     passed: (f: string) => `Licencia de ${f.toLowerCase()} conseguida`,
+  },
+
+  /** Modo carrera (fase 25) */
+  career: {
+    menu: 'Modo carrera',
+    menuText: 'empieza con una City 25 y poco dinero; contratos, alquiler y compra de grúas',
+    title: 'Carrera de operador',
+    head: (day: number) => `Contrato · día ${day}`,
+    money: (eur: string) => `Caja: <b>${eur}</b>`,
+    day: (d: number, done: number, failed: number) => `Día ${d} · ${done} ${done === 1 ? 'contrato hecho' : 'contratos hechos'} · ${failed} ${failed === 1 ? 'fallado' : 'fallados'}`,
+    fleet: 'Tu flota',
+    wear: (w: number) => `desgaste ${w} %`,
+    maintain: (eur: string) => `Mantener (${eur})`,
+    sell: (eur: string) => `Vender (${eur})`,
+    shop: 'Comprar grúa',
+    buy: (eur: string) => `Comprar (${eur})`,
+    rentDay: (eur: string) => `alquiler ${eur} por contrato`,
+    offers: 'Contratos de hoy',
+    accept: 'Aceptar',
+    pay: (eur: number) => `Pago hasta ${eurs(eur)}`,
+    own: (name: string, wear: number) => `con tu ${name} (desgaste ${wear} %)`,
+    rent: (name: string, eur: number) => `alquilando la ${name} (${eurs(eur)})`,
+    worn: '⚠ la grúa está gastada: puede averiarse',
+    cranes: (list: string) => `Grúas: ${list}`,
+    export: 'Exportar a un archivo',
+    import: 'Importar',
+    reset: 'Nueva carrera',
+    resetAsk: '¿Empezar una carrera nueva? Se pierde la actual (expórtala antes si quieres guardarla).',
+    imported: 'Carrera importada',
+    badFile: 'Ese archivo no es una carrera de este juego',
+    back: 'Volver a la carrera',
+    result: 'Cuentas del contrato',
+    payLine: 'Pago (según estrellas y suavidad)',
+    rentLine: 'Alquiler de la grúa',
+    repairLine: 'Reparación o franquicia',
+    fine: (what: string) => `Multa: ${what}`,
+    total: 'Total',
+    eur: (v: number) => eurs(v),
   },
 
   /** Reto diario (fase 22) */

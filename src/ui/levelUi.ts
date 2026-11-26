@@ -96,7 +96,7 @@ function jobHead(job: Job, L: Level, r?: { stars: number; time: number }) {
 }
 
 function jobBrief(_job: Job, L: Level) {
-  return L.brief || t.daily.brief(L.crates.length, CRANES[L.rec].name);
+  return L.brief ? withKeys(L.brief) : t.daily.brief(L.crates.length, CRANES[L.rec].name);
 }
 
 /** URL del examen de una familia (tándem: el nivel 13) */
@@ -150,7 +150,11 @@ export class LevelUi {
   /** Opción "Todo desbloqueado" (fase 22) */
   unlockAll = false;
   /** Licencias de operador (se leen cada vez: un examen aprobado en otra partida cuenta) */
-  lic(): Licenses { return loadLicenses(loadRecords(), loadSchool()); }
+  lic(): Licenses {
+    const l = loadLicenses(loadRecords(), loadSchool());
+    // en la carrera se empieza con la licencia de ruedas (fase 25)
+    return this.job?.kind === 'contrato' ? { ...l, ruedas: 1 } : l;
+  }
   /** ¿Abierto este nivel con las licencias? */
   open_(L: Level) { return levelOpen(L, this.lic(), this.unlockAll); }
   /** El nivel i, o el del trabajo */
@@ -193,7 +197,8 @@ export class LevelUi {
     this.show(`<div class="eyebrow">${tl.eyebrow}</div>${schoolMenu()}<h2>${tl.choose}</h2>
       <div class="levels">${lic.ruedas || this.unlockAll ? `<a class="lvl daily" href="${location.pathname}?reto=${today}"><small>${t.daily.head(today)}</small><b>${t.daily.menu}</b>
         <span class="stars">${starText(dr?.stars ?? 0)}</span><small>${t.daily.today(dr ? fmt(dr.time) : null)}</small></a>`
-        : `<a class="lvl daily locked" href="${examUrl('ruedas')}"><small>${t.daily.head(today)}</small><b>${t.daily.menu}</b><small>${t.license.locked(t.license.names.ruedas)}</small></a>`}</div>
+        : `<a class="lvl daily locked" href="${examUrl('ruedas')}"><small>${t.daily.head(today)}</small><b>${t.daily.menu}</b><small>${t.license.locked(t.license.names.ruedas)}</small></a>`}
+        <a class="lvl daily" href="${location.pathname}?carrera=1"><small>${t.career.menuText}</small><b>${t.career.menu}</b></a></div>
       <div class="levels">${LEVELS.map((L, i) => {
         const r = rec[i];
         if (!levelOpen(L, lic, this.unlockAll)) {
@@ -225,8 +230,8 @@ export class LevelUi {
     const L = this.lvl(i), r = this.rec(i), job = this.job, lic = this.lic();
     const list = Object.values(CRANES).sort((a, b) => a.structMax - b.structMax);
     this.show(`<div class="eyebrow"><span class="tag">${L.type}</span>${job ? jobHead(job, L, r) : tl.briefHead(i + 1, LEVELS.length, L.wind[0], fmt(L.par), L.time ? fmt(L.time) : null, r ? ` · ${tl.record(fmt(r.time))} ${starText(r.stars)}` : '')}</div>
-      <h2>${L.name}</h2><p>${job ? jobBrief(job, L) : text3d(L.brief)}</p>${job?.rival ? `<p class="rec">${t.daily.rival(fmt(job.rival))}</p><p class="dim">${t.daily.rivalNote}</p>` : ''}
-      <ul>${(job ? [t.daily.tip1, t.daily.tip2] : L.tips).map((t) => `<li>${text3d(t)}</li>`).join('')}</ul>
+      <h2>${L.name}</h2><p>${job ? jobBrief(job, L) : text3d(L.brief)}</p>${job?.note ? `<p class="rec">${job.note}</p>` : ''}${job?.rival ? `<p class="rec">${t.daily.rival(fmt(job.rival))}</p><p class="dim">${t.daily.rivalNote}</p>` : ''}
+      <ul>${(L.tips.length ? L.tips : [t.daily.tip1, t.daily.tip2]).map((t) => `<li>${text3d(t)}</li>`).join('')}</ul>
       ${L.tandem ? tandemCranes(L) : L.crew ? crewCranes(L) : `<div class="eyebrow">${tl.pick}</div>
       <div class="cranes">${list.map((c) => {
         const allowed = L.cranes.includes(c.id as CraneId), lok = craneOk(c.id as CraneId, lic, this.unlockAll), ok = allowed && lok;

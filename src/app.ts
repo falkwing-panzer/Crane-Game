@@ -1,3 +1,4 @@
+import './career/job'; // fase 25: ?contrato= (se apunta en jobSources)
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { createScene, resetView, type SceneCtx } from './render/scene';

@@ -36,15 +36,23 @@ async function ready(page: Page) {
   await page.evaluate(() => new Promise<void>((r) => { let n = 0; const f = () => (++n >= 10 ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); }));
 }
 
-/** Tarjetas de los niveles del menú (sin las de la escuela, fase 19) */
-const JOBS = '.levels:not(.school) a.lvl';
+/** Tarjetas de los niveles del menú (sin las de la escuela, fase 19, ni el reto diario y la carrera, fases 22 y 25) */
+const JOBS = '.levels:not(.school) a.lvl:not(.daily)';
 
-test('menú: los 14 trabajos, las dos pruebas libres y las 6 lecciones de la escuela', async ({ page }) => {
+// Fase 22: las licencias de operador cierran los niveles a un jugador nuevo; las pruebas los abren todos
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    if (!localStorage.getItem('gruas-licencias')) localStorage.setItem('gruas-licencias', '{"ruedas":1,"orugas":1,"torre":1,"tandem":1}');
+  });
+});
+
+test('menú: los 22 trabajos, las dos pruebas libres, las 6 lecciones y los 3 exámenes', async ({ page }) => {
   const log = watchConsole(page);
   await open(page);
   await ready(page);
-  await expect(page.locator(JOBS)).toHaveCount(16);
-  await expect(page.locator('.levels.school a.lvl')).toHaveCount(6);
+  await expect(page.locator(JOBS)).toHaveCount(24);
+  await expect(page.locator('.levels.school a.lvl')).toHaveCount(9);
+  await expect(page.locator('a.lvl.daily')).toHaveCount(2);
   await expect(page.locator('#lcard h2')).toHaveText('Elige un trabajo');
   expect(log).toEqual([]);
 });
@@ -59,7 +67,7 @@ test('ir a un nivel desde el menú no recarga la página', async ({ page }) => {
   await expect(page.locator('#l-start')).toBeVisible();
   expect(await page.evaluate(() => (window as unknown as { marca?: number }).marca)).toBe(1);
   await page.goBack();
-  await expect(page.locator(JOBS)).toHaveCount(16);
+  await expect(page.locator(JOBS)).toHaveCount(24);
   expect(log).toEqual([]);
 });
 

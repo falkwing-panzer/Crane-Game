@@ -39,6 +39,7 @@ import type { HookAnchor } from '../render/camera';
 import { t } from '../i18n';
 import { AchievementToast } from './progressView';
 import { SafetyView } from './safetyView';
+import { settleContract, showCareer } from '../career/careerUi';
 import { active, type LevelEvent } from '../levels/events';
 
 const MODE_TEXT = t.hud.modes;
@@ -203,7 +204,8 @@ export class Presenter {
     }
     lui.job = def.job;
     lui.unlockAll = settings.desbloquear;
-    if (def.showMenu) lui.menu();
+    if (def.career) showCareer(lui, go);
+    else if (def.showMenu) lui.menu();
     else if (L && !lui.open_(L)) {
       // fase 22: sin la licencia de la familia, el nivel está cerrado (se llega con la URL a mano)
       const f = t.license.names[missingFor(L)];
@@ -240,9 +242,14 @@ export class Presenter {
         clearSave(def.nivel);
         if (e.fail) {
           const f = this.lastEnd = e.fail;
-          this.startReplay(() => lui.failed(def.li, ses.act.T.name, f.title, f.text, ses.run, this.lastReplay ? () => this.replayAgain() : undefined));
+          const contract = this.contract(e);
+          this.startReplay(() => {
+            lui.failed(def.li, ses.act.T.name, f.title, f.text, ses.run, this.lastReplay ? () => this.replayAgain() : undefined);
+            this.showContract(contract);
+          });
         } else {
           lui.won(def.li, ses.act.T.name, ses.run, !!e.record, e.smooth, !!e.smoothBest);
+          this.showContract(this.contract(e));
           this.licensed(null); // el nivel 13 puede completar la de tándem
         }
       }),
@@ -308,6 +315,23 @@ export class Presenter {
   private settings: Settings;
 
   /** Opciones (fase 21): recuadro, modo experto y tamaño del HUD; las ayudas y la vibración se leen cada cuadro */
+  /** Fase 25: si es un contrato de la carrera, lo cobra (una vez) y devuelve las cuentas para el cartel */
+  private contract(e: { fail: unknown; stars?: number; smooth?: { medal: 'oro' | 'plata' | 'bronce' | null } | null }) {
+    const { ses } = this, job = ses.def.job, run = ses.run;
+    if (job?.kind !== 'contrato' || job.offer === undefined) return '';
+    return settleContract(job.offer, ses.units[0].id, {
+      ok: !e.fail, stars: e.stars ?? 0, medal: e.smooth?.medal ?? null, bumps: run.bumps, hard: run.hard, prox: run.prox,
+      excl: run.excl, skips: run.skips, late: run.late, tipped: ses.units.some((u) => ses.tipped(u)),
+    });
+  }
+
+  /** Cuentas del contrato en el cartel: sustituyen a sus botones (la oferta ya no existe) */
+  private showContract(html: string) {
+    if (!html) return;
+    this.lui.card.querySelectorAll('.row').forEach((r) => r.remove());
+    this.lui.card.insertAdjacentHTML('beforeend', html);
+  }
+
   /** Da la licencia del examen (o mira si lo hecho ya da alguna) y lo avisa (fase 22) */
   private licensed(f: Family | null) {
     for (const k of grant(this.lui.lic(), f, loadRecords(), loadSchool())) this.hud.say(t.license.got(t.license.names[k]), 4);
