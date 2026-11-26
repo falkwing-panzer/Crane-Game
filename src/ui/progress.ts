@@ -67,6 +67,21 @@ export const loadAchievements = (): Record<string, number> => {
 };
 export const saveAchievements = (a: Record<string, number>) => write(K_ACH, a);
 
+/** Récords de los trabajos con obra propia (reto diario, contratos): clave → estrellas y tiempo */
+export const loadJobRecords = (): Record<string, { stars: number; time: number }> => {
+  const v = read<Record<string, { stars: number; time: number }>>('gruas-reto', {});
+  return v && typeof v === 'object' ? v : {};
+};
+
+/** Guarda si mejora; devuelve si mejoró */
+export function saveJobRecord(key: string, stars: number, time: number): boolean {
+  const all = loadJobRecords(), old = all[key];
+  const better = !old || stars > old.stars || time < old.time;
+  all[key] = { stars: Math.max(stars, old?.stars ?? 0), time: Math.min(time, old?.time ?? Infinity) };
+  write('gruas-reto', all);
+  return better;
+}
+
 /** Mejor nota de suavidad (0–100) por índice de nivel */
 export const loadSmooth = (): Record<number, number> => {
   const v = read<Record<number, number>>(K_SMOOTH, {});

@@ -191,12 +191,13 @@ export class Presenter {
       const rain = root.querySelector('#rain') as HTMLInputElement;
       rain.addEventListener('change', () => { this.setRain(rain.checked); rain.blur(); });
     }
+    lui.job = def.job;
     if (def.showMenu) lui.menu();
     else if (ses.lesson) this.school = this.setupSchool(root);
     else if (L) {
       // partida guardada de este nivel (fase 15): Continuar la monta con su grúa y sigue donde quedó
-      const sv = loadSave(def.nivel);
-      lui.brief(def.li, def.ids[0], (k) => go(levelUrl(def.nivel, k)), () => { ses.running = true; },
+      const sv = def.job ? null : loadSave(def.nivel);
+      lui.brief(def.li, def.ids[0], (k) => go(lui.url(def.li, k)), () => { ses.running = true; },
         sv ? { t: sv.t, crane: CRANES[sv.crane].name, go: () => go(`${levelUrl(def.nivel, L.tandem ? undefined : sv.crane)}&continuar=1`) } : undefined);
     }
 
@@ -469,7 +470,7 @@ export class Presenter {
       const a = (L.wind[2] * Math.PI) / 180, dx = Math.cos(a), dz = Math.sin(a);
       const arrow = (Math.atan2(dx * -fz + dz * fx, dx * fx + dz * fz) * 180) / Math.PI;
       this.lui.setClock(L, run.t, ses.def.nivel, { wind: run.wind, arrow, lineD: run.lineD });
-      this.lui.showSave(ses.running && !run.done && !ses.tipped());
+      this.lui.showSave(!ses.def.job && ses.running && !run.done && !ses.tipped());
     } else this.lui.setClock(null, 0);
     hud.readout({
       Lb: S.Lb,

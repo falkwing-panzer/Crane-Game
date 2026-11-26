@@ -22,6 +22,7 @@ import { LESSONS, SCHOOL_CRANE, newSchool, type Lesson, type SchoolState } from 
 import { Bus, type GameEvents } from './events';
 import { t } from '../i18n';
 import { newSmooth, type SmoothRun } from './smooth';
+import { dailySite, todayUTC } from '../levels/generate';
 
 /** Grúas del menú: las de ruedas (fase 4), la grúa torre sobre camión (fase 8) y las de orugas (fase 6) */
 export const MENU_IDS: CraneId[] = [...TRUCK_IDS, 'crawler', 'lr'];
@@ -93,7 +94,40 @@ export interface SessionDef {
   /** Lección de la escuela (fase 19): 1…6, o 0 */
   school: number;
   ids: CraneId[];
+  /** Trabajo que no es uno de los niveles fijos (fase 22: reto diario; fase 25: contratos de la carrera) */
+  job: Job | null;
 }
+
+/** Un trabajo con obra propia: récords aparte, sin guardar a mitad */
+export interface Job {
+  kind: 'reto' | 'contrato';
+  L: Level;
+  /** Clave de su récord (p. ej. reto-2026-11-26) */
+  key: string;
+  /** Cabecera de la ficha y los carteles */
+  head: string;
+  /** URL para repetirlo (sin grúa) */
+  url: string;
+  /** Tiempo del enlace compartido con el que se reta (s) */
+  rival?: number;
+  /** Fecha del reto */
+  date?: string;
+}
+
+/** ?reto=AAAA-MM-DD (o ?reto=1: hoy): el reto diario de esa fecha */
+function dailyJob(params: URLSearchParams): Job | null {
+  const raw = params.get('reto');
+  if (raw === null) return null;
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : todayUTC();
+  const L = dailySite(date);
+  if (!L) return null;
+  const rival = Number(params.get('t'));
+  return { kind: 'reto', L, key: `reto-${date}`, head: t.daily.head(date), url: `?reto=${date}`, date,
+    rival: Number.isFinite(rival) && rival > 0 ? rival : undefined };
+}
+
+/** Trabajos de otros módulos (la carrera, fase 25) */
+export const jobSources: ((p: URLSearchParams) => Job | null)[] = [dailyJob];
 
 /**
  * ?nivel=1…14: un nivel (con ?grua= una de las permitidas; si no, la recomendada).
@@ -107,7 +141,9 @@ export function sessionDef(search: string): SessionDef {
   const sn = Number(params.get('escuela')) || 0;
   const school = !nivel && sn >= 1 && sn <= LESSONS.length ? sn : 0;
   const li = nivel >= 1 && nivel <= LEVELS.length ? nivel - 1 : -1;
-  const L = li >= 0 ? LEVELS[li] : null;
+  let job: Job | null = null;
+  if (li < 0 && !school) for (const f of jobSources) if ((job = f(params))) break;
+  const L = li >= 0 ? LEVELS[li] : job?.L ?? null;
   const freeTandem = !L && params.has('tandem');
   const tandem = freeTandem || !!L?.tandem;
   const showMenu = !L && !freeTandem && !school && !params.has('grua') && !params.has('libre');
@@ -115,7 +151,7 @@ export function sessionDef(search: string): SessionDef {
   const ids: CraneId[] = L?.tandem ? [L.tandem.main.id, L.tandem.tail.id] : freeTandem ? [...TANDEM_IDS]
     : school ? [SCHOOL_CRANE]
     : [L ? (q && L.cranes.includes(q) ? q : L.rec) : q && MENU_IDS.includes(q) ? q : 'medium'];
-  return { nivel, li, L, freeTandem, tandem, showMenu, school, ids };
+  return { nivel, li, L, freeTandem, tandem, showMenu, school, ids, job };
 }
 
 /** Suelo bajo el chasis en su sitio (gy, gb, gc, gspread de CraneState) */

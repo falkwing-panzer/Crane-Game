@@ -1,0 +1,18 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`obras generadas (fase 22) > fija: si cambia la generación, cambian los retos de todos (esta prueba lo avisa) 1`] = `
+{
+  "first": [
+    63,
+    20,
+    19.2,
+  ],
+  "n": 2,
+  "rec": "xl",
+  "start": {
+    "h": 0,
+    "x": 46,
+    "z": 31,
+  },
+}
+`;

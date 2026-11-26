@@ -4,6 +4,9 @@ import { ALL_LEVELS as LEVELS } from '../levels/tandemSetup';
 import { medalHtml, progressHtml, smoothHtml } from './progressView';
 import { loadSmooth } from './progress';
 import type { SmoothScore } from '../game/smooth';
+import type { Job } from '../game/session';
+import { loadJobRecords } from './progress';
+import { todayUTC } from '../levels/generate';
 import { stickyParams } from './settings';
 import { t } from '../i18n';
 import { withKeys } from './keys';
@@ -81,6 +84,15 @@ function tandemCranes(L: Level) {
     ${card(td.tail.id, tl.tail, tl.tailText)}</div>`;
 }
 
+/** Cabecera de la ficha de un trabajo con obra propia */
+function jobHead(job: Job, L: Level, r?: { stars: number; time: number }) {
+  return `${job.head} · viento ${L.wind[0]} m/s · par ${fmt(L.par)}${r ? ` · ${tl.record(fmt(r.time))} ${starText(r.stars)}` : ''}`;
+}
+
+function jobBrief(_job: Job, L: Level) {
+  return L.brief || t.daily.brief(L.crates.length, CRANES[L.rec].name);
+}
+
 const starText = (n: number) => `${'★'.repeat(n)}<span class="off">${'★'.repeat(3 - n)}</span>`;
 
 /** URL de un nivel (1…13) con una grúa, o de la prueba libre (nivel 0); conserva ?fps= */
@@ -113,6 +125,16 @@ export class LevelUi {
   /** Plan de izaje (fase 20): el fantasma de cada nivel y grúa, para que siga donde se dejó al volver a abrirlo */
   private ghosts = new Map<string, Ghost>();
   private planView: PlanView | null = null;
+  /** Trabajo con obra propia (reto diario, contratos): su nivel, su cabecera y su récord */
+  job: Job | null = null;
+  /** El nivel i, o el del trabajo */
+  private lvl(i: number) { return this.job?.L ?? LEVELS[i]; }
+  private rec(i: number) { return this.job ? loadJobRecords()[this.job.key] : loadRecords()[i]; }
+  /** URL del mismo trabajo con otra grúa (o sin grúa) */
+  url(i: number, crane?: string) {
+    if (!this.job) return levelUrl(i + 1, crane);
+    return location.pathname + this.job.url + (crane ? `&grua=${crane}` : '');
+  }
 
   constructor(root: HTMLElement) {
     root.insertAdjacentHTML('beforeend', `
@@ -140,8 +162,10 @@ export class LevelUi {
 
   /** Menú: los 13 niveles de la referencia y el de tándem (fase 10) con su tipo y sus estrellas, más las pruebas libres */
   menu() {
-    const rec = loadRecords(), sm = loadSmooth();
+    const rec = loadRecords(), sm = loadSmooth(), today = todayUTC(), dr = loadJobRecords()[`reto-${today}`];
     this.show(`<div class="eyebrow">${tl.eyebrow}</div>${schoolMenu()}<h2>${tl.choose}</h2>
+      <div class="levels"><a class="lvl daily" href="${location.pathname}?reto=${today}"><small>${t.daily.head(today)}</small><b>${t.daily.menu}</b>
+        <span class="stars">${starText(dr?.stars ?? 0)}</span><small>${t.daily.today(dr ? fmt(dr.time) : null)}</small></a></div>
       <div class="levels">${LEVELS.map((L, i) => {
         const r = rec[i];
         return `<a class="lvl" href="${levelUrl(i + 1)}"><small>${i + 1} · ${L.type}</small><b>${L.name}</b>
@@ -166,10 +190,11 @@ export class LevelUi {
    * sirven, desactivadas con el motivo). onPick recarga con otra grúa; onStart empieza el turno.
    */
   brief(i: number, current: CraneId, onPick: (id: CraneId) => void, onStart: () => void, cont?: { t: number; crane: string; go: () => void }) {
-    const L = LEVELS[i], r = loadRecords()[i];
+    const L = this.lvl(i), r = this.rec(i), job = this.job;
     const list = Object.values(CRANES).sort((a, b) => a.structMax - b.structMax);
-    this.show(`<div class="eyebrow"><span class="tag">${L.type}</span>${tl.briefHead(i + 1, LEVELS.length, L.wind[0], fmt(L.par), L.time ? fmt(L.time) : null, r ? ` · ${tl.record(fmt(r.time))} ${starText(r.stars)}` : '')}</div>
-      <h2>${L.name}</h2><p>${text3d(L.brief)}</p><ul>${L.tips.map((t) => `<li>${text3d(t)}</li>`).join('')}</ul>
+    this.show(`<div class="eyebrow"><span class="tag">${L.type}</span>${job ? jobHead(job, L, r) : tl.briefHead(i + 1, LEVELS.length, L.wind[0], fmt(L.par), L.time ? fmt(L.time) : null, r ? ` · ${tl.record(fmt(r.time))} ${starText(r.stars)}` : '')}</div>
+      <h2>${L.name}</h2><p>${job ? jobBrief(job, L) : text3d(L.brief)}</p>${job?.rival ? `<p class="rec">${t.daily.rival(fmt(job.rival))}</p><p class="dim">${t.daily.rivalNote}</p>` : ''}
+      <ul>${(job ? [t.daily.tip1, t.daily.tip2] : L.tips).map((t) => `<li>${text3d(t)}</li>`).join('')}</ul>
       ${L.tandem ? tandemCranes(L) : `<div class="eyebrow">${tl.pick}</div>
       <div class="cranes">${list.map((c) => {
         const ok = L.cranes.includes(c.id as CraneId);
@@ -197,14 +222,14 @@ export class LevelUi {
    * ficha; start = empezar el turno.
    */
   plan(i: number, crane: CraneId, back: () => void, start: () => void) {
-    const L = LEVELS[i], T = CRANES[crane];
+    const L = this.lvl(i), T = CRANES[crane];
     const S = { x: 0, z: 0, h: 0 } as CraneState;
     placeCrane(T, S, L);
     const home: Ghost = { x: S.x, z: S.z, h: S.h };
     const key = `${i}|${crane}`;
     let g = this.ghosts.get(key);
     if (!g) this.ghosts.set(key, g = { ...home });
-    this.show(`<div class="eyebrow"><span class="tag">${L.type}</span>${tl.clockHead(i + 1, L.name)}</div>
+    this.show(`<div class="eyebrow"><span class="tag">${L.type}</span>${this.job ? this.job.head : tl.clockHead(i + 1, L.name)}</div>
       <h2>${t.plan.title(L.name, T.name)}</h2><div class="plan"></div>
       <div class="row"><button class="btn" id="p-back">${t.plan.back}</button><button class="btn primary" id="p-start">${tl.start}</button></div>`);
     this.planView?.dispose();
@@ -218,21 +243,27 @@ export class LevelUi {
   /** Nivel completado (checkWin de la referencia) */
   won(i: number, crane: string, res: { t: number; hard: number; bumps: number; prox: number; maxLmi: number } & Partial<LiftStats>, record: boolean,
     smooth?: SmoothScore | null, smoothBest = false) {
-    const L = LEVELS[i], n = stars(L, res), next = i + 1 < LEVELS.length;
-    this.show(`<div class="eyebrow">${tl.won(i + 1, crane)}</div><h2 class="okh">${L.name}</h2>
+    const L = this.lvl(i), n = stars(L, res), job = this.job, next = !job && i + 1 < LEVELS.length;
+    this.show(`<div class="eyebrow">${job ? `${job.head} · ${crane}` : tl.won(i + 1, crane)}</div><h2 class="okh">${L.name}</h2>
       <div class="stars big">${starText(n)}</div>${record ? `<p class="rec">${tl.newRecord}</p>` : ''}
       <div class="stats"><span>${tl.time(fmt(L.par))}</span><b>${fmt(res.t)}</b><span>${tl.hard}</span><b>${res.hard}</b>
       <span>${tl.bumps}</span><b>${res.bumps}</b><span>${tl.prox}</span><b>${res.prox}</b><span>${tl.maxLmi}</span><b>${Math.round(res.maxLmi * 100)} %</b></div>${smoothHtml(smooth, smoothBest)}${liftHtml(res, !!L.tandem)}
-      <div class="row"><a class="btn" href="${homeUrl()}">${tl.menuBtn}</a><a class="btn${next ? '' : ' primary'}" href="${levelUrl(i + 1)}">${tl.retry}</a>
+      <div class="row"><a class="btn" href="${homeUrl()}">${tl.menuBtn}</a>${job?.date ? `<button class="btn" id="l-share">${t.daily.share}</button>` : ''}<a class="btn${next ? '' : ' primary'}" href="${this.url(i)}">${tl.retry}</a>
       ${next ? `<a class="btn primary" id="l-next" href="${levelUrl(i + 2)}">${tl.next}</a>` : ''}</div>
-      ${next ? '' : `<p>${tl.last}</p>`}`);
+      ${next || job ? '' : `<p>${tl.last}</p>`}`);
+    const sh = this.card.querySelector<HTMLButtonElement>('#l-share');
+    if (sh && job?.date) sh.onclick = () => {
+      const u = new URL(location.pathname, location.href);
+      u.search = `?reto=${job.date}&t=${Math.ceil(res.t)}`;
+      void navigator.clipboard?.writeText(u.toString()).then(() => { sh.textContent = t.daily.copied; }, () => { sh.textContent = u.toString(); });
+    };
     this.card.querySelector<HTMLElement>('#l-next')?.focus({ preventScroll: true });
   }
 
   /** Nivel fallido (fail de la referencia) */
   failed(i: number, crane: string, title: string, text: string, res?: { maxLmi: number } & Partial<LiftStats>, onReplay?: () => void) {
-    this.show(`<div class="eyebrow">${tl.failed(i + 1, crane)}</div><h2>${title}</h2><p>${withKeys(text)}</p>${res ? liftHtml(res, !!LEVELS[i].tandem, true) : ''}
-      <div class="row"><a class="btn" href="${homeUrl()}">${tl.menuBtn}</a>${onReplay ? `<button class="btn" id="l-replay">${t.replay.again}</button>` : ''}<a class="btn primary" id="l-retry" href="${location.href}">${tl.retry}</a></div>`, true);
+    this.show(`<div class="eyebrow">${this.job ? `${this.job.head} · ${crane}` : tl.failed(i + 1, crane)}</div><h2>${title}</h2><p>${withKeys(text)}</p>${res ? liftHtml(res, !!this.lvl(i).tandem, true) : ''}
+      <div class="row"><a class="btn" href="${homeUrl()}">${tl.menuBtn}</a>${onReplay ? `<button class="btn" id="l-replay">${t.replay.again}</button>` : ''}<a class="btn primary" id="l-retry" href="${this.job ? this.url(i) : location.href}">${tl.retry}</a></div>`, true);
     const rb = this.card.querySelector<HTMLButtonElement>('#l-replay');
     if (rb && onReplay) rb.onclick = () => onReplay();
     this.card.querySelector<HTMLElement>('#l-retry')?.focus({ preventScroll: true });
@@ -260,7 +291,7 @@ export class LevelUi {
     if (info && L.lines?.length && Number.isFinite(info.lineD)) {
       extra += `${extra ? ' · ' : ''}<span class="${info.lineD < 0 ? 'bad' : info.lineD < 2 ? 'bad blink' : ''}">${tl.line(f(Math.max(0, info.lineD)))}</span>`;
     }
-    this.clockText.innerHTML = `<small>${tl.clockHead(n, L.name)}</small><br><b class="${L.time && left < 30 ? 'bad' : ''}">${L.time ? tl.left(fmt(left)) : fmt(t)}</b>` +
+    this.clockText.innerHTML = `<small>${this.job ? `${this.job.head} · ${L.name}` : tl.clockHead(n, L.name)}</small><br><b class="${L.time && left < 30 ? 'bad' : ''}">${L.time ? tl.left(fmt(left)) : fmt(t)}</b>` +
       `<small> · ${tl.par(fmt(L.par))}</small>${extra ? `<br>${extra}` : ''}`;
   }
 }

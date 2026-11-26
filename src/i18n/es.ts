@@ -569,6 +569,22 @@ export const es = {
     steadyTie: 'Estabiliza el gancho antes de amarrarlo',
     tiedUp: 'Gancho amarrado al frente (posición de transporte) · {hook} para soltarlo',
   },
+  /** Reto diario (fase 22) */
+  daily: {
+    head: (date: string) => `Reto del ${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}`,
+    menu: 'Reto diario',
+    menuText: 'una obra nueva cada día, la misma para todos',
+    today: (rec: string | null) => (rec ? `tu mejor: ${rec}` : 'sin jugar todavía'),
+    brief: (n: number, crane: string) =>
+      `Obra generada para hoy (la misma en cualquier navegador). ${n === 1 ? 'Lleva la carga a su zona' : `Lleva las ${n} cargas a sus zonas`} con la ${crane} o con otra de las que sirven.`,
+    rival: (t: string) => `Te retaron con <b>${t}</b>: ¿lo mejoras?`,
+    rivalNote: 'El tiempo viene en el enlace: no se puede comprobar sin servidor.',
+    share: 'Copiar enlace con mi tiempo',
+    copied: 'Enlace copiado',
+    tip1: 'Abre el Plan de izaje para ver desde dónde llegas a cada carga y a su zona.',
+    tip2: 'Cada carga entra en cualquier zona; las zonas llevan un número solo para encontrarlas.',
+  },
+
   /** Suavidad, estadísticas y logros (fase 22) */
   progress: {
     smoothHead: 'Suavidad',

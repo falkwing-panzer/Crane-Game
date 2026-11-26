@@ -49,6 +49,8 @@ export interface Level {
   size?: [number, number];
   /** Izaje en tándem (fase 10): grúa principal (orejeta 0) y de cola (orejeta 1) de la primera carga */
   tandem?: { main: TandemCrane; tail: TandemCrane };
+  /** Niveles que no son de la referencia (fase 22 en adelante): entorno del decorado y su semilla */
+  env?: string; seed?: number;
 }
 
 const B = (x: number, z: number, w: number, d: number, h: number, kind: BoxKind = 'building', extra: { color?: string } = {}): LevelBox => ({ x, z, w, d, h, kind, ...extra });
