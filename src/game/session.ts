@@ -79,10 +79,12 @@ export interface Run extends SmoothRun {
    * fuera de sus límites (s).
    */
   excl: number; inExcl: boolean; exclT: number; skips: number; checked: number; lifted: number; bkT: number;
+  /** Fase 24: camiones que ya entraron (máscara de bits) y retraso acumulado esperando muelle (s) */
+  tDone: number; late: number;
 }
 
 export const newRun = (): Run => ({ t: 0, done: false, hard: 0, bumps: 0, prox: 0, maxLmi: 0, bumpCd: 0, lineD: Infinity, inProx: false, wind: 0,
-  peakLabel: '', peakMass: 0, peakR: 0, peakCrane: '', maxR: 0, maxRLabel: '', heavy: 0, heavyLabel: '', excl: 0, inExcl: false, exclT: 0, skips: 0, checked: 0, lifted: 0, bkT: 0, ...newSmooth() });
+  peakLabel: '', peakMass: 0, peakR: 0, peakCrane: '', maxR: 0, maxRLabel: '', heavy: 0, heavyLabel: '', excl: 0, inExcl: false, exclT: 0, skips: 0, checked: 0, lifted: 0, bkT: 0, tDone: 0, late: 0, ...newSmooth() });
 
 /** Qué se juega, sacado de la URL */
 export interface SessionDef {
@@ -154,7 +156,7 @@ export function sessionDef(search: string): SessionDef {
   const tandem = freeTandem || !!L?.tandem;
   const showMenu = !L && !freeTandem && !school && !params.has('grua') && !params.has('libre');
   const q = params.get('grua') as CraneId | null;
-  const ids: CraneId[] = L?.tandem ? [L.tandem.main.id, L.tandem.tail.id] : freeTandem ? [...TANDEM_IDS]
+  const ids: CraneId[] = L?.tandem ? [L.tandem.main.id, L.tandem.tail.id] : L?.crew ? L.crew.map((c) => c.id) : freeTandem ? [...TANDEM_IDS]
     : school ? [lessonByN(school)!.crane ?? SCHOOL_CRANE]
     : [L ? (q && L.cranes.includes(q) ? q : L.rec) : q && MENU_IDS.includes(q) ? q : 'medium'];
   return { nivel, li, L, freeTandem, tandem, showMenu, school, ids, job };
@@ -260,7 +262,14 @@ export class Session {
     const { L, freeTandem } = this.def;
     if (L?.tandem) placeTandem(states[0], states[1], L.tandem, tandemColumn(L));
     else if (freeTandem) placeTandem(states[0], states[1]);
-    else if (L) placeCrane(states[0].T, states[0].S, L);
+    else if (L?.crew) {
+      // grúa auxiliar (fase 24): cada una en su sitio, con los estabilizadores fuera si se pide
+      L.crew.forEach((c, i) => {
+        const { S } = states[i];
+        S.x = c.x; S.z = c.z; S.h = -c.h;
+        if (c.out) S.out = S.outT = 1;
+      });
+    } else if (L) placeCrane(states[0].T, states[0].S, L);
     else if (this.lesson) {
       const { T, S, C } = states[0];
       placeCrane(T, S, this.lesson.site);

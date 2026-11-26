@@ -10,6 +10,7 @@ import type { Failure } from './events';
 import { smoothScore } from './smooth';
 import { saveJobRecord, saveSmooth } from '../ui/progress';
 import { EXCL_T, overWorker } from '../levels/people';
+import { axleLoad } from '../crane/axles';
 import type { Session } from './session';
 
 import { t } from '../i18n';
@@ -44,6 +45,12 @@ export class LevelRules {
       // en un nivel, el vuelco es nivel fallido (Repetir vuelve a la ficha)
       bus.on('tipped', (e) => this.finish({ title: tr.tippedTitle, text: e.text })),
     );
+    // fase 24: las cargas de los camiones que llegan más tarde esperan fuera, sin chocar con nada
+    // (los que ya están en su muelle al empezar cuentan como entrados)
+    (L.trucks ?? []).forEach((tk, i) => {
+      if (tk.at > 0) ses.units[0].phys.loads[tk.crate].body.setEnabled(false);
+      else ses.run.tDone |= 1 << i;
+    });
   }
 
   /** Reloj de la comprobación de victoria (instantáneas, fase 15) */
@@ -93,6 +100,7 @@ export class LevelRules {
       if (units.every((u) => !u.phys.attached) && allPlaced(phys.loads.map((l) => phys.placed(l)), L.zones)) { this.finish(null); return false; }
     }
     run.bumpCd = Math.max(0, run.bumpCd - dt);
+    if (L.trucks) this.trucks(dt);
     // viento sobre la carga enganchada o el gancho (step de la referencia); tándem: lo pone una sola grúa
     for (const u of units) {
       const a = u.phys.attached;
@@ -112,6 +120,7 @@ export class LevelRules {
     if (run.done) return false;
     if (L.tandem && !this.tandem()) return false;
     if (!this.people()) return false;
+    if (!this.bridges()) return false;
     if (!L.lines?.length || ses.tipped(ses.units[0])) return true;
     const { T, S, phys, pose } = ses.units[0];
     const hk = phys.hookBody.translation(), a = phys.attached;
@@ -187,6 +196,48 @@ export class LevelRules {
       } else run.bkT = 0;
     }
     return true;
+  }
+
+  /** Fase 24: con la grúa sobre un puente, la carga por eje no pasa de su límite */
+  private bridges(): boolean {
+    const { ses, L } = this;
+    if (!L.bridges) return true;
+    for (const u of ses.units) {
+      const q = axleLoad(u.T, u.C);
+      if (q === null) continue;
+      for (const b of L.bridges) {
+        if (Math.abs(u.S.x - b.x) <= b.w / 2 && Math.abs(u.S.z - b.z) <= b.d / 2 && q > b.maxAxle) {
+          this.finish({ title: tr.bridgeTitle, text: tr.bridge(u.T.name, q, b.maxAxle) });
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Fase 24: cada camión entra a su hora si su muelle está libre (ninguna carga sobre la caja); su carga, que espera
+   * fuera de la obra, pasa a la caja del camión. Mientras espera, el retraso cuenta.
+   */
+  private trucks(dt: number) {
+    const { ses, L } = this, run = ses.run, phys = ses.units[0].phys;
+    L.trucks!.forEach((tk, i) => {
+      if (run.tDone & (1 << i) || run.t < tk.at) return;
+      const bay = L.bays![tk.bay];
+      const busy = phys.loads.some((l) => {
+        const p = l.body.translation();
+        return Math.abs(p.x - bay.x) < 4.5 && Math.abs(p.z - bay.z) < 1.6 && p.y < bay.y + 3.5;
+      });
+      if (busy) { run.late += dt; return; }
+      const l = phys.loads[tk.crate];
+      l.body.setTranslation({ x: bay.x, y: bay.y + l.half.y + 0.02, z: bay.z }, true);
+      l.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      l.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      l.body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+      l.body.setEnabled(true);
+      run.tDone |= 1 << i;
+      if (tk.at > 0) ses.bus.emit('say', { text: tr.truckIn(i + 1, tk.bay + 1), s: 3 });
+    });
   }
 
   /**

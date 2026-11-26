@@ -3,6 +3,7 @@
 // llevar de cola): columna de 40 m, Ø 5 m y 400 t, límites y obra de 120 × 80 m aprobados por Jesús.
 
 import { SAFETY_LEVELS } from './safety';
+import { MISSION_LEVELS } from './missions';
 import type { CraneId, CraneSpec } from '../crane/cranes';
 import { tipPos, type CraneState } from '../crane/kinematics';
 import { syncConfig } from '../crane/assembly';
@@ -115,7 +116,7 @@ export const TANDEM_LEVEL: Level = {
 };
 
 /** Los 13 niveles de la referencia, el de tándem (fase 10) y los de la fase 23 (15–17) */
-export const ALL_LEVELS: Level[] = [...LEVELS, TANDEM_LEVEL, ...SAFETY_LEVELS];
+export const ALL_LEVELS: Level[] = [...LEVELS, TANDEM_LEVEL, ...SAFETY_LEVELS, ...MISSION_LEVELS];
 
 /** La columna del nivel de tándem en el mundo: centro (sobre el transportador) y orejetas */
 export function tandemColumn(L: Level): { pos: V3; lugs: V3[] } {

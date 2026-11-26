@@ -244,6 +244,10 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   brazos y radio en texto (voz opcional en Opciones), trabajadores que caminan con su zona de exclusión, lista de
   chequeo (J). Pruebas en `levels/safety.test.ts` y `levels/safety.world.test.ts` (un operador de guion que solo
   obedece la radio termina los tres niveles sin faltas).
+- **Fase 24, parte A** (misiones): nivel 18 "De la base a la obra" (conducir plegada: puente de 12 t por eje, río,
+  cable bajo, coches; después el izaje), 19 "Camiones con horario" (dos muelles, cuatro camiones, retraso) y 20
+  "Montaje con grúa auxiliar" (AT 60 + AT 300-6 con Tab; el lastre se monta cuando la AT 60 lo ha descargado en su
+  zona). Pruebas en `crane/axles.test.ts` y `levels/missions.test.ts` (el 18 jugado entero por un guion con la AT 60).
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -444,6 +448,9 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   `Presenter.safety`), `LevelRules.people()`, `Run.excl`/`inExcl`/`exclT`/`skips`/`checked`/`lifted`/`bkT`,
   `Session.expert`, `Cmd` `'checklist'` y acción `checklist` (J), `CameraRig.restrict`/`only`, `Settings.voz`,
   `stars()` cuenta `excl` y `skips` como golpes, `workerGeo` exportado de `decorView.ts`. Textos en `t.rigger`.
+- Fase 24 A: `crane/axles.ts` (`axleLoad`), `levels/missions.ts` (`MISSION_LEVELS` en `ALL_LEVELS`, `BRIDGE_AXLE`),
+  `Level.bridges`/`trucks`/`bays`/`crew`/`ballastZone`, `LevelRules.bridges()`/`trucks()`, `Run.tDone`/`late`,
+  `ballastDelivered` en `game/commands.ts`, `Session.place` con `crew`, `crewCranes` en `levelUi.ts`.
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
   cut…, de la grúa que se maneja; `units`, todas) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
   dibuja cuadros; así se puede probar desde la consola).
@@ -1002,6 +1009,20 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   LMI quedaba justo en el 50 %). Límites del juego, no de una norma: revisar con Jesús.
 - **A ciegas**: `CameraRig.restrict(['cabina', 'gancho'])`. El plan de izaje da por montados lastre e Y-guy: los
   niveles lo dicen en la ficha.
+
+- **Carga por eje (fase 24)**: masa con la pluma recogida (`craneMasses`, datos de la referencia) repartida por
+  igual entre los ejes: City 25 10,9 t, AT 60 15,0, AT 220 21,3, AT 300-6 11,5, AT 500-8 20,2. El reparto por igual
+  es aproximación (la referencia no trae cargas por eje). **El límite del puente (12 t por eje) lo puso el juego**:
+  la fase pedía preguntar los límites antes de inventarlos y Jesús pidió hacerlo sin esperar. Revisar con él.
+- **Cable bajo (fase 24)**: es una `PowerLine` a 6,5 m (las reglas de las líneas: alarma y fallo). La AT 60 empieza
+  con la pluma a 40° (como siempre): hay que bajarla antes de salir.
+- **Camiones (fase 24)**: las cargas de los camiones que llegan después esperan fuera de la obra con el cuerpo
+  desactivado (`setEnabled(false)`, no chocan); al llegar su hora y con el muelle libre (ninguna carga sobre la caja)
+  pasan a la caja. Mientras el muelle está ocupado cuenta el retraso; más de 20 s en total = falta. Los camiones
+  dibujados son las cajas fijas del muelle (no se mueven).
+- **Grúa auxiliar (fase 24)**: `Level.crew` (dos grúas que no son tándem, cada una en su sitio). Las placas de lastre
+  son 4 × 9 t (aproximación: el lastre real de la AT 300-6 son 86 t). Montaje con grúa auxiliar de la LR 3000: no se
+  hizo (la fase pedía preguntar qué datos faltan; harían falta piezas del montaje que la referencia no trae).
 
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las

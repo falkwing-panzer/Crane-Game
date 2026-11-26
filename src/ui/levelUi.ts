@@ -44,9 +44,10 @@ export function saveRecord(i: number, stars: number, time: number): boolean {
 }
 
 /** Estrellas (checkWin de la referencia): 3 − aterrizaje duro − (golpes + alarmas de línea) − pasarse del par */
-export function stars(L: Level, r: { t: number; hard: number; bumps: number; prox: number; excl?: number; skips?: number }) {
-  // fase 23: pasar la carga encima de alguien y saltarse la lista de chequeo cuentan como los golpes
-  const faults = r.bumps + r.prox + (r.excl ?? 0) + (r.skips ?? 0);
+export function stars(L: Level, r: { t: number; hard: number; bumps: number; prox: number; excl?: number; skips?: number; late?: number }) {
+  // fase 23: pasar la carga encima de alguien y saltarse la lista de chequeo cuentan como los golpes;
+  // fase 24: más de 20 s de retraso de los camiones, también
+  const faults = r.bumps + r.prox + (r.excl ?? 0) + (r.skips ?? 0) + ((r.late ?? 0) > 20 ? 1 : 0);
   return Math.max(1, 3 - (r.hard > 0 ? 1 : 0) - (faults > 0 ? 1 : 0) - (r.t > L.par ? 1 : 0));
 }
 
@@ -102,6 +103,14 @@ function jobBrief(_job: Job, L: Level) {
 export function examUrl(f: string) {
   const e = EXAMS.find((x) => x.license === f);
   return e ? `${location.pathname}?escuela=${e.n}` : levelUrl(13);
+}
+
+/** Varias grúas que no son tándem (fase 24): ya están colocadas */
+function crewCranes(L: Level) {
+  return `<div class="eyebrow">${withKeys(t.levels.crewHead)}</div><div class="cranes">${L.crew!.map((c) => {
+    const s = CRANES[c.id];
+    return `<div class="copt" aria-pressed="true"><small>${s.size}</small><b>${s.name}</b><small>${tl.maxT(s.structMax)}</small><em>${s.note}</em></div>`;
+  }).join('')}</div>`;
 }
 
 const starText = (n: number) => `${'★'.repeat(n)}<span class="off">${'★'.repeat(3 - n)}</span>`;
@@ -218,7 +227,7 @@ export class LevelUi {
     this.show(`<div class="eyebrow"><span class="tag">${L.type}</span>${job ? jobHead(job, L, r) : tl.briefHead(i + 1, LEVELS.length, L.wind[0], fmt(L.par), L.time ? fmt(L.time) : null, r ? ` · ${tl.record(fmt(r.time))} ${starText(r.stars)}` : '')}</div>
       <h2>${L.name}</h2><p>${job ? jobBrief(job, L) : text3d(L.brief)}</p>${job?.rival ? `<p class="rec">${t.daily.rival(fmt(job.rival))}</p><p class="dim">${t.daily.rivalNote}</p>` : ''}
       <ul>${(job ? [t.daily.tip1, t.daily.tip2] : L.tips).map((t) => `<li>${text3d(t)}</li>`).join('')}</ul>
-      ${L.tandem ? tandemCranes(L) : `<div class="eyebrow">${tl.pick}</div>
+      ${L.tandem ? tandemCranes(L) : L.crew ? crewCranes(L) : `<div class="eyebrow">${tl.pick}</div>
       <div class="cranes">${list.map((c) => {
         const allowed = L.cranes.includes(c.id as CraneId), lok = craneOk(c.id as CraneId, lic, this.unlockAll), ok = allowed && lok;
         const boom = c.boom.min === c.boom.max ? tl.boomFixed(c.boom.min) : tl.boomRange(c.boom.min, c.boom.max);
@@ -227,7 +236,7 @@ export class LevelUi {
           <small>${c.size}${c.id === L.rec ? tl.recommended : ''}</small><b>${c.name}</b>
           <small>${tl.craneLine(c.structMax, boom)}</small><em class="${ok ? '' : 'why'}">${ok ? c.note : why}</em></button>`;
       }).join('')}</div>`}
-      <div class="row"><a class="btn" href="${homeUrl()}">${tl.menuBtn}</a>${L.tandem ? '' : `<button class="btn" id="l-plan">${t.plan.open}</button>`}${cont ? `<button class="btn" id="l-cont">${tl.cont(fmt(cont.t), cont.crane)}</button>` : ''}<button class="btn primary" id="l-start">${tl.start}</button></div>`);
+      <div class="row"><a class="btn" href="${homeUrl()}">${tl.menuBtn}</a>${L.tandem || L.crew ? '' : `<button class="btn" id="l-plan">${t.plan.open}</button>`}${cont ? `<button class="btn" id="l-cont">${tl.cont(fmt(cont.t), cont.crane)}</button>` : ''}<button class="btn primary" id="l-start">${tl.start}</button></div>`);
     const cb = this.card.querySelector<HTMLButtonElement>('#l-cont');
     if (cb && cont) cb.onclick = () => { this.close(); cont.go(); };
     this.card.querySelectorAll<HTMLButtonElement>('.copt').forEach((b) => {
