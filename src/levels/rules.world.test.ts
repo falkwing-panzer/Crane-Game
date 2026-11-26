@@ -52,11 +52,12 @@ describe('reglas de los niveles en Rapier', () => {
 
   it('bajar la carga deprisa da un aterrizaje con la velocidad de bajada', () => {
     const { S, P, pose } = hanging(3);
-    for (let i = 0; i < 240 && !P.events.some((e) => e.kind === 'land'); i++) { S.cable += 2 / 60; P.step(S, pose); }
+    // fase 26: con los ramales a 45° la carga sigue al gancho con algo de retraso: se baja a 2,4 m/s
+    for (let i = 0; i < 240 && !P.events.some((e) => e.kind === 'land'); i++) { S.cable += 2.4 / 60; P.step(S, pose); }
     const land = P.events.find((e) => e.kind === 'land');
     expect(land).toBeTruthy();
     expect(land!.v).toBeGreaterThan(1.4); // aterrizaje duro
-    expect(land!.v).toBeLessThan(2.6);
+    expect(land!.v).toBeLessThan(3);
   });
 
   it('bajarla despacio da un apoyo suave; arrastrarla contra un bloque, un golpe', () => {

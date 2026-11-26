@@ -75,6 +75,7 @@ Fase 23: **J** lista de chequeo antes de izar (niveles 15–17).
 Fase 21: **V** tiene un modo más, **cámara del gancho** (orbital → seguimiento → cabina → gancho → libre del tándem).
 Botón **Opciones** (columna izquierda): recuadro del gancho, vibración del mando, ayudas, modo experto, tamaño del HUD.
 **Esc** también salta la repetición del fallo.
+Fase 26: **Z / U** cuerdas guía (girar la carga colgada a la izquierda / derecha).
 
 ## Estado y decisiones
 Se trabaja por fases (ver `FASES.md`), con `/clear` entre fases. **Al cerrar cada fase, actualizar esta sección**
@@ -257,6 +258,12 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   un nivel y se cobran al terminar. Pruebas en `career/career.test.ts` (30 minutos de contratos simulados; ofertas
   siempre posibles 15 días). Playwright: las pruebas abren todas las licencias (`beforeEach`) y cuentan las tarjetas
   nuevas del menú.
+
+- **Fase 26** (aparejos realistas; Jesús pidió hacer de la 26 a la 28 sin esperar aprobaciones): choque de la carga
+  con la pluma y el plumín, eslinga de 4 ramales en la física y balancín en las cargas largas, cuerdas guía (Z/U) en vez
+  de bloquear el giro, nivel 23 "Volteo de un depósito" (tándem AT 500-8 + AT 220). Cable medido antes y después (ver
+  Rendimiento). Pruebas en `physics/sling.test.ts` y `levels/flip.test.ts` (un guion pone el depósito de pie y lo deja
+  en la cimentación).
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -468,6 +475,13 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   guardado `gruas-carrera`, `exportCareer`/`importCareer`), `career/job.ts` (`contractJob` en `jobSources`,
   `careerLic`; lo importa `app.ts`), `career/careerUi.ts` (`showCareer`, `settleContract`, `settleHtml`),
   `SessionDef.career`, `Job.offer`/`note`, `Presenter.contract`/`showContract`. Textos en `t.career`.
+- Fase 26: en `physics/world.ts`, `boomCol`/`jibCol` (colisionadores de la superestructura que solo chocan con
+  cargas; `placeBoom`, `isBoom`; grupos `HOOK_GROUPS`/`BOOM_GROUPS`/`RIG_GROUPS`), `rigPlan` (ramales y balancín:
+  `RigLeg`, `SPREAD_MIN`, `BEAM_DROP`), `makeRig`, `Physics.rig`/`beam`/`beamHalf`, `rigResting`, `isRig`,
+  `tagLines` (`guide`, `GUIDE_RATE`, `GUIDE_K`). `CraneInput.guide`, acciones `tgl`/`tgr` (Z/U). `CrewState` lleva
+  `boomCol`/`jibCol`/`boomAt` y `rig`/`rigJoints`/`beam`/`beamHalf`/`trBeam` (opcionales: partidas guardadas antes).
+  `Rigging` dibuja `p.rig` (hasta `MAX_LEGS` = 6) y el balancín relativo a la carga interpolada. `levels/flip.ts`
+  (`FLIP_LEVEL`, nivel 23, al final de `ALL_LEVELS`). `signals.ts`: `LUFF_MAX`, `boomClearCable`, `SignalIn.slack`.
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
   cut…, de la grúa que se maneja; `units`, todas) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
   dibuja cuadros; así se puede probar desde la consola).
@@ -1060,6 +1074,29 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   posibles con una grúa de una familia con licencia (la carrera da siempre la de ruedas). Abandonar un contrato no lo
   cobra ni lo gasta.
 
+- **Choque de la carga con la pluma (fase 26)**: la pluma (del pie a 1,5 m de la cabeza, caja de `boom.w` × 1,2·`w`)
+  y el plumín (de la cabeza a 1,5 m de la punta) son colisionadores de `supBody` que solo chocan con las cargas (ni
+  con el gancho, que cuelga bajo la cabeza, ni con el suelo); se recolocan cuando cambian ángulo, largo o plumín. La
+  grúa torre no (su carga cuelga del carro). Tocar la pluma cuenta como golpe por donde sea y **no** sostiene la carga
+  para la tensión ni el LMI (si no, apoyarla en la pluma bajaría el LMI). El rayo de la cámara no la ve. El señalero
+  no pide subir la pluma de 70° con carga (`LUFF_MAX`) y deja cable para que no toque la pluma (`boomClearCable`).
+- **Aparejo (fase 26)**, aproximación del juego: sin orejetas, 4 ramales del fondo del gancho a puntos de la cara de
+  arriba metidos un 20 % (como mucho 0,25 m) desde las esquinas, a 45° (el gancho queda sobre la carga a la distancia
+  de los puntos, mínimo 0,5 m; antes siempre 0,5 m). Si los puntos quedan a más de 2,6 m del centro (contenedores,
+  vigas, piezas de 6 × 6 m), **balancín** a lo largo del lado mayor: ramal de 0,5 m del gancho a su centro y dos
+  ramales desde cada extremo a las esquinas, de 1 m de alto. El balancín pesa 2 % de la carga (0,2–3 t), cuelga del
+  cable (la tensión lo cuenta; el LMI de los cortes, no), choca con todo menos el gancho y empieza apoyado sobre la
+  carga. Con orejetas (tándem), la eslinga de siempre.
+- **Cuerdas guía (fase 26)**: la carga ya no tiene bloqueado el giro alrededor de la vertical. Colgada (no apoyada),
+  sin orejetas, cada paso se corrige el 12 % de la diferencia entre su giro y el pedido (Z/U: ±0,15 rad/s; sin tecla,
+  0): no gira sola y se orienta con las teclas. Entra en la grabación (`CraneInput.guide`). El mando no las tiene.
+- **Nivel 23 (fase 26)**, datos del juego: depósito de 16 × 3,5 × 3,5 m y 35 t sobre dos cunas de 1 m, obra de
+  90 × 64 m, AT 500-8 (34 m a 64°) en la cabeza y AT 220 (20 m a 60°) en el pie, cimentación a ~12 m de la principal.
+  Orejeta del pie **arriba sobre un poste de 1,2 m**: a ras del depósito el gancho de cola se apoyaba en él a mitad
+  del giro, y en el costado (muñón) lo ladeaba. Cómo se hace (y cómo lo hace el guion de la prueba): la principal iza
+  en vertical sobre la cabeza y la de cola lleva el pie hacia debajo de la cabeza sin dejar que toque las cunas;
+  de pie, la de cola baja hasta no llevar nada y suelta. Reglas del tándem de siempre (LMI, 6°, 10°, doble bloqueo).
+
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
   grúas grandes (fases 4–6): cabeza cinemática, izado a velocidad plena, estiramiento máximo del cable.
@@ -1191,6 +1228,13 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 
 - Fase 22 parte A: sin cambios en draw calls (todo es DOM). Bundle sin medir.
 
+- Fase 26 (medidas del cable con `physics/sling.test.ts`: enganchar bajo la cabeza e izar a fondo hasta 6 m;
+  estiramiento, tensión al izar y en reposo, en % de carga + gancho). Antes → después: AT 60 con 2 t 0,0 → 0,0 cm,
+  99–101 → 99–101 %; AT 60 con 15 t 0,0 → 0,0 cm, 100 → 100 %; AT 500-8 con 60 t 0,0 → 0,0 cm, 96–104 → 96–104 %;
+  LR 3000 con 800 t 0,0 → 0,0 cm, 93–105 → 100–100 %, en reposo 100 → 100,4 % (el balancín de 3 t); viga de 22 m con
+  la AT 220 0,0 → 0,0 cm, 97–104 → 101–103 %, en reposo 100 → 101,8 % (balancín). Nivel 23 en el panel: 157 draw
+  calls, 60 fps. El aterrizaje de la prueba de las reglas sale algo más lento con los ramales (se baja a 2,4 m/s).
+
 ### Pendientes
 - Rapier: si una versión nueva da las fuerzas de las juntas, cambiar la tensión medida por la real (comparando antes).
 - Posible mejora de carga: el `.wasm` empieza a bajar cuando ya llegó `app.js` (no se puede precargar desde
@@ -1264,4 +1308,7 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   usan el mismo generador que el reto diario.
 - `crane/loadChart.test.ts` "se calcula rápido": con toda la batería en paralelo pasó una vez de su límite de
   tiempo (sola, bien).
+- Fase 26: el volteo solo lo jugó el guion (en Node). El balancín no se interpola (se dibuja donde está respecto de
+  la carga en el último paso). Las cuerdas guía no van en el mando. Con la pluma muy empinada y poco cable la carga
+  ahora toca la pluma: algún nivel podría pedir más cable que antes (los guiones de los niveles 15–22 pasan).
 - Vite avisaría que `app.js` pasa de 500 kB (three.js y el juego, ~780 kB): `chunkSizeWarningLimit` = 1200.

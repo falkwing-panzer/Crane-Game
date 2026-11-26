@@ -3,7 +3,7 @@ import { lit, type LitMat } from './models/materials';
 import type { CraneSpec } from '../crane/cranes';
 import { HOOK_HALF_H, type Load, type Physics } from '../physics/world';
 import { hookFalls, hookScale } from './models/layout';
-import { apply, rotate } from '../crane/pose';
+import { apply, rotate, type Quat } from '../crane/pose';
 import { tieLug } from '../crane/tiedown';
 import type { BodyT, UnitFrame } from '../game/interp';
 import type { V3 } from '../crane/pose';
@@ -13,6 +13,8 @@ import { RopeSim } from './ropeSim';
 /** Tramos de cada ramal del cable y de cada ramal de la eslinga (rectos cuando están tensos) */
 const FALL_SEG = 16;
 const SLING_SEG = 8;
+/** Ramales de la eslinga como mucho (fase 26: 4 + el del balancín) */
+const MAX_LEGS = 6;
 const _pts: V3[] = [];
 
 /** Punto (x, y, z) del cuerpo en el mundo */
@@ -47,6 +49,8 @@ export class Rigging {
   private loadMeshes = new Map<Load, THREE.Mesh>();
   private sling: THREE.LineSegments;
   private slingPos: Float32Array;
+  /** Balancín de las cargas largas (fase 26) */
+  private beam: THREE.Mesh;
 
   /** drawLoads: dibujar las cargas (en el tándem las dibuja solo el aparejo de la primera grúa) */
   constructor(scene: THREE.Scene, private phys: Physics, private T: CraneSpec, drawLoads = true) {
@@ -111,8 +115,12 @@ export class Rigging {
       this.loadMeshes.set(l, m);
     }
 
-    // 4 ramales de SLING_SEG tramos (dos vértices por tramo)
-    this.slingPos = new Float32Array(4 * SLING_SEG * 2 * 3);
+    // hasta MAX_LEGS ramales de SLING_SEG tramos (dos vértices por tramo)
+    this.slingPos = new Float32Array(MAX_LEGS * SLING_SEG * 2 * 3);
+    this.beam = new THREE.Mesh(box, lit({ color: '#d39a1c' }));
+    this.beam.castShadow = true;
+    this.beam.visible = false;
+    scene.add(this.beam);
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(this.slingPos, 3));
     this.sling = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: '#1a1a1a' }));
@@ -165,8 +173,10 @@ export class Rigging {
       m.quaternion.set(lr.x, lr.y, lr.z, lr.w);
     }
 
-    // Eslinga de 4 ramales (solo visual; en física es un punto)
+    // Eslinga: los ramales de la física (fase 26); con orejetas (tándem), 4 ramales dibujados hasta el punto
     const L = p.attached;
+    this.beam.visible = false;
+    let legs = 4;
     const tie = L || !p.tied ? null : apply(f.pose, tieLug(this.T));
     this.sling.visible = !!L || !!tie;
     if (tie) {
@@ -178,7 +188,31 @@ export class Rigging {
       }
       (this.sling.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
     }
-    if (L) {
+    if (L && p.rig.length) {
+      const lbt = lb(L);
+      // el balancín se dibuja donde está respecto de la carga en la física, con la carga interpolada
+      let bt: BodyT | null = null;
+      if (p.beam && p.beamHalf) {
+        const lt = L.body.translation(), lq = L.body.rotation(), bp = p.beam.translation(), bq = p.beam.rotation();
+        const iq = { x: -lq.x, y: -lq.y, z: -lq.z, w: lq.w };
+        const rel = rotate(iq, { x: bp.x - lt.x, y: bp.y - lt.y, z: bp.z - lt.z });
+        bt = { t: pt(lbt, rel.x, rel.y, rel.z), q: qmul(lbt.q, qmul(iq, bq)) };
+        this.beam.position.set(bt.t.x, bt.t.y, bt.t.z);
+        this.beam.quaternion.set(bt.q.x, bt.q.y, bt.q.z, bt.q.w);
+        this.beam.scale.set(p.beamHalf.x * 2, p.beamHalf.y * 2, p.beamHalf.z * 2);
+        this.beam.visible = true;
+      }
+      const sup = p.loadSupported();
+      legs = 0;
+      for (const l of p.rig) {
+        const a = l.from === 'hook' ? pt(hk, l.a.x, l.a.y, l.a.z) : pt(bt!, l.a.x, l.a.y, l.a.z);
+        const b = l.to === 'load' ? pt(lbt, l.b.x, l.b.y, l.b.z) : pt(bt!, l.b.x, l.b.y, l.b.z);
+        // con la carga apoyada, lo que sobra de cada ramal se queda encima (no baja del punto más bajo)
+        const slack = sup ? l.len - Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) : 0;
+        this.leg(legs++, a, b, slack, Math.min(a.y, b.y));
+      }
+      (this.sling.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+    } else if (L) {
       const hb = pt(hk, 0, -HOOK_HALF_H, 0), lbt = lb(L);
       const lug = p.attachedLug >= 0 ? L.lugs![p.attachedLug] : null;
       // holgura de la eslinga (fase 15): con la carga apoyada y el gancho bajado, los ramales cuelgan sobre la carga;
@@ -195,6 +229,7 @@ export class Rigging {
       }
       (this.sling.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
     }
+    this.sling.geometry.setDrawRange(0, legs * SLING_SEG * 2);
   }
 
   /** Ramal `i` de la eslinga de `a` a `b`, con `slack` m de más (catenaria si sobra); `floor` = no baja de ahí */
@@ -252,4 +287,14 @@ function crateTexture(mass: number) {
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
+}
+
+/** Producto de cuaterniones a·b */
+function qmul(a: Quat, b: Quat): Quat {
+  return {
+    x: a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+    y: a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+    z: a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+    w: a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
+  };
 }

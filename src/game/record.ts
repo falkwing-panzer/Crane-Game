@@ -24,7 +24,7 @@ export interface InputSource {
 }
 
 const sameCrane = (a: CraneInput, b: CraneInput) => a.slew === b.slew && a.luff === b.luff && a.tele === b.tele && a.hoist === b.hoist
-  && a.fine === b.fine && (a.sl ?? 0) === (b.sl ?? 0) && (a.jib ?? 0) === (b.jib ?? 0);
+  && a.fine === b.fine && (a.sl ?? 0) === (b.sl ?? 0) && (a.jib ?? 0) === (b.jib ?? 0) && (a.guide ?? 0) === (b.guide ?? 0);
 const sameDrive = (a: DriveInput, b: DriveInput) => a.throttle === b.throttle && a.steer === b.steer && a.fine === b.fine;
 
 /** Tramo de la grabación: `n` pasos seguidos con las mismas entradas (las acciones, solo en el primero) */

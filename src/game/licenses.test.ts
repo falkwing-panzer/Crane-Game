@@ -17,7 +17,9 @@ describe('licencias (fase 22)', () => {
     const open = (lic: object) => ALL_LEVELS.map((L) => levelOpen(L, lic, false));
     expect(open({}).every((o) => !o)).toBe(true);
     expect(open({ ruedas: 1 }).slice(0, 14)).toEqual([...Array(11).fill(true), false, false, false]);
-    expect(open({ ruedas: 1 }).slice(14).every((o) => o)).toBe(true); // fase 23: 15–17 con grúas de ruedas
+    expect(open({ ruedas: 1 }).slice(14, 22).every((o) => o)).toBe(true); // fases 23–24: 15–22 con grúas de ruedas
+    expect(open({ ruedas: 1 })[22]).toBe(false); // fase 26: el 23 es de tándem
+    expect(open({ tandem: 1 })[22]).toBe(true);
     expect(open({ torre: 1 })[11]).toBe(true);
     expect(open({ orugas: 1 })[12]).toBe(true);
     expect(open({ orugas: 1 })[6]).toBe(true); // el 7 también con la LR 300

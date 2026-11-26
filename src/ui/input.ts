@@ -156,7 +156,7 @@ export class Input {
     const m = (key: number, pad: number | undefined) => (key !== 0 ? key : pad ?? 0);
     return {
       slew: m(k.sll - k.slr, p?.slew), luff: m(k.lu - k.ld, p?.luff), tele: m(k.to - k.ti, p?.tele), hoist: m(k.hd - k.hu, p?.hoist),
-      fine: !!k.fine || !!p?.fine, sl: m(k.slo - k.sli, p?.sl), jib: m(k.jd - k.ju, p?.jib),
+      fine: !!k.fine || !!p?.fine, sl: m(k.slo - k.sli, p?.sl), jib: m(k.jd - k.ju, p?.jib), guide: m(k.tgl - k.tgr, undefined),
     };
   }
 
