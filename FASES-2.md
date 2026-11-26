@@ -191,6 +191,13 @@ Antes de programar, dime el plan.
 
 Para revisar: los 14 niveles siguen igual; en una rampa de prueba la grúa se nivela, y sin nivelar el LMI lo nota.
 
+**Estado (2026-11-25):** hecha solo la **parte A** (terreno con alturas y conducción en pendiente, PR #33).
+**Pendiente, saltada de momento** para pasar a la fase 19:
+- **Parte B**: nivelación con estabilizadores (puntos 3 y 4). Falta decidir la carrera de los gatos (la referencia no
+  la trae) y cómo nota la estabilidad la pendiente: CDG desplazado por el ángulo, corte del LMI por inclinación, o
+  las dos. Mientras tanto, O no apoya los estabilizadores con más de 1° de pendiente.
+- **Parte C**: presión al suelo bajo las zapatas (punto 5). Falta el área de las zapatas y la resistencia del terreno.
+
 ---
 
 # Bloque B: el juego (usa el motor nuevo)

@@ -133,11 +133,17 @@ export class Hud {
   }
 
   private keysLine: HTMLElement;
+  /** Acciones resaltadas en la línea de teclas */
+  private hl: readonly string[] = [];
   private has: { tele: boolean; tower?: boolean };
 
   /** Línea de teclas de abajo y título del botón "?" con las teclas en uso (fase 14: configurables) */
-  setKeys() {
-    this.keysLine.innerHTML = withKeys(h.keysLine(this.has));
+  setKeys(hl: readonly string[] = this.hl) {
+    this.hl = hl;
+    // escuela (fase 19): los grupos con alguna tecla del paso actual van resaltados
+    const line = h.keysLine(this.has).replace(/<b>(.*?)<\/b>/g, (all, inner: string) =>
+      hl.some((a) => inner.includes(`{${a}}`)) ? `<b class="hl">${inner}</b>` : all);
+    this.keysLine.innerHTML = withKeys(line);
     const tip = withKeys(h.helpBtn);
     this.helpBtn.title = tip;
     this.helpBtn.setAttribute('aria-label', tip);

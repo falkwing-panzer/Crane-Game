@@ -100,6 +100,7 @@ export const es = {
     camTitleTandem: 'Cámara y tándem',
     camTitle: 'Cámara',
     free: 'Solo en la prueba libre',
+    school: 'En la escuela',
     reset: 'reponer la carga en su sitio',
     bypass: 'puentear el LMI (sin cortes: se puede volcar)',
     rewind: 'rebobinar 10 s',
@@ -226,8 +227,92 @@ export const es = {
     } as Record<string, string>,
   },
 
+  /** Escuela de operadores (fase 19): textos de las lecciones en el mismo orden que LESSONS y sus pasos */
+  school: {
+    menuHead: 'Escuela de operadores',
+    menuText: 'Si nunca has manejado una grúa, empieza aquí: seis lecciones cortas con la AT 60.',
+    lessonN: (n: number) => `Lección ${n}`,
+    doneMark: '✓ hecha',
+    todo: 'pendiente',
+    head: (n: number, total: number) => `Escuela · lección ${n} de ${total}`,
+    stepOf: (i: number, n: number) => `Paso ${i} de ${n}`,
+    start: 'Empezar',
+    rewindTip: 'Si algo sale mal, {rewind} rebobina 10 s.',
+    passed: (n: number) => `Lección ${n} superada`,
+    next: 'Siguiente lección',
+    repeat: 'Repetir',
+    menu: 'Menú',
+    allDone: 'Has terminado la escuela. Ya puedes con un trabajo de verdad: el nivel 1 es mover dos contenedores.',
+    level1: 'Ir al nivel 1',
+    stepDone: '¡Bien!',
+    wind: (v: string) => `viento ${v} m/s`,
+    landed: (v: number) => `Apoyada a ${v.toFixed(2).replace('.', ',')} m/s`,
+    tooFast: (v: number) => `Demasiado rápido (${v.toFixed(2).replace('.', ',')} m/s): el vidrio se rompería. Vuelve a izarla y bájala más despacio, o rebobina con {rewind}.`,
+    lessons: [
+      {
+        title: 'Cámara y conducción',
+        intro: 'La AT 60 es una grúa de ruedas: se conduce como un camión. Primero aprende a mirar alrededor y a llevarla a un sitio.',
+        steps: [
+          'Pulsa {view} para cambiar de cámara (orbital, seguimiento y cabina). En la orbital, arrastra con el ratón para girar la vista y usa la rueda para acercarla.',
+          'Avanza con {fw} hasta el primer rectángulo y para dentro: suelta {fw} y frena con {bk}.',
+          'Gira con {stl} o {str} mientras avanzas y para dentro del segundo rectángulo. {bk} también es marcha atrás.',
+        ],
+      },
+      {
+        title: 'Estabilizadores',
+        intro: 'Sobre las ruedas una grúa levanta poco. Para trabajar se apoya en los estabilizadores: cuatro brazos que salen a los lados y levantan el chasis del suelo.',
+        steps: [
+          'Con la grúa parada, saca los estabilizadores con {outriggers}. Mira en el panel de la derecha cómo sube la Capacidad.',
+          'Recógelos con {outriggers}: la capacidad vuelve a bajar. Solo se recogen sin carga colgada.',
+          'Vuelve a sacarlos con {outriggers}: para izar se trabaja siempre apoyado.',
+        ],
+      },
+      {
+        title: 'Subir, girar y telescopar',
+        intro: 'La pluma tiene tres movimientos: subir y bajar, girar la superestructura y alargar el telescopio. Lleva la cabeza de la pluma (la punta, donde están las poleas) a cada aro.',
+        steps: [
+          'Sube la pluma con {lu} hasta meter la cabeza en el aro. {ld} la baja.',
+          'Gira hacia la izquierda con {sll} hasta el aro. {slr} gira a la derecha.',
+          'Alarga la pluma con {to} hasta el aro. {ti} la recoge.',
+          'Ahora combina los tres movimientos hasta el último aro, detrás de la grúa. Mantén {fine} pulsado para ir más fino.',
+        ],
+      },
+      {
+        title: 'Enganchar, izar y soltar',
+        intro: 'El gancho cuelga del cable, que sube y baja. Engancha el palé, llévalo a la zona marcada detrás de la grúa y suéltalo.',
+        steps: [
+          'Baja el gancho con {hd} hasta tocar el palé y engánchalo con {hook}.',
+          'Iza con {hu} hasta que el palé quede a más de 2 m del suelo.',
+          'Gira hasta la zona y baja el palé con {hd} hasta apoyarlo dentro.',
+          'Suelta el gancho con {hook}.',
+        ],
+      },
+      {
+        title: 'El LMI y el radio',
+        intro: 'Cuanto más lejos de la grúa va la carga (más radio), menos puede levantar. El LMI, en el panel de la derecha, marca qué parte de la capacidad estás usando y corta el movimiento al llegar al 100 %.',
+        steps: [
+          'Engancha el bloque de 15 t ({hd} y {hook}) y levántalo 1 m con {hu}.',
+          'Alarga la pluma con {to}: el radio crece y el LMI sube. Sigue hasta pasar del 90 % (suena la alarma).',
+          'Sigue con {to}: al llegar al 100 % el LMI corta el movimiento.',
+          'Recoge la pluma con {ti} para volver a verde, gira y deja el bloque en la zona, detrás de la grúa y más cerca.',
+          'Suelta el gancho con {hook}.',
+        ],
+      },
+      {
+        title: 'Viento y movimientos finos',
+        intro: 'Hoy sopla el viento y la carga es una caja de vidrio: si toca algo a más de 0,5 m/s, se rompe. Con {fine} pulsado todos los movimientos van más despacio.',
+        steps: [
+          'Engancha la caja de vidrio y levántala 3 m.',
+          'Gira despacio hasta dejarla sobre la zona. El viento la balancea: espera a que se calme antes de bajar.',
+          'Bájala con {fine} y {hd} hasta dentro de la zona. Un poco antes de tocar, suelta {hd} y dale toques cortos: tiene que apoyarse a menos de 0,5 m/s.',
+          'Suelta el gancho con {hook}.',
+        ],
+      },
+    ],
+  },
+
   camera: {
-    orbita: 'Cámara orbital libre (ratón)',
+    orbita:'Cámara orbital libre (ratón)',
     seguir: 'Cámara de seguimiento',
     cabina: 'Vista desde la cabina del conductor',
     libre: 'Cámara libre: no sigue a ninguna grúa ni cambia con {switch} (ratón; botón derecho para desplazarla)',

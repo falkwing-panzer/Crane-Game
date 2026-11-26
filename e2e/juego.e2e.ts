@@ -36,11 +36,15 @@ async function ready(page: Page) {
   await page.evaluate(() => new Promise<void>((r) => { let n = 0; const f = () => (++n >= 10 ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); }));
 }
 
-test('menú: los 14 trabajos y las dos pruebas libres', async ({ page }) => {
+/** Tarjetas de los niveles del menú (sin las de la escuela, fase 19) */
+const JOBS = '.levels:not(.school) a.lvl';
+
+test('menú: los 14 trabajos, las dos pruebas libres y las 6 lecciones de la escuela', async ({ page }) => {
   const log = watchConsole(page);
   await open(page);
   await ready(page);
-  await expect(page.locator('a.lvl')).toHaveCount(16);
+  await expect(page.locator(JOBS)).toHaveCount(16);
+  await expect(page.locator('.levels.school a.lvl')).toHaveCount(6);
   await expect(page.locator('#lcard h2')).toHaveText('Elige un trabajo');
   expect(log).toEqual([]);
 });
@@ -50,12 +54,12 @@ test('ir a un nivel desde el menú no recarga la página', async ({ page }) => {
   await open(page);
   await ready(page);
   await page.evaluate(() => { (window as unknown as { marca: number }).marca = 1; });
-  await page.locator('a.lvl').first().click();
+  await page.locator(JOBS).first().click();
   await expect(page).toHaveURL(/nivel=1/);
   await expect(page.locator('#l-start')).toBeVisible();
   expect(await page.evaluate(() => (window as unknown as { marca?: number }).marca)).toBe(1);
   await page.goBack();
-  await expect(page.locator('a.lvl')).toHaveCount(16);
+  await expect(page.locator(JOBS)).toHaveCount(16);
   expect(log).toEqual([]);
 });
 
@@ -179,5 +183,27 @@ test('nivel: guardar a mitad y continuar desde la ficha', async ({ page }) => {
   const [m2, s2] = now!.split(':').map(Number);
   expect(m2 * 60 + s2).toBeGreaterThanOrEqual(mm * 60 + ss);
   await expect(page).not.toHaveURL(/continuar/);
+  expect(log).toEqual([]);
+});
+
+test('escuela: la lección 2 se pasa con el teclado, se guarda y lleva a la siguiente sin recargar', async ({ page }) => {
+  const log = watchConsole(page);
+  await open(page, 'escuela=2');
+  await ready(page);
+  await page.evaluate(() => { (window as unknown as { marca: number }).marca = 1; });
+  await page.locator('#s-start').click();
+  await expect(page.locator('#lesson')).toContainText('Paso 1 de 3');
+  // O tres veces: sacar, recoger y volver a sacar los estabilizadores (cada uno cuando termina el anterior)
+  for (const n of [2, 3]) {
+    await page.keyboard.press('KeyO');
+    await expect(page.locator('#lesson')).toContainText(`Paso ${n} de 3`, { timeout: 20_000 });
+  }
+  await page.keyboard.press('KeyO');
+  await expect(page.locator('#lcard h2')).toHaveText('Lección 2 superada', { timeout: 20_000 });
+  expect(await page.evaluate(() => localStorage.getItem('gruas-escuela'))).toBe('[2]');
+  await page.locator('#s-next').click();
+  await expect(page).toHaveURL(/escuela=3/);
+  await expect(page.locator('#s-start')).toBeVisible();
+  expect(await page.evaluate(() => (window as unknown as { marca?: number }).marca)).toBe(1);
   expect(log).toEqual([]);
 });

@@ -38,7 +38,11 @@ export function bindCommands(ses: Session, game: GameStep, input: Input, view: P
     say(settings.sonido ? m.soundOn : m.soundOff, 1.5);
   };
   input.onPad = (id) => say(m.pad(id.replace(/\s*\(.*$/, '')), 2.5);
-  input.onView = () => say(cam.cycle(ses.act.S, ses.act.pose), 1.5);
+  input.onView = () => {
+    say(cam.cycle(ses.act.S, ses.act.pose), 1.5);
+    // escuela (fase 19): la primera lección pide cambiar de cámara (no es una entrada de la simulación)
+    if (ses.sch && ses.running && !paused()) ses.sch.views++;
+  };
   // rebobinar 10 s (fase 15): solo en la prueba libre; no cuenta para nada
   input.onRewind = () => {
     if (paused() || !ses.running) return;

@@ -21,7 +21,7 @@ export function runCommand(ses: Session, cmd: Cmd) {
     return;
   }
   if (cmd === 'bypass') {
-    if (L) { say(m.noBypass, 2); return; }
+    if (L || ses.lesson) { say(m.noBypass, 2); return; }
     ses.bypass = !ses.bypass;
     say(ses.bypass ? m.bypassOn : m.bypassOff, 2.5);
     return;

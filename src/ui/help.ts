@@ -27,6 +27,8 @@ export interface HelpFlags {
   tandem: boolean;
   /** prueba libre: X reponer la carga y P puentear el LMI */
   free: boolean;
+  /** escuela (fase 19): X reponer la carga y rebobinar (sin puentear el LMI) */
+  school?: boolean;
 }
 
 export interface HelpGroup {
@@ -69,6 +71,7 @@ export function helpGroups(f: HelpFlags, k: KeyMap = activeKeys()): HelpGroup[] 
   g.push({ title: f.tandem ? h.camTitleTandem : h.camTitle, keys: cam });
 
   if (f.free) g.push({ title: h.free, keys: [[K('reset'), h.reset], [K('bypass'), h.bypass], [K('rewind'), h.rewind]] });
+  else if (f.school) g.push({ title: h.school, keys: [[K('reset'), h.reset], [K('rewind'), h.rewind]] });
 
   g.push({ title: h.game, keys: [[K('help'), h.help], [keyLabel('Escape'), h.esc], [K('mute'), h.mute]] });
 

@@ -38,6 +38,7 @@ async function start() {
         get ses() { return cur().ses; }, get game() { return cur().game; }, get view() { return cur().view; },
         get hud() { return cur().view.hud; }, get cam() { return cur().view.cam; }, get lui() { return cur().view.lui; },
         get L() { return cur().ses.L; }, get run() { return cur().ses.run; }, get units() { return cur().ses.units; },
+        get sch() { return cur().ses.sch; },
         get bus() { return cur().ses.bus; },
         get S() { return cur().ses.act.S; }, get C() { return cur().ses.act.C; }, get T() { return cur().ses.act.T; },
         get phys() { return cur().ses.act.phys; }, get crane() { return cur().ses.act.crane; }, get act() { return cur().ses.act; },

@@ -69,6 +69,7 @@ Fase 13: **H** (o el botón "?" de la franja de abajo) abre la ayuda con todas l
 Fase 14: las teclas se cambian en la ayuda (**Cambiar teclas**); esta tabla es la de por defecto. Esc y el mando son fijos.
 Fase 15: **Retroceso** rebobina 10 s (solo en la prueba libre); botón **Guardar** junto al reloj de un nivel.
 Fase 16: casilla **Lluvia** en el HUD (solo en la prueba libre, no en calidad baja).
+Fase 19: en la **escuela** (`?escuela=1…6`) valen X y Retroceso, pero no P.
 
 ## Estado y decisiones
 Se trabaja por fases (ver `FASES.md`), con `/clear` entre fases. **Al cerrar cada fase, actualizar esta sección**
@@ -201,6 +202,14 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   (parches = heightfield de Rapier y malla con las mismas alturas y triángulos), los 14 niveles planos como siempre,
   las colinas del horizonte como terreno real más allá del decorado, meseta de prueba en la prueba libre, el chasis
   sigue el terreno (ruedas y orugas) con pendiente máxima. Pruebas en `terrain/terrain.test.ts`.
+
+- **Fase 18, partes B y C**: saltadas por ahora (anotado en `FASES-2.md`): nivelación con estabilizadores, estabilidad
+  en pendiente y presión al suelo esperan decisiones de Jesús.
+- **Fase 19** (escuela de operadores): 6 lecciones con la AT 60 (cámara y conducción, estabilizadores, subir/girar/
+  telescopar con aros, enganchar e izar, LMI y radio, viento y movimientos finos), arriba del menú con su marca de
+  hecha; presentación, panel con el paso, sus teclas y la línea de abajo resaltada; avanza solo; rebobinar; cartel
+  de lección superada con la siguiente (al final, el nivel 1). Pruebas en `school/lessons.test.ts` (un alumno de
+  guion termina las 6 en la simulación de verdad) y un caso nuevo en `e2e/juego.e2e.ts` (33).
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -350,6 +359,13 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   `carrierFrame` con altura e inclinación en `pose.ts`, `DriveCtx.ground`, `Physics.addTerrain`/`terrain`/`groundY`
   (`land`: terreno y handles compartidos en el tándem), `render/terrainView.ts` (`terrainMeshes`), `Session.terrain`
   y `groundState`, `CameraRig.groundY`, `DecorView(…, hills)`.
+- Fase 19: `school/lessons.ts` (sin three.js ni Rapier: `LESSONS`, `Lesson` = obra (`Level` que no está en LEVELS),
+  aros, `setup` y pasos con `keys` y `done(SchoolView)`; `SchoolState`/`newSchool`; cargas, zonas y aros salen de
+  `headPos` con la pose), `game/schoolRules.ts` (`SchoolRules`: viento, aviso al apoyar, avance de pasos, evento
+  `lessonDone`), `Session.lesson`/`site` (obra del nivel o de la lección)/`sch` (va en `GameSnap.sch`),
+  `SessionDef.school`, `Physics.footprint`, `ui/schoolUi.ts` (`loadSchool`/`markSchool`, clave `gruas-escuela`,
+  `schoolUrl`, `schoolMenu`, `SchoolPanel`, `introHtml`, `passedHtml`), `render/ringsView.ts` (aros y bordes de
+  las zonas), `Hud.setKeys(resaltadas)`, `HelpFlags.school`, `LevelUi.show`/`card` públicos, textos en `t.school`.
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
   cut…, de la grúa que se maneja; `units`, todas) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
   dibuja cuadros; así se puede probar desde la consola).
@@ -791,6 +807,15 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   es la parte B. La estabilidad (LMI, vuelco) todavía no tiene en cuenta la inclinación: parte B, con el visto bueno
   de Jesús antes de tocar `stability.ts`.
 
+- **Escuela (fase 19)**: una lección no es un nivel: `ses.L` sigue en null (sin estrellas, récords, guardar ni
+  cartel de fallo; se puede rebobinar y reponer la carga con X, no puentear el LMI) y la obra va en `ses.site`. Sin
+  fallos: si vuelca, el cartel de Reiniciar de la prueba libre. El progreso (`ses.sch`) va en las instantáneas.
+  Contar las pulsaciones de V (lección 1) es de la interfaz, no de la simulación (no se graba). Datos de
+  aproximación del juego (la referencia no tiene escuela): palé de 2 t, bloque de 15 t (con 60° de lado el LMI pasa
+  del 90 % hacia 30 m de pluma y corta hacia 31,5 m; se descartó bajar la pluma con 20 t porque la carga tocaba el
+  suelo antes del aviso), caja de vidrio del nivel 6 (0,5 m/s) con viento de 4 m/s y ráfagas de 3. Las zonas llevan
+  borde amarillo y postes (el relleno de los niveles casi no se ve de lejos).
+
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
   grúas grandes (fases 4–6): cabeza cinemática, izado a velocidad plena, estiramiento máximo del cable.
@@ -905,6 +930,10 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   frecuencia: ver la nota de la fase 16); física por paso igual (0,67–1,09 → 0,70–0,98). Nivel 11: un cuadro de
   33 ms en una pasada (59,5 fps). Bundle `app.js` 843 → 848 kB (209 kB comprimido).
 
+- Fase 19 (capturas de Chromium sin ventana sobre la Intel, 1280×720): lecciones a 60 fps con 81–84 draw calls y
+  ~52.000 triángulos (la AT 60 en la obra de 84 × 56 con el decorado). Sin banco nuevo (Jesús pidió no seguir
+  revisando en el navegador).
+
 ### Pendientes
 - Rapier: si una versión nueva da las fuerzas de las juntas, cambiar la tensión medida por la real (comparando antes).
 - Posible mejora de carga: el `.wasm` empieza a bajar cuando ya llegó `app.js` (no se puede precargar desde
@@ -958,4 +987,7 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - Playwright en local (fase 18): "guardar a mitad y continuar" falla siempre, también en `main` (el reloj tras
   Continuar queda 1 s antes del que se leyó al guardar); en la acción del PR #32 pasó. Revisar si el guardado toma el
   estado de un paso anterior al que muestra el reloj, o si la prueba compara mal el redondeo.
+- Escuela: nadie la ha jugado todavía a mano. El alumno de guion tarda 11–172 s por lección; la 6 es lenta (girar
+  con Mayús y esperar a que el viento calme el balanceo). Si a una persona se le hace larga, lo primero: zonas más
+  grandes o menos viento.
 - Vite avisaría que `app.js` pasa de 500 kB (three.js y el juego, ~780 kB): `chunkSizeWarningLimit` = 1200.
