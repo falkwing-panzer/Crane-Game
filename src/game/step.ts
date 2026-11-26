@@ -8,7 +8,7 @@ import type { SchoolState } from '../school/lessons';
 import { runCommand } from './commands';
 import { Recording, type Cmd, type InputSource, type StepInput } from './record';
 import { Interp } from './interp';
-import type { Run, Session } from './session';
+import { newRun, type Run, type Session } from './session';
 import type { CraneConfig } from '../crane/stability';
 import type { CraneState } from '../crane/kinematics';
 import type { Dyn } from '../crane/ops';
@@ -166,7 +166,7 @@ export class GameStep {
     ses.act = ses.units[s.act];
     ses.bypass = s.bypass;
     ses.running = s.running;
-    ses.run = { ...s.run };
+    ses.run = { ...newRun(), ...s.run }; // partidas guardadas antes de la fase 20: sin los campos nuevos
     if (this.rules) this.rules.winClock = s.winClock;
     if (ses.sch && s.sch) ses.sch = { ...s.sch };
     this.steps = s.step;

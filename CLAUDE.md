@@ -70,6 +70,7 @@ Fase 14: las teclas se cambian en la ayuda (**Cambiar teclas**); esta tabla es l
 Fase 15: **Retroceso** rebobina 10 s (solo en la prueba libre); botón **Guardar** junto al reloj de un nivel.
 Fase 16: casilla **Lluvia** en el HUD (solo en la prueba libre, no en calidad baja).
 Fase 19: en la **escuela** (`?escuela=1…6`) valen X y Retroceso, pero no P.
+Fase 20: **C** abre / cierra la tabla de cargas (solo interfaz; se puede manejar con ella abierta).
 
 ## Estado y decisiones
 Se trabaja por fases (ver `FASES.md`), con `/clear` entre fases. **Al cerrar cada fase, actualizar esta sección**
@@ -210,6 +211,13 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   hecha; presentación, panel con el paso, sus teclas y la línea de abajo resaltada; avanza solo; rebobinar; cartel
   de lección superada con la siguiente (al final, el nivel 1). Pruebas en `school/lessons.test.ts` (un alumno de
   guion termina las 6 en la simulación de verdad) y un caso nuevo en `e2e/juego.e2e.ts` (33).
+
+- **Fase 20** (tabla de cargas y plan de izaje): tabla de cargas con C (ratedCap por radio y largo de pluma, 360° o
+  giro actual, casilla actual marcada, en rojo lo que no aguantaría con lo que lleva el gancho); botón "Plan de izaje"
+  en la ficha con la grúa fantasma en la planta (verde, ámbar, rojo por carga y contorno del radio útil); resumen del
+  izaje más exigente en los carteles de nivel completado y fallido. Pruebas en `crane/loadChart.test.ts`,
+  `levels/liftPlan.test.ts` (también contra los choques de Rapier), `game/trackLift.test.ts` y un caso nuevo en
+  `e2e/juego.e2e.ts` (34).
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -366,6 +374,16 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   `SessionDef.school`, `Physics.footprint`, `ui/schoolUi.ts` (`loadSchool`/`markSchool`, clave `gruas-escuela`,
   `schoolUrl`, `schoolMenu`, `SchoolPanel`, `introHtml`, `passedHtml`), `render/ringsView.ts` (aros y bordes de
   las zonas), `Hud.setKeys(resaltadas)`, `HelpFlags.school`, `LevelUi.show`/`card` públicos, textos en `t.school`.
+- Fase 20: `crane/loadChart.ts` (sin three.js ni DOM: `loadChart(T, C, md, slew | null, maxLb)` → filas = radio,
+  columnas = largo, o ángulo en la SK 60; `angleFor` = inversa de `reach`, con plumín por bisección; `capAt`,
+  `SLEW_SAMPLES`, `cellPose`, `chartMark`, `niceSteps`/`roundSteps`), `ui/chartPanel.ts` (`ChartPanel`:
+  `Presenter.chart`, `update` cada cuadro, recalcula solo si cambia la configuración, como mucho cada 0,4 s;
+  `capText`), `levels/liftPlan.ts` (sin three.js ni Rapier: `Ghost`, `toCrane`/`toWorld`, `planConfigs`, `bestLift`,
+  `liftPlan`, `grade`, `PLAN_MARGIN` = 0,8, `RIG_H` = 3 m, `siteProblem`, `usefulRadius`/`usefulContour`,
+  `crateNeedH`), `ui/planView.ts` (`PlanView`: lienzo 2D, arrastrar, rueda, tabla), `LevelUi.plan` (los fantasmas
+  se recuerdan por nivel y grúa mientras dura la visita), `liftHtml` y `LiftStats` en `levelUi.ts`, `trackLift` en
+  `control.ts`; `Run` con `peakLabel`/`peakMass`/`peakR`/`peakCrane`/`maxR`/`maxRLabel`/`heavy`/`heavyLabel`.
+  Acción `chart` en `keys.ts` (`Input.onChart`), textos en `t.chart`, `t.plan` y `t.levels`.
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
   cut…, de la grúa que se maneja; `units`, todas) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
   dibuja cuadros; así se puede probar desde la consola).
@@ -816,6 +834,27 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   suelo antes del aviso), caja de vidrio del nivel 6 (0,5 m/s) con viento de 4 m/s y ráfagas de 3. Las zonas llevan
   borde amarillo y postes (el relleno de los niveles casi no se ve de lejos).
 
+- **Tabla de cargas (fase 20)**: cada casilla es `ratedCap` de la referencia en ese punto (incluye el gancho, como el
+  HUD). Por defecto **360°** (decidido con Jesús): la peor de 19 giros de 0 a 180° (el apoyo es simétrico; una prueba
+  comprueba que entre muestras no baja más de un 1 %); la casilla "giro actual" usa el giro redondeado a 2°. Con el
+  modo de apoyo de ese momento (en marcha da la tabla de `move`). El largo que no se puede telescopar ahora (35 m sin
+  Y-guy) sale vacío. SK 60: columnas = ángulo de la pluma y el carro da el radio. Calcularla cuesta hasta ~50 ms
+  (por eso solo al cambiar la configuración). La capacidad de "Ahora" es la del HUD (giro actual), no la casilla.
+- **Plan de izaje (fase 20)**, aproximación del juego (la referencia no lo tiene): para cada carga, el radio y el giro
+  desde el fantasma a su centro y al centro de su zona; la mejor capacidad entre los largos de pluma (cada metro) que
+  llegan a ese radio con la punta a lo alto de la carga + 3 m (`RIG_H`: eslinga, gancho y doble bloqueo) o más, con la
+  grúa montada (estabilizadores o orugas, lastre completo, Y-guy, superlift a r0 o rMax, plumín cada 15° solo en el
+  nivel 11). Verde = carga + gancho ≤ 80 % de esa capacidad (decidido con Jesús), ámbar ≤ 100 %, rojo si no. Destino:
+  la zona más fácil; con pilas (`stack`), la más difícil. Sitio: chasis y zapatas contra cajas, cargas, borde y
+  terreno blando con las medidas de `carrierBlocked`/`padsBlocked` (prueba contra Rapier en 5 niveles; solo difieren
+  justo en el borde). **No mira**: lo que hay en el camino (edificios, líneas), el viento, el contrapeso al girar ni la
+  bandeja del superlift. Contorno del radio útil: con la altura de la carga y sin plumín (con él tardaba ~0,5 s).
+  No hay marca del fantasma en 3D (era opcional; no se hizo).
+- **Resumen del turno (fase 20)**: en el momento del LMI máximo con carga colgada se guardan la carga, las t (en el
+  tándem, la parte de esa grúa), el radio y la grúa; además el radio máximo con carga y la carga más pesada. Campos
+  planos en `Run` (las instantáneas copian `{ ...run }`); al restaurar, `{ ...newRun(), ...s.run }` para partidas
+  guardadas antes.
+
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
   grúas grandes (fases 4–6): cabeza cinemática, izado a velocidad plena, estiramiento máximo del cable.
@@ -934,6 +973,10 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   ~52.000 triángulos (la AT 60 en la obra de 84 × 56 con el decorado). Sin banco nuevo (Jesús pidió no seguir
   revisando en el navegador).
 
+- Fase 20: sin cambios en draw calls (todo es DOM y un lienzo 2D en la ficha). Plan de izaje: ≤ 6 ms por recálculo
+  al mover el fantasma (nivel 11 con el plumín), contorno ≤ ~70 ms al elegir carga (en Node). Bundle `app.js` 875 kB
+  (219 kB comprimido).
+
 ### Pendientes
 - Rapier: si una versión nueva da las fuerzas de las juntas, cambiar la tensión medida por la real (comparando antes).
 - Posible mejora de carga: el `.wasm` empieza a bajar cuando ya llegó `app.js` (no se puede precargar desde
@@ -990,4 +1033,7 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - Escuela: nadie la ha jugado todavía a mano. El alumno de guion tarda 11–172 s por lección; la 6 es lenta (girar
   con Mayús y esperar a que el viento calme el balanceo). Si a una persona se le hace larga, lo primero: zonas más
   grandes o menos viento.
+- Plan de izaje: en el nivel 2 solo hay sitio para la City 25 justo en el centro de la calle (z = 25); el nivel 7 (pick
+  & carry) sale en rojo desde cualquier sitio fijo, porque se recoge en un sitio y se deja en otro. Jesús no ha
+  probado la tabla ni el plan en la laptop.
 - Vite avisaría que `app.js` pasa de 500 kB (three.js y el juego, ~780 kB): `chunkSizeWarningLimit` = 1200.

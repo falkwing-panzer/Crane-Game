@@ -135,6 +135,36 @@ test('teclas configurables: se cambian en la ayuda, se guardan y la grúa las ob
   expect(log).toEqual([]);
 });
 
+test('tabla de cargas (C) y plan de izaje en la ficha', async ({ page }) => {
+  const log = watchConsole(page);
+  await open(page, 'nivel=1');
+  await ready(page);
+  // plan de izaje: la planta, una fila por carga y volver a la ficha
+  await page.locator('#l-plan').click();
+  await expect(page.locator('.plan-cv')).toBeVisible();
+  await expect(page.locator('.plan-table tr[data-k]')).toHaveCount(2);
+  const before = await page.locator('.plan-table').innerText();
+  // arrastrar el fantasma cambia los radios
+  const box = (await page.locator('.plan-cv').boundingBox())!;
+  const sx = box.width / 84, x0 = box.x + 10 * sx, y0 = box.y + 46 * sx;
+  await page.mouse.move(x0, y0);
+  await page.mouse.down();
+  await page.mouse.move(x0 + 20 * sx, y0 - 6 * sx, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.locator('.plan-table')).not.toHaveText(before);
+  await page.locator('#p-back').click();
+  await page.locator('#l-start').click();
+  await expect(page.locator('#overlay')).toBeHidden();
+  // tabla de cargas: C la abre con la casilla actual marcada y la vuelve a cerrar
+  await page.keyboard.press('KeyC');
+  await expect(page.locator('.chart')).toBeVisible();
+  await expect(page.locator('.chart td.now')).toHaveCount(1);
+  await expect(page.locator('.chart-now')).toContainText('capacidad');
+  await page.keyboard.press('KeyC');
+  await expect(page.locator('.chart')).toBeHidden();
+  expect(log).toEqual([]);
+});
+
 test('pausa al perder el foco: no se acumulan pasos de física', async ({ page }) => {
   const log = watchConsole(page);
   await open(page, 'grua=medium');

@@ -37,6 +37,8 @@ export function bindCommands(ses: Session, game: GameStep, input: Input, view: P
     saveSettings(settings);
     say(settings.sonido ? m.soundOn : m.soundOff, 1.5);
   };
+  // tabla de cargas (fase 20): solo interfaz, no es una entrada de la simulación
+  input.onChart = () => view.chart.toggle();
   input.onPad = (id) => say(m.pad(id.replace(/\s*\(.*$/, '')), 2.5);
   input.onView = () => {
     say(cam.cycle(ses.act.S, ses.act.pose), 1.5);

@@ -1,7 +1,7 @@
 import type { CraneInput } from '../crane/kinematics';
 import type { DriveInput } from '../crane/drive';
 import { stepCrane, stepOutriggers } from '../crane/kinematics';
-import { lmiStatic } from '../crane/stability';
+import { lmiStatic, reach } from '../crane/stability';
 import { dynamicStability, stepTilt, supportMode, TILTED_PHI } from '../crane/ops';
 import { apply, carrierFrame, carrierPose, edgeAxis, rotate, worldToCarrier } from '../crane/pose';
 import { stepDrive, stepSuspension } from '../crane/drive';
@@ -124,7 +124,7 @@ export function afterUnit(ses: Session, u: Unit, dt: number) {
   // Estabilidad con la tensión real del cable: un balanceo o un tirón también cuentan.
   const md = supportMode(S, T);
   u.dyn = dynamicStability(T, C, S, md, phys.tension, worldToCarrier(S, phys.gp));
-  if (ses.hanging(u)) ses.run.maxLmi = Math.max(ses.run.maxLmi, u.dyn.lmi); // LMI máximo con la carga colgada (maxLmi de la referencia)
+  if (ses.hanging(u)) trackLift(ses, u); // LMI máximo con la carga colgada (maxLmi de la referencia) e izaje más exigente
   if (stepTilt(S, u.dyn, dt)) {
     const { p, axis } = edgeAxis(T, md, S.edge);
     const f = carrierFrame(S); // la arista viene en el marco del chasis
@@ -135,4 +135,16 @@ export function afterUnit(ses: Session, u: Unit, dt: number) {
     u.tipText = t.msg.tipText(Math.round(u.dyn.u * 100), md === 'tire' || md === 'move');
     bus.emit('tipping', { unit: u.i });
   }
+}
+
+/** Izaje más exigente (fase 20): el LMI máximo con su carga y su radio, el radio máximo y la carga más pesada */
+export function trackLift(ses: Session, u: Unit) {
+  const run = ses.run, { T, S, C } = u;
+  const label = u.phys.attached!.label, m = ses.loadOnHook(u), R = Math.max(0, reach(T, C, S.Lb, S.ang));
+  if (u.dyn.lmi > run.maxLmi) {
+    run.maxLmi = u.dyn.lmi;
+    run.peakLabel = label; run.peakMass = m; run.peakR = R; run.peakCrane = T.name;
+  }
+  if (R > run.maxR) { run.maxR = R; run.maxRLabel = label; }
+  if (m > run.heavy) { run.heavy = m; run.heavyLabel = label; }
 }

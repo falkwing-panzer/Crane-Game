@@ -142,3 +142,38 @@ kbd { display: inline-block; min-width: 1.1em; text-align: center; font: 600 12p
 .lcard ol { margin: 0 0 12px; padding-left: 22px; color: #c3cad1; }
 .lcard .hint { color: #aab3bc; font-size: 13px; }
 .keys b.hl { color: #1b1d20; background: #f0bb27; border-radius: 3px; padding: 0 3px; }
+
+/* fase 20: tabla de cargas (C), abajo a la izquierda; se puede tener abierta mientras se maneja */
+.chart { left: 10px; bottom: 52px; max-width: calc(100% - 240px); max-height: calc(100% - 200px); overflow: auto; pointer-events: auto;
+  font-variant-numeric: tabular-nums; font-size: 12px; }
+.chart[hidden] { display: none; }
+.chart-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: #f0bb27; font-size: 13px; }
+.chart-x { font: inherit; font-size: 11px; padding: 2px 8px; border: 0; border-radius: 4px; background: #3a424b; color: #f2f4f6; cursor: pointer; }
+.chart-mode { display: block; margin: 3px 0 1px; }
+.chart small { color: #aab3bc; display: block; }
+.chart table { border-collapse: collapse; margin: 6px 0; }
+.chart th, .chart td { padding: 1px 6px; text-align: right; border-bottom: 1px solid rgba(255, 255, 255, 0.07); }
+.chart thead th { color: #aab3bc; font-weight: 400; }
+.chart tbody th { color: #aab3bc; font-weight: 400; }
+.chart th.on, .chart tr.on th { color: #f0bb27; font-weight: 700; }
+.chart tr.on td, .chart td.col { background: rgba(240, 187, 39, 0.1); }
+.chart td.now { background: #f0bb27; color: #1b1d20; font-weight: 700; border-radius: 3px; }
+.chart td.over { color: #ff8b7d; }
+.chart td.now.over { background: #ff6b5a; color: #1b1d20; }
+.chart-now { margin: 2px 0 3px; }
+
+/* fase 20: plan de izaje en la ficha */
+.plan-intro { font-size: 13px; }
+.plan-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 8px; }
+.btn.small { padding: 4px 10px; font-size: 12px; }
+.plan-site { margin-left: 8px; color: #aab3bc; }
+.plan-cv { display: block; border-radius: 6px; cursor: grab; touch-action: none; }
+.plan-cv:active { cursor: grabbing; }
+.plan-table table { border-collapse: collapse; width: 100%; margin: 8px 0; font-variant-numeric: tabular-nums; }
+.plan-table th, .plan-table td { padding: 3px 8px; text-align: left; border-bottom: 1px solid #2f363e; }
+.plan-table th { color: #aab3bc; font-weight: 400; }
+.plan-table tr[data-k] { cursor: pointer; }
+.plan-table tr.on { background: rgba(240, 187, 39, 0.1); }
+.plan-table small { color: #aab3bc; margin-left: 4px; }
+.plan-table .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+.plan-legend { display: block; color: #aab3bc; margin: 0 0 12px; }

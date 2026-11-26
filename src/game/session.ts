@@ -63,9 +63,17 @@ export interface Unit {
 export interface Run {
   t: number; done: boolean; hard: number; bumps: number; prox: number; maxLmi: number;
   bumpCd: number; lineD: number; inProx: boolean; wind: number;
+  /**
+   * Izaje más exigente (fase 20), en el momento del LMI máximo: carga, t en el gancho (en el tándem, la parte de esa
+   * grúa), radio y grúa; radio máximo con carga colgada y carga más pesada. Campos planos: las instantáneas copian
+   * el turno con { ...run }.
+   */
+  peakLabel: string; peakMass: number; peakR: number; peakCrane: string;
+  maxR: number; maxRLabel: string; heavy: number; heavyLabel: string;
 }
 
-export const newRun = (): Run => ({ t: 0, done: false, hard: 0, bumps: 0, prox: 0, maxLmi: 0, bumpCd: 0, lineD: Infinity, inProx: false, wind: 0 });
+export const newRun = (): Run => ({ t: 0, done: false, hard: 0, bumps: 0, prox: 0, maxLmi: 0, bumpCd: 0, lineD: Infinity, inProx: false, wind: 0,
+  peakLabel: '', peakMass: 0, peakR: 0, peakCrane: '', maxR: 0, maxRLabel: '', heavy: 0, heavyLabel: '' });
 
 /** Qué se juega, sacado de la URL */
 export interface SessionDef {

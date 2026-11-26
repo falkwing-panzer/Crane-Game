@@ -5,6 +5,10 @@ import { stickyParams } from './settings';
 import { t } from '../i18n';
 import { withKeys } from './keys';
 import { schoolMenu } from './schoolUi';
+import { PlanView } from './planView';
+import { placeCrane } from '../levels/setup';
+import type { Ghost } from '../levels/liftPlan';
+import type { CraneState } from '../crane/kinematics';
 
 const tl = t.levels;
 
@@ -46,6 +50,23 @@ export const TEXT_3D: Record<string, string> = tl.text3d;
 const text3d = (s: string) => withKeys(TEXT_3D[s] ?? s);
 
 /** Tándem (fase 10): las dos grúas ya están colocadas y montadas; no se eligen */
+/** Lo que el resumen necesita del turno (Run) */
+export interface LiftStats { maxLmi: number; peakLabel: string; peakMass: number; peakR: number; peakCrane: string; maxR: number; maxRLabel: string; heavy: number; heavyLabel: string }
+
+/**
+ * Resumen del izaje más exigente (fase 20): LMI máximo con su carga y su radio, radio máximo con carga y carga más
+ * pesada. Vacío si no se colgó nada. withLmi: también el LMI máximo (el cartel de nivel fallido no tiene la tabla).
+ */
+export function liftHtml(r: { maxLmi: number } & Partial<LiftStats>, tandem: boolean, withLmi = false) {
+  if (!r.peakLabel) return '';
+  const f = (v: number) => v.toFixed(1).replace('.', ',');
+  return `<div class="eyebrow">${tl.liftHead}</div><div class="stats">` +
+    (withLmi ? `<span>${tl.maxLmi}</span><b>${Math.round(r.maxLmi * 100)} %</b>` : '') +
+    `<span>${tl.peakAt}</span><b>${tl.peak(r.peakLabel, f(r.peakMass ?? 0), f(r.peakR ?? 0), tandem ? r.peakCrane ?? '' : '')}</b>` +
+    `<span>${tl.maxR}</span><b>${tl.maxRVal(f(r.maxR ?? 0), r.maxRLabel ?? '')}</b>` +
+    `<span>${tl.heavy}</span><b>${tl.heavyVal(r.heavyLabel ?? '', f(r.heavy ?? 0))}</b></div>`;
+}
+
 function tandemCranes(L: Level) {
   const td = L.tandem!;
   const card = (id: CraneId, role: string, what: string) => {
@@ -86,6 +107,9 @@ export class LevelUi {
   private saveBtn: HTMLButtonElement;
   /** Botón Guardar (fase 15): guardar a mitad del nivel */
   onSave: () => void = () => {};
+  /** Plan de izaje (fase 20): el fantasma de cada nivel y grúa, para que siga donde se dejó al volver a abrirlo */
+  private ghosts = new Map<string, Ghost>();
+  private planView: PlanView | null = null;
 
   constructor(root: HTMLElement) {
     root.insertAdjacentHTML('beforeend', `
@@ -142,7 +166,7 @@ export class LevelUi {
           <small>${c.size}${c.id === L.rec ? tl.recommended : ''}</small><b>${c.name}</b>
           <small>${tl.craneLine(c.structMax, boom)}</small><em class="${ok ? '' : 'why'}">${ok ? c.note : why}</em></button>`;
       }).join('')}</div>`}
-      <div class="row"><a class="btn" href="${homeUrl()}">${tl.menuBtn}</a>${cont ? `<button class="btn" id="l-cont">${tl.cont(fmt(cont.t), cont.crane)}</button>` : ''}<button class="btn primary" id="l-start">${tl.start}</button></div>`);
+      <div class="row"><a class="btn" href="${homeUrl()}">${tl.menuBtn}</a>${L.tandem ? '' : `<button class="btn" id="l-plan">${t.plan.open}</button>`}${cont ? `<button class="btn" id="l-cont">${tl.cont(fmt(cont.t), cont.crane)}</button>` : ''}<button class="btn primary" id="l-start">${tl.start}</button></div>`);
     const cb = this.card.querySelector<HTMLButtonElement>('#l-cont');
     if (cb && cont) cb.onclick = () => { this.close(); cont.go(); };
     this.card.querySelectorAll<HTMLButtonElement>('.copt').forEach((b) => {
@@ -151,15 +175,40 @@ export class LevelUi {
     const st = this.card.querySelector<HTMLButtonElement>('#l-start')!;
     st.onclick = () => { this.close(); onStart(); };
     st.focus({ preventScroll: true });
+    const pb = this.card.querySelector<HTMLButtonElement>('#l-plan');
+    if (pb) pb.onclick = () => this.plan(i, current, () => this.brief(i, current, onPick, onStart, cont), () => { this.close(); onStart(); });
+  }
+
+  /**
+   * Plan de izaje (fase 20): la planta con la grúa fantasma, en la misma tarjeta que la ficha. back = volver a la
+   * ficha; start = empezar el turno.
+   */
+  plan(i: number, crane: CraneId, back: () => void, start: () => void) {
+    const L = LEVELS[i], T = CRANES[crane];
+    const S = { x: 0, z: 0, h: 0 } as CraneState;
+    placeCrane(T, S, L);
+    const home: Ghost = { x: S.x, z: S.z, h: S.h };
+    const key = `${i}|${crane}`;
+    let g = this.ghosts.get(key);
+    if (!g) this.ghosts.set(key, g = { ...home });
+    this.show(`<div class="eyebrow"><span class="tag">${L.type}</span>${tl.clockHead(i + 1, L.name)}</div>
+      <h2>${t.plan.title(L.name, T.name)}</h2><div class="plan"></div>
+      <div class="row"><button class="btn" id="p-back">${t.plan.back}</button><button class="btn primary" id="p-start">${tl.start}</button></div>`);
+    this.planView?.dispose();
+    this.planView = new PlanView(this.card.querySelector('.plan')!, T, L, g, home);
+    const close = () => { this.planView?.dispose(); this.planView = null; };
+    this.card.querySelector<HTMLButtonElement>('#p-back')!.onclick = () => { close(); back(); };
+    const ps = this.card.querySelector<HTMLButtonElement>('#p-start')!;
+    ps.onclick = () => { close(); start(); };
   }
 
   /** Nivel completado (checkWin de la referencia) */
-  won(i: number, crane: string, res: { t: number; hard: number; bumps: number; prox: number; maxLmi: number }, record: boolean) {
+  won(i: number, crane: string, res: { t: number; hard: number; bumps: number; prox: number; maxLmi: number } & Partial<LiftStats>, record: boolean) {
     const L = LEVELS[i], n = stars(L, res), next = i + 1 < LEVELS.length;
     this.show(`<div class="eyebrow">${tl.won(i + 1, crane)}</div><h2 class="okh">${L.name}</h2>
       <div class="stars big">${starText(n)}</div>${record ? `<p class="rec">${tl.newRecord}</p>` : ''}
       <div class="stats"><span>${tl.time(fmt(L.par))}</span><b>${fmt(res.t)}</b><span>${tl.hard}</span><b>${res.hard}</b>
-      <span>${tl.bumps}</span><b>${res.bumps}</b><span>${tl.prox}</span><b>${res.prox}</b><span>${tl.maxLmi}</span><b>${Math.round(res.maxLmi * 100)} %</b></div>
+      <span>${tl.bumps}</span><b>${res.bumps}</b><span>${tl.prox}</span><b>${res.prox}</b><span>${tl.maxLmi}</span><b>${Math.round(res.maxLmi * 100)} %</b></div>${liftHtml(res, !!L.tandem)}
       <div class="row"><a class="btn" href="${homeUrl()}">${tl.menuBtn}</a><a class="btn${next ? '' : ' primary'}" href="${levelUrl(i + 1)}">${tl.retry}</a>
       ${next ? `<a class="btn primary" id="l-next" href="${levelUrl(i + 2)}">${tl.next}</a>` : ''}</div>
       ${next ? '' : `<p>${tl.last}</p>`}`);
@@ -167,8 +216,8 @@ export class LevelUi {
   }
 
   /** Nivel fallido (fail de la referencia) */
-  failed(i: number, crane: string, title: string, text: string) {
-    this.show(`<div class="eyebrow">${tl.failed(i + 1, crane)}</div><h2>${title}</h2><p>${withKeys(text)}</p>
+  failed(i: number, crane: string, title: string, text: string, res?: { maxLmi: number } & Partial<LiftStats>) {
+    this.show(`<div class="eyebrow">${tl.failed(i + 1, crane)}</div><h2>${title}</h2><p>${withKeys(text)}</p>${res ? liftHtml(res, !!LEVELS[i].tandem, true) : ''}
       <div class="row"><a class="btn" href="${homeUrl()}">${tl.menuBtn}</a><a class="btn primary" id="l-retry" href="${location.href}">${tl.retry}</a></div>`, true);
     this.card.querySelector<HTMLElement>('#l-retry')?.focus({ preventScroll: true });
   }

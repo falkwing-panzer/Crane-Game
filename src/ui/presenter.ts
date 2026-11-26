@@ -26,6 +26,7 @@ import { saveSettings, showFps, QUALITIES, type Quality, type Settings } from '.
 import type { Input } from './input';
 import { RingsView } from '../render/ringsView';
 import { SchoolPanel, introHtml, markSchool, passedHtml } from './schoolUi';
+import { ChartPanel } from './chartPanel';
 import { t } from '../i18n';
 
 const MODE_TEXT = t.hud.modes;
@@ -65,6 +66,8 @@ export class Presenter {
   readonly help: Help;
   readonly lui: LevelUi;
   readonly sound: Sound;
+  /** Tabla de cargas (fase 20, tecla C) */
+  readonly chart: ChartPanel;
   private readonly off: (() => void)[] = [];
   /** Detalles de las grúas que se ocultan de lejos (fase 16) */
   readonly lod: DetailLod;
@@ -122,6 +125,7 @@ export class Presenter {
       if (this.school && ses.sch) this.school.panel.update(ses.sch, ses.running, true);
     };
     hud.onCrane = (k) => go(levelUrl(0, k));
+    this.chart = new ChartPanel(root);
 
     // Niveles: menú, ficha, carteles y reloj. El turno empieza en pausa hasta "Empezar turno".
     const lui = this.lui = new LevelUi(root);
@@ -165,7 +169,7 @@ export class Presenter {
       bus.on('tipped', (e) => { if (!L) hud.showTipped(multi ? m.named(units[e.unit].T.name, e.text) : e.text); }),
       bus.on('end', (e) => {
         clearSave(def.nivel);
-        if (e.fail) lui.failed(def.li, ses.act.T.name, e.fail.title, e.fail.text);
+        if (e.fail) lui.failed(def.li, ses.act.T.name, e.fail.title, e.fail.text, ses.run);
         else lui.won(def.li, ses.act.T.name, ses.run, !!e.record);
       }),
       bus.on('restart', () => hud.showTipped(null)),
@@ -332,6 +336,7 @@ export class Presenter {
       tower: T.tower ? { text: towerPhase(S.er, S.erT), p: S.er } : null,
       side: share !== null ? { deg: (act.sideAng * 180) / Math.PI, max: 6 } : null,
     });
+    this.chart.update({ T, S, C, md, mHook: T.hookM + ses.loadOnHook(act) });
     const o = multi ? units.find((u) => u !== act)! : null;
     hud.other(o ? { name: o.T.name, lmi: o.dyn.lmi, tension: o.phys.tension, share: o.phys.slingShare(), tiltDeg: (o.S.phi * 180) / Math.PI, tipped: ses.tipped(o),
       sideDeg: o.phys.slingShare() !== null ? (o.sideAng * 180) / Math.PI : null } : null);
