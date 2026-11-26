@@ -71,6 +71,7 @@ Fase 15: **Retroceso** rebobina 10 s (solo en la prueba libre); botón **Guardar
 Fase 16: casilla **Lluvia** en el HUD (solo en la prueba libre, no en calidad baja).
 Fase 19: en la **escuela** (`?escuela=1…6`) valen X y Retroceso, pero no P.
 Fase 20: **C** abre / cierra la tabla de cargas (solo interfaz; se puede manejar con ella abierta).
+Fase 23: **J** lista de chequeo antes de izar (niveles 15–17).
 Fase 21: **V** tiene un modo más, **cámara del gancho** (orbital → seguimiento → cabina → gancho → libre del tándem).
 Botón **Opciones** (columna izquierda): recuadro del gancho, vibración del mando, ayudas, modo experto, tamaño del HUD.
 **Esc** también salta la repetición del fallo.
@@ -238,6 +239,11 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   `&t=`) y licencias de operador (exámenes en la escuela `?escuela=7…9`, niveles cerrados, "Todo desbloqueado" en
   Opciones). Pruebas en `levels/generate.test.ts`, `game/licenses.test.ts` y `school/lessons.test.ts` (el alumno de
   guion aprueba los tres exámenes).
+- **Fase 23** (gente en la obra; hecha sin esperar aprobación por pedido de Jesús): niveles 15 "Azotea a ciegas",
+  16 "Patio interior" (a ciegas: solo cabina y cámara del gancho) y 17 "Cesta de personal"; señalero con señales de
+  brazos y radio en texto (voz opcional en Opciones), trabajadores que caminan con su zona de exclusión, lista de
+  chequeo (J). Pruebas en `levels/safety.test.ts` y `levels/safety.world.test.ts` (un operador de guion que solo
+  obedece la radio termina los tres niveles sin faltas).
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -430,6 +436,14 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   (`Family`, `earned`, `loadLicenses` con la migración, `grant`, `craneOk`, `levelOpen`, `missingFor`; clave
   `gruas-licencias`), `EXAMS`/`lessonByN` y `Lesson.crane`/`license` en `school/lessons.ts`, `licenseMenu` en
   `schoolUi.ts`, `examUrl` en `levelUi.ts`, `Settings.desbloquear`, `Presenter.licensed`.
+- Fase 23: `levels/people.ts` (sin three.js: `SiteWorker`, `workerAt(w, t)` función del reloj del turno,
+  `overWorker`, `workerMargin`, `EXCL_R`/`EXCL_H`/`EXCL_T`), `levels/safety.ts` (`SAFETY_LEVELS`, en `ALL_LEVELS`
+  detrás del 14), `Level.workers`/`rigger`/`blind`/`checklist`, `LevelCrate.people`, `game/signals.ts` (`Signal`,
+  `signalFor` puro, `sessionSignal(ses)`, `SIG_TOL`), `render/people.ts` (`WorkersView`, `RiggerView` con `POSES`),
+  `ui/safetyUi.ts` (`RadioPanel` con `speechSynthesis`, `ChecklistPanel`), `ui/safetyView.ts` (`SafetyView`:
+  `Presenter.safety`), `LevelRules.people()`, `Run.excl`/`inExcl`/`exclT`/`skips`/`checked`/`lifted`/`bkT`,
+  `Session.expert`, `Cmd` `'checklist'` y acción `checklist` (J), `CameraRig.restrict`/`only`, `Settings.voz`,
+  `stars()` cuenta `excl` y `skips` como golpes, `workerGeo` exportado de `decorView.ts`. Textos en `t.rigger`.
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
   cut…, de la grúa que se maneja; `units`, todas) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
   dibuja cuadros; así se puede probar desde la consola).
@@ -963,6 +977,32 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - **Examen de torre**: zona de 9 × 9 m. Con 35 m de cable la carga queda girando en cono y casi no se amortigua
   (el guion de la prueba no consiguió calmarla en 5 min): con una zona de 5 m solo un experto lo aprobaría.
 
+- **Señalero (fase 23)**: solo interfaz (no se graba). Orden: si se lleva la carga apoyada fuera de la zona, sube;
+  si hay que pasar por encima de algo (cajas en la línea recta hacia el destino + 1,5 m; la caja sobre la que está
+  el destino, solo su altura de apoyo) y no basta el cable, sube la pluma (o saca pluma si ya está arriba); después
+  gira, después radio (saca pluma si no sobra altura y el LMI lo permite, si no baja la pluma; para acercar, sube la
+  pluma; en la torre, el carro), después baja y despacio al final. Guía la **punta** (donde quedará el gancho
+  quieto), no el gancho: guiando el gancho, su balanceo lo hacía corregir de un lado a otro sin fin. Antes de bajar
+  espera a que se calme (velocidad o distancia de la carga a la punta). Parada si hay alguien junto a la carga o en
+  los próximos 4 m del camino. Para enganchar pide 0,4 m de precisión; para dejar, 0,6. **Señales elegidas por el
+  juego** (la fase pedía pasarlas a Jesús antes de animarlas; se hizo sin esperar): sube, baja, despacio, gira
+  izquierda/derecha, sube/baja la pluma, saca/mete pluma, carro afuera/adentro, para, espera (hay gente), engancha,
+  suelta. Lista en `game/signals.ts`.
+- **Trabajadores (fase 23)**: solo en los niveles nuevos (los 14 no cambian de dificultad). Caminan por rutas fijas
+  (función del reloj del turno: deterministas). Carga en el aire a menos de 2,5 m + su radio de alguien: aviso,
+  alarma y cuenta como falta; más de 3 s seguidos, falla (como la línea eléctrica). Rutas apartadas de recogida y
+  destino (con una ruta que cruzaba, ni el guion ni un jugador podían evitarlo).
+- **Lista de chequeo (fase 23)**: niveles 15–17. Tres puntos automáticos (grúa apoyada, nadie a menos de 3 m de la
+  carga, viento < 9 m/s) y dos que marca el jugador (peso, eslinga). "Lista hecha" entra como acción del paso (se
+  graba); vale para el siguiente izaje. Despegar sin ella: falta (resta la estrella de golpes); en modo experto,
+  falla. Se pide otra después de soltar.
+- **Cesta (fase 23)**: con la cesta enganchada los mandos van en fino y además al 60 % (cable) y 40 % (giro, pluma,
+  telescopio); falla con más de 1 s fuera de: LMI 50 %, balanceo 5°, subida o bajada 0,6 m/s (la velocidad
+  horizontal no: el balanceo ya tiene su límite) o viento 9 m/s. Plataforma a 18 m (con 22 m y la AT 60 el
+  LMI quedaba justo en el 50 %). Límites del juego, no de una norma: revisar con Jesús.
+- **A ciegas**: `CameraRig.restrict(['cabina', 'gancho'])`. El plan de izaje da por montados lastre e Y-guy: los
+  niveles lo dicen en la ficha.
+
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
   grúas grandes (fases 4–6): cabeza cinemática, izado a velocidad plena, estiramiento máximo del cable.
@@ -1159,4 +1199,7 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - Fase 22: fijar los umbrales de la suavidad con partidas de Jesús (el cartel de nivel completado muestra la nota
   y las tres medidas). Revisar si la carga de la grúa torre con cable largo debería amortiguarse más (gira en cono).
   Jesús no ha probado el reto diario, los exámenes ni el bloqueo en la laptop.
+- Fase 23: Jesús no ha revisado la lista de señales ni sus posturas, ni los límites de la cesta. La voz depende de
+  las voces en español que tenga el sistema (sin comprobar en la laptop). Los trabajadores atraviesan las cargas
+  apoyadas (no tienen colisionador) y no esquivan a nadie.
 - Vite avisaría que `app.js` pasa de 500 kB (three.js y el juego, ~780 kB): `chunkSizeWarningLimit` = 1200.

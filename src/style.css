@@ -224,3 +224,12 @@ kbd { display: inline-block; min-width: 1.1em; text-align: center; font: 600 12p
 .lvl.daily { border-color: #f0bb27; }
 .lvl.locked { opacity: 0.55; }
 .lvl.locked b { color: #aab3bc; }
+/* Fase 23: radio del señalero y lista de chequeo */
+.radio { position: absolute; left: 50%; bottom: 56px; transform: translateX(-50%); display: flex; gap: 10px; align-items: baseline;
+  padding: 6px 14px; font-size: 1.15em; }
+.radio small { color: #aab3bc; }
+.radio.stop b { color: #ff6b5a; }
+.checks { list-style: none; padding: 0; margin: 8px 0 12px; display: flex; flex-direction: column; gap: 6px; }
+.checks li.ok { color: #7ee0ad; }
+.checks li.bad { color: #ff6b5a; }
+.checks label { display: flex; gap: 8px; align-items: center; cursor: pointer; }

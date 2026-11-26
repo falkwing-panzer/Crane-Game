@@ -73,7 +73,7 @@ export function helpGroups(f: HelpFlags, k: KeyMap = activeKeys()): HelpGroup[] 
   if (f.free) g.push({ title: h.free, keys: [[K('reset'), h.reset], [K('bypass'), h.bypass], [K('rewind'), h.rewind]] });
   else if (f.school) g.push({ title: h.school, keys: [[K('reset'), h.reset], [K('rewind'), h.rewind]] });
 
-  g.push({ title: h.game, keys: [[K('help'), h.help], [keyLabel('Escape'), h.esc], [K('chart'), h.chart], [K('mute'), h.mute]] });
+  g.push({ title: h.game, keys: [[K('help'), h.help], [keyLabel('Escape'), h.esc], [K('chart'), h.chart], [K('checklist'), h.checklist], [K('mute'), h.mute]] });
 
   const pad: [string, string][] = [[p.lstick, p.lstickText], [p.rstick, p.rstickText], ['LT / RT', p.triggers]];
   if (f.tele || f.tower) pad.push(['LB / RB', f.tower && !f.tele ? p.bumpersTrolley : p.bumpers]);
@@ -103,7 +103,7 @@ export const KEY_GROUPS: [keyof typeof t.keys.groups, Action[]][] = [
   ['drive', ['fw', 'bk', 'stl', 'str', 'outriggers']],
   ['crane', ['sll', 'slr', 'lu', 'ld', 'ti', 'to', 'hu', 'hd', 'ju', 'jd', 'sli', 'slo', 'fine', 'hook']],
   ['mount', ['ballast', 'yguy', 'mount']],
-  ['game', ['view', 'chart', 'switch', 'reset', 'bypass', 'rewind', 'mute', 'help']],
+  ['game', ['view', 'chart', 'checklist', 'switch', 'reset', 'bypass', 'rewind', 'mute', 'help']],
 ];
 
 /** HTML del editor: un botón con la tecla de cada acción */

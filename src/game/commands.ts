@@ -26,6 +26,11 @@ export function runCommand(ses: Session, cmd: Cmd) {
     say(ses.bypass ? m.bypassOn : m.bypassOff, 2.5);
     return;
   }
+  if (cmd === 'checklist') {
+    // fase 23: la lista de chequeo hecha (la confirma el panel): vale para el próximo izaje
+    if (ses.L?.checklist) { ses.run.checked = 1; say(m.checkDone, 2); }
+    return;
+  }
   if (!ses.live()) return;
   const { T, S, C, phys, pose, jibOk } = ses.act;
   switch (cmd) {

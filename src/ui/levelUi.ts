@@ -44,8 +44,10 @@ export function saveRecord(i: number, stars: number, time: number): boolean {
 }
 
 /** Estrellas (checkWin de la referencia): 3 − aterrizaje duro − (golpes + alarmas de línea) − pasarse del par */
-export function stars(L: Level, r: { t: number; hard: number; bumps: number; prox: number }) {
-  return Math.max(1, 3 - (r.hard > 0 ? 1 : 0) - (r.bumps + r.prox > 0 ? 1 : 0) - (r.t > L.par ? 1 : 0));
+export function stars(L: Level, r: { t: number; hard: number; bumps: number; prox: number; excl?: number; skips?: number }) {
+  // fase 23: pasar la carga encima de alguien y saltarse la lista de chequeo cuentan como los golpes
+  const faults = r.bumps + r.prox + (r.excl ?? 0) + (r.skips ?? 0);
+  return Math.max(1, 3 - (r.hard > 0 ? 1 : 0) - (faults > 0 ? 1 : 0) - (r.t > L.par ? 1 : 0));
 }
 
 /** mm:ss (fmt de la referencia) */
@@ -262,13 +264,13 @@ export class LevelUi {
   }
 
   /** Nivel completado (checkWin de la referencia) */
-  won(i: number, crane: string, res: { t: number; hard: number; bumps: number; prox: number; maxLmi: number } & Partial<LiftStats>, record: boolean,
+  won(i: number, crane: string, res: { t: number; hard: number; bumps: number; prox: number; maxLmi: number; excl?: number; skips?: number } & Partial<LiftStats>, record: boolean,
     smooth?: SmoothScore | null, smoothBest = false) {
     const L = this.lvl(i), n = stars(L, res), job = this.job, next = !job && i + 1 < LEVELS.length;
     this.show(`<div class="eyebrow">${job ? `${job.head} · ${crane}` : tl.won(i + 1, crane)}</div><h2 class="okh">${L.name}</h2>
       <div class="stars big">${starText(n)}</div>${record ? `<p class="rec">${tl.newRecord}</p>` : ''}
       <div class="stats"><span>${tl.time(fmt(L.par))}</span><b>${fmt(res.t)}</b><span>${tl.hard}</span><b>${res.hard}</b>
-      <span>${tl.bumps}</span><b>${res.bumps}</b><span>${tl.prox}</span><b>${res.prox}</b><span>${tl.maxLmi}</span><b>${Math.round(res.maxLmi * 100)} %</b></div>${smoothHtml(smooth, smoothBest)}${liftHtml(res, !!L.tandem)}
+      <span>${tl.bumps}</span><b>${res.bumps}</b><span>${tl.prox}</span><b>${res.prox}</b>${L.workers ? `<span>${t.rigger.excl}</span><b>${res.excl ?? 0}</b>` : ''}${L.checklist ? `<span>${t.rigger.skips}</span><b>${res.skips ?? 0}</b>` : ''}<span>${tl.maxLmi}</span><b>${Math.round(res.maxLmi * 100)} %</b></div>${smoothHtml(smooth, smoothBest)}${liftHtml(res, !!L.tandem)}
       <div class="row"><a class="btn" href="${homeUrl()}">${tl.menuBtn}</a>${job?.date ? `<button class="btn" id="l-share">${t.daily.share}</button>` : ''}<a class="btn${next ? '' : ' primary'}" href="${this.url(i)}">${tl.retry}</a>
       ${next ? `<a class="btn primary" id="l-next" href="${levelUrl(i + 2)}">${tl.next}</a>` : ''}</div>
       ${next || job ? '' : `<p>${tl.last}</p>`}`);

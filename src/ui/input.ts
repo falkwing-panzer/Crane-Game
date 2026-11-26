@@ -43,6 +43,8 @@ export class Input {
   onMute: () => void = () => {};
   /** C: tabla de cargas (fase 20; solo interfaz) */
   onChart: () => void = () => {};
+  /** Fase 23: lista de chequeo (J) */
+  onChecklist: () => void = () => {};
   /** H: ayuda de controles (fase 13) */
   onHelp: () => void = () => {};
   /** Esc: cerrar la ayuda (fase 13) */
@@ -59,7 +61,7 @@ export class Input {
     const tap: Record<Exclude<TapAction, 'help'>, () => void> = {
       hook: () => this.onHook(), outriggers: () => this.onOutriggers(), ballast: () => this.onBallast(), yguy: () => this.onYGuy(),
       mount: () => this.onMount(), view: () => this.onView(), switch: () => this.onSwitch(), reset: () => this.onReset(),
-      bypass: () => this.onBypass(), rewind: () => this.onRewind(), mute: () => this.onMute(), chart: () => this.onChart(),
+      bypass: () => this.onBypass(), rewind: () => this.onRewind(), mute: () => this.onMute(), chart: () => this.onChart(), checklist: () => this.onChecklist(),
     };
     addEventListener('keydown', (e) => {
       const code = normCode(e.code);

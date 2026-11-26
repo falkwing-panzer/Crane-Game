@@ -29,6 +29,11 @@ export function controlUnit(ses: Session, u: Unit, dt: number, inp: CraneInput, 
   const { T, S, C, phys } = u;
   const { bus, L, bypass } = ses;
   if (ses.tipped(u)) return;
+  // cesta de personal (fase 23): con personas colgando, todo a velocidad fina
+  // (y más despacio aún: en fino la punta de una pluma de 40 m sube a ~0,6 m/s y el límite de la cesta es 0,6)
+  if (phys.attached?.kind === 'basket') {
+    inp = { ...inp, fine: true, hoist: inp.hoist * 0.6, slew: inp.slew * 0.4, luff: inp.luff * 0.4, tele: inp.tele * 0.4 };
+  }
   const say = (text: string, s?: number) => bus.emit('say', { text, s, unit: u.i });
   const sayOnce = (text: string) => bus.emit('say', { text, once: true, unit: u.i });
   const att = phys.attached;

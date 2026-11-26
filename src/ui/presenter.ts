@@ -38,6 +38,7 @@ import { maxReachContour } from '../crane/loadChart';
 import type { HookAnchor } from '../render/camera';
 import { t } from '../i18n';
 import { AchievementToast } from './progressView';
+import { SafetyView } from './safetyView';
 
 const MODE_TEXT = t.hud.modes;
 const m = t.msg;
@@ -94,6 +95,8 @@ export class Presenter {
   private lastEnd: { title: string; text: string } | null = null;
   /** Aviso de logro conseguido (fase 22) */
   private toast: AchievementToast;
+  /** Fase 23: trabajadores, señalero y lista de chequeo */
+  safety!: SafetyView;
   private replayBar: HTMLElement;
   private size: number;
   private readonly off: (() => void)[] = [];
@@ -155,6 +158,11 @@ export class Presenter {
     hud.onCrane = (k) => go(levelUrl(0, k));
     this.chart = new ChartPanel(root);
     this.toast = new AchievementToast(root);
+    this.safety = new SafetyView(ctx.scene, root, ses);
+    this.safety.checklist && (this.safety.checklist.onToggle = (open) => input.block('chequeo', open));
+    ses.expert = settings.experto;
+    // a ciegas (fase 23): solo la cabina y la cámara del gancho
+    if (ses.L?.blind) this.cam.restrict(['cabina', 'gancho'], act.S, act.pose);
     // fase 21
     this.size = camSize(specs);
     this.pip = new HookPip(root, t.options.pipTitle);
@@ -311,6 +319,7 @@ export class Presenter {
     }
     this.pip.setOn(s.recuadro);
     this.hud.expert = s.experto;
+    this.ses.expert = s.experto;
     root.style.setProperty('--hud-scale', String(s.hud));
     root.querySelector('#other')?.classList.toggle('pip', s.recuadro);
   }
@@ -487,6 +496,7 @@ export class Presenter {
     const hp = phys.headWorld();
     hud.frame(dt, physMs, t2 - t1, ctx.renderer.info);
     this.drawSchool();
+    if (L) this.safety.update(this.settings.voz);
     if (L) {
       // flecha del viento en pantalla: dirección del nivel respecto de hacia dónde mira la cámara
       ctx.camera.getWorldDirection(_wd);
@@ -583,5 +593,6 @@ export class Presenter {
     this.aids.dispose();
     this.pip.dispose();
     this.toast.dispose();
+    this.safety.dispose();
   }
 }

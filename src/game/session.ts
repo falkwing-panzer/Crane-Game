@@ -73,10 +73,16 @@ export interface Run extends SmoothRun {
    */
   peakLabel: string; peakMass: number; peakR: number; peakCrane: string;
   maxR: number; maxRLabel: string; heavy: number; heavyLabel: string;
+  /**
+   * Fase 23: alarmas por pasar la carga encima de alguien, si está dentro y cuánto lleva; izajes sin la lista de
+   * chequeo, lista hecha para el próximo izaje (0/1), la carga colgaba en el paso anterior (0/1); tiempo de la cesta
+   * fuera de sus límites (s).
+   */
+  excl: number; inExcl: boolean; exclT: number; skips: number; checked: number; lifted: number; bkT: number;
 }
 
 export const newRun = (): Run => ({ t: 0, done: false, hard: 0, bumps: 0, prox: 0, maxLmi: 0, bumpCd: 0, lineD: Infinity, inProx: false, wind: 0,
-  peakLabel: '', peakMass: 0, peakR: 0, peakCrane: '', maxR: 0, maxRLabel: '', heavy: 0, heavyLabel: '', ...newSmooth() });
+  peakLabel: '', peakMass: 0, peakR: 0, peakCrane: '', maxR: 0, maxRLabel: '', heavy: 0, heavyLabel: '', excl: 0, inExcl: false, exclT: 0, skips: 0, checked: 0, lifted: 0, bkT: 0, ...newSmooth() });
 
 /** Qué se juega, sacado de la URL */
 export interface SessionDef {
@@ -186,6 +192,8 @@ export class Session {
   running: boolean;
   /** Puenteo del LMI (tecla P): sin cortes, para poder probar el vuelco */
   bypass = false;
+  /** Modo experto (fase 21; en la fase 23 saltarse la lista de chequeo falla): lo pone el Presenter al empezar */
+  expert = false;
   run: Run = newRun();
 
   /** makeModel: los modelos 3D (`loadModels` en el juego, `allModels` en las pruebas) */

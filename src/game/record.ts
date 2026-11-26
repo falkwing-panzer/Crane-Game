@@ -8,7 +8,7 @@ import type { DriveInput } from '../crane/drive';
  */
 
 /** Acciones de un toque que cambian la simulación (la cámara, el sonido o la ayuda no cuentan) */
-export type Cmd = 'hook' | 'reset' | 'outriggers' | 'ballast' | 'yguy' | 'mount' | 'bypass' | 'switch';
+export type Cmd = 'hook' | 'reset' | 'outriggers' | 'ballast' | 'yguy' | 'mount' | 'bypass' | 'switch' | 'checklist';
 
 /** Lo que entra en un paso: mandos de la grúa que se maneja, conducción y acciones */
 export interface StepInput {

@@ -9,6 +9,7 @@ import { saveRecord, stars } from '../ui/levelUi';
 import type { Failure } from './events';
 import { smoothScore } from './smooth';
 import { saveJobRecord, saveSmooth } from '../ui/progress';
+import { EXCL_T, overWorker } from '../levels/people';
 import type { Session } from './session';
 
 import { t } from '../i18n';
@@ -110,6 +111,7 @@ export class LevelRules {
     const { ses, L } = this, run = ses.run;
     if (run.done) return false;
     if (L.tandem && !this.tandem()) return false;
+    if (!this.people()) return false;
     if (!L.lines?.length || ses.tipped(ses.units[0])) return true;
     const { T, S, phys, pose } = ses.units[0];
     const hk = phys.hookBody.translation(), a = phys.attached;
@@ -133,6 +135,56 @@ export class LevelRules {
     if (run.lineD < 0) {
       this.finish({ title: tr.lineTitle, text: tr.line });
       return false;
+    }
+    return true;
+  }
+
+  /**
+   * Fase 23: trabajadores (zona de exclusión: aviso y alarma al entrar, fallo si la carga sigue encima de alguien más de
+   * EXCL_T s), lista de chequeo (cada izaje que despega sin ella resta; en el modo experto, falla) y cesta de personal
+   * (LMI ≤ 50 %, balanceo ≤ 5°, ≤ 0,6 m/s y viento ≤ 9 m/s; más de 1 s fuera, falla). Devuelve false si falló.
+   */
+  private people(): boolean {
+    const { ses, L } = this, run = ses.run, dt = FIXED_DT;
+    const u = ses.act, a = u.phys.attached;
+    if (L.workers?.length) {
+      let over = -1;
+      if (a) {
+        const c = a.body.translation();
+        over = overWorker({ x: c.x, z: c.z, r: Math.hypot(a.half.x, a.half.z), bottom: c.y - a.half.y }, L.workers, run.t);
+      }
+      if (over >= 0) {
+        if (!run.inExcl) {
+          run.inExcl = true;
+          run.excl++;
+          ses.bus.emit('prox', {});
+          ses.bus.emit('say', { text: tr.excl, s: 2.5 });
+        }
+        run.exclT += dt;
+        if (run.exclT > EXCL_T) { this.finish({ title: tr.exclTitle, text: tr.exclFail }); return false; }
+      } else { run.inExcl = false; run.exclT = 0; }
+    }
+    const hanging = ses.hanging(u);
+    if (L.checklist) {
+      if (hanging && !run.lifted) {
+        if (!run.checked) {
+          if (ses.expert) { this.finish({ title: tr.checkTitle, text: tr.checkFail }); return false; }
+          run.skips++;
+          ses.bus.emit('say', { text: tr.checkSkip, s: 3 });
+        }
+      } else if (!hanging && run.lifted && !a) run.checked = 0; // soltada: el próximo izaje pide otra lista
+    }
+    run.lifted = hanging ? 1 : 0;
+    if (a?.kind === 'basket' && hanging) {
+      // velocidad de subida o bajada (el balanceo tiene su propio límite)
+      const sp = Math.abs(a.body.linvel().y);
+      const why = u.dyn.lmi > 0.5 ? tr.bkLmi(Math.round(u.dyn.lmi * 100)) : u.sideAng > 5 * Math.PI / 180 ? tr.bkSwing(deg(u.sideAng))
+        : sp > 0.6 ? tr.bkSpeed(sp) : run.wind > 9 ? tr.bkWind(run.wind) : null;
+      if (why) {
+        if (run.bkT === 0) ses.bus.emit('say', { text: why, s: 2 });
+        run.bkT += dt;
+        if (run.bkT > 1) { this.finish({ title: tr.bkTitle, text: why }); return false; }
+      } else run.bkT = 0;
     }
     return true;
   }

@@ -41,13 +41,15 @@ export interface Settings {
   hud: number;
   /** Fase 22: todo desbloqueado (sin licencias) */
   desbloquear: boolean;
+  /** Fase 23: voz del señalero (síntesis de voz del navegador) */
+  voz: boolean;
 }
 
 /** Tamaños del HUD que se pueden elegir */
 export const HUD_SIZES = [0.8, 1, 1.25, 1.5];
 
 const STORE = 'gruas-ajustes';
-export const DEFAULTS: Settings = { calidad: 'alto', sonido: true, volumen: 0.6, recuadro: false, vibracion: true, ayudas: false, experto: false, hud: 1, desbloquear: false };
+export const DEFAULTS: Settings = { calidad: 'alto', sonido: true, volumen: 0.6, recuadro: false, vibracion: true, ayudas: false, experto: false, hud: 1, desbloquear: false, voz: false };
 
 const bool = (v: unknown, d: boolean) => (typeof v === 'boolean' ? v : d);
 
@@ -72,6 +74,7 @@ export function loadSettings(search = typeof location !== 'undefined' ? location
     experto: bool(saved.experto, DEFAULTS.experto),
     hud: typeof saved.hud === 'number' && HUD_SIZES.includes(saved.hud) ? saved.hud : DEFAULTS.hud,
     desbloquear: bool(saved.desbloquear, DEFAULTS.desbloquear),
+    voz: bool(saved.voz, DEFAULTS.voz),
   };
   const q = new URLSearchParams(search).get('calidad');
   if (isQuality(q)) s.calidad = q;

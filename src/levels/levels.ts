@@ -21,6 +21,8 @@ export interface LevelCrate {
   lugs?: { x: number; y: number; z: number }[];
   /** Se coloca de pie sobre su eje x (la columna del tándem va tumbada a lo largo de x) */
   stand?: 'x';
+  /** Cesta de personal (fase 23): operarios dentro; límites más estrictos mientras cuelga */
+  people?: number;
 }
 /** Una grúa del tándem: rumbo, giro y ángulo de pluma; se coloca con la cabeza sobre su orejeta */
 export interface TandemCrane { id: CraneId; h: number; slew: number; ang?: number; Lb?: number }
@@ -51,6 +53,14 @@ export interface Level {
   tandem?: { main: TandemCrane; tail: TandemCrane };
   /** Niveles que no son de la referencia (fase 22 en adelante): entorno del decorado y su semilla */
   env?: string; seed?: number;
+  /** Fase 23: trabajadores en el suelo (zona de exclusión bajo la carga) */
+  workers?: import('./people').SiteWorker[];
+  /** Señalero: dónde está (y = altura del suelo donde está parado, p. ej. una azotea) */
+  rigger?: { x: number; z: number; y: number };
+  /** A ciegas: solo las cámaras de la cabina y del gancho */
+  blind?: boolean;
+  /** Lista de chequeo antes de cada izaje (saltarla resta una estrella; en el modo experto, falla) */
+  checklist?: boolean;
 }
 
 const B = (x: number, z: number, w: number, d: number, h: number, kind: BoxKind = 'building', extra: { color?: string } = {}): LevelBox => ({ x, z, w, d, h, kind, ...extra });

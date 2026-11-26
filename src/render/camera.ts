@@ -146,8 +146,18 @@ export class CameraRig {
     this.freeCenter = center;
   }
 
+  /** Niveles a ciegas (fase 23): solo estos modos (empieza en el primero) */
+  only: CamMode[] | null = null;
+
+  /** Pone solo estos modos y pasa al primero */
+  restrict(modes: CamMode[], S: CraneState, pose: Pose) {
+    this.only = modes;
+    this.mode = modes[modes.length - 1];
+    this.cycle(S, pose);
+  }
+
   cycle(S: CraneState, pose: Pose): string {
-    const order = this.freeCenter ? ORDER : ORDER.filter((m) => m !== 'libre');
+    const order = this.only ?? (this.freeCenter ? ORDER : ORDER.filter((m) => m !== 'libre'));
     this.mode = order[(order.indexOf(this.mode) + 1) % order.length];
     const { controls, camera } = this.ctx;
     // la transición sale de lo que se ve ahora

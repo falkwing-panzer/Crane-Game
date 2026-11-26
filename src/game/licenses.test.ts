@@ -16,7 +16,8 @@ describe('licencias (fase 22)', () => {
   it('sin licencias todo cerrado; con la de ruedas, del 1 al 11 (el 7 por la RT 90); torre el 12, orugas el 13, tándem el 14', () => {
     const open = (lic: object) => ALL_LEVELS.map((L) => levelOpen(L, lic, false));
     expect(open({}).every((o) => !o)).toBe(true);
-    expect(open({ ruedas: 1 })).toEqual([...Array(11).fill(true), false, false, false]);
+    expect(open({ ruedas: 1 }).slice(0, 14)).toEqual([...Array(11).fill(true), false, false, false]);
+    expect(open({ ruedas: 1 }).slice(14).every((o) => o)).toBe(true); // fase 23: 15–17 con grúas de ruedas
     expect(open({ torre: 1 })[11]).toBe(true);
     expect(open({ orugas: 1 })[12]).toBe(true);
     expect(open({ orugas: 1 })[6]).toBe(true); // el 7 también con la LR 300

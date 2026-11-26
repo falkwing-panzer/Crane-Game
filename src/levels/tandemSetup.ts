@@ -2,6 +2,7 @@
 // las pruebas). Nada de esto está en la referencia (su nivel 13 tiene una columna de 1.200 t que la AT 500-8 no podría
 // llevar de cola): columna de 40 m, Ø 5 m y 400 t, límites y obra de 120 × 80 m aprobados por Jesús.
 
+import { SAFETY_LEVELS } from './safety';
 import type { CraneId, CraneSpec } from '../crane/cranes';
 import { tipPos, type CraneState } from '../crane/kinematics';
 import { syncConfig } from '../crane/assembly';
@@ -113,8 +114,8 @@ export const TANDEM_LEVEL: Level = {
   zones: [{ x: 92, z: 10, w: 9, d: 9, y: 2, label: 'CIMENTACIÓN' }],
 };
 
-/** Los 13 niveles de la referencia y el de tándem (fase 10) */
-export const ALL_LEVELS: Level[] = [...LEVELS, TANDEM_LEVEL];
+/** Los 13 niveles de la referencia, el de tándem (fase 10) y los de la fase 23 (15–17) */
+export const ALL_LEVELS: Level[] = [...LEVELS, TANDEM_LEVEL, ...SAFETY_LEVELS];
 
 /** La columna del nivel de tándem en el mundo: centro (sobre el transportador) y orejetas */
 export function tandemColumn(L: Level): { pos: V3; lugs: V3[] } {
