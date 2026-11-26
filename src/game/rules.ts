@@ -3,7 +3,7 @@ import { apply } from '../crane/pose';
 import { boomFoot, headPos } from '../crane/kinematics';
 import { allPlaced } from '../levels/setup';
 import { OVER_T, ROLL_MAX, SIDE_LOAD, SIDE_MAX, SIDE_T, SIDE_WARN, rollOf } from '../levels/tandemSetup';
-import { HARD_LANDING, LANDING_MIN, LINE_WARN, lineMargin, windArea, windForce } from '../levels/rules';
+import { HARD_LANDING, LANDING_MIN, LINE_WARN, WINDK, lineMargin, windArea, windForce } from '../levels/rules';
 import type { Level } from '../levels/levels';
 import { saveRecord, stars } from '../ui/levelUi';
 import type { Failure } from './events';
@@ -11,6 +11,7 @@ import { smoothScore } from './smooth';
 import { saveJobRecord, saveSmooth } from '../ui/progress';
 import { EXCL_T, overWorker } from '../levels/people';
 import { axleLoad } from '../crane/axles';
+import { active, capFactor, gustAt, gustWarnings, starting, LEAK_RATE, LEAK_T, STORM_ANG, STORM_GRACE } from '../levels/events';
 import type { Session } from './session';
 
 import { t } from '../i18n';
@@ -101,10 +102,18 @@ export class LevelRules {
     }
     run.bumpCd = Math.max(0, run.bumpCd - dt);
     if (L.trucks) this.trucks(dt);
+    if (L.events && !this.events(dt)) return false;
     // viento sobre la carga enganchada o el gancho (step de la referencia); tándem: lo pone una sola grúa
     for (const u of units) {
       const a = u.phys.attached;
-      const w = windForce(L, run.t, windArea(a ? { w: 2 * a.half.x, d: 2 * a.half.z, h: 2 * a.half.y } : null));
+      const area = windArea(a ? { w: 2 * a.half.x, d: 2 * a.half.z, h: 2 * a.half.y } : null);
+      const w = windForce(L, run.t, area);
+      // fase 24: ráfagas de los eventos del nivel (la fuerza crece con v²)
+      const g = gustAt(L.events, run.t);
+      if (g > 0) {
+        const v = w.v + g, f = WINDK * v * v * area, ang = (L.wind[2] * Math.PI) / 180;
+        Object.assign(w, { v, x: Math.cos(ang) * f, z: Math.sin(ang) * f });
+      }
       run.wind = w.v;
       u.phys.wind = { x: w.x, z: w.z };
     }
@@ -194,6 +203,35 @@ export class LevelRules {
         run.bkT += dt;
         if (run.bkT > 1) { this.finish({ title: tr.bkTitle, text: why }); return false; }
       } else run.bkT = 0;
+    }
+    return true;
+  }
+
+  /**
+   * Fase 24 B: avisos (ráfaga anunciada si el anemómetro funciona, inicio de cada evento), fuga hidráulica (la pluma de
+   * la grúa que se maneja baja sola; con la carga colgada más de LEAK_T s, falla), tormenta (pasado el margen, pluma
+   * por encima de 30° o carga colgada: falla) y cable dañado (`ses.capK`). Devuelve false si falló.
+   */
+  private events(dt: number): boolean {
+    const { ses, L } = this, run = ses.run, t = run.t, ev = L.events;
+    const say = (text: string, s = 4) => ses.bus.emit('say', { text, s });
+    if (!active(ev, 'anemo', t)) for (const g of gustWarnings(ev, t - dt, t)) say(tr.gustWarn(g.v + L.wind[0]));
+    for (const e of starting(ev, t - dt, t)) {
+      if (e.kind !== 'gust') say(tr.event[e.kind], 5);
+      if (e.kind === 'storm' || e.kind === 'leak') ses.bus.emit('prox', {});
+    }
+    ses.capK = capFactor(ev, t);
+    const leak = active(ev, 'leak', t), u = ses.act;
+    if (leak && !ses.tipped(u)) {
+      u.S.ang = Math.max(u.T.boom.angMin, u.S.ang - LEAK_RATE * dt);
+      if (t - leak.t > LEAK_T && ses.hanging(u)) { this.finish({ title: tr.leakTitle, text: tr.leakFail }); return false; }
+    }
+    const storm = active(ev, 'storm', t);
+    if (storm && t - storm.t > STORM_GRACE) {
+      for (const v of ses.units) {
+        if (ses.tipped(v)) continue;
+        if (v.S.ang > STORM_ANG || ses.hanging(v)) { this.finish({ title: tr.stormTitle, text: tr.stormFail }); return false; }
+      }
     }
     return true;
   }

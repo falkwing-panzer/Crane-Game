@@ -317,7 +317,7 @@ export class LevelUi {
     const f = (v: number) => v.toFixed(1).replace('.', ',');
     let extra = '';
     if (info && (L.wind[0] || L.wind[1])) {
-      extra += `<span class="${info.wind > 7 ? 'warn' : ''}">${tl.wind(f(info.wind))} ` +
+      extra += !Number.isFinite(info.wind) ? `<span class="bad">${tl.windNone}</span> ` : `<span class="${info.wind > 7 ? 'warn' : ''}">${tl.wind(f(info.wind))} ` +
         `<i class="arrow" style="transform:rotate(${info.arrow.toFixed(0)}deg)">↑</i></span>`;
     }
     if (info && L.lines?.length && Number.isFinite(info.lineD)) {

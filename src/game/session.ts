@@ -196,6 +196,8 @@ export class Session {
   bypass = false;
   /** Modo experto (fase 21; en la fase 23 saltarse la lista de chequeo falla): lo pone el Presenter al empezar */
   expert = false;
+  /** Fase 24: capacidad disponible (1, o 0,5 con el cable dañado): los cortes del LMI la tienen en cuenta */
+  capK = 1;
   run: Run = newRun();
 
   /** makeModel: los modelos 3D (`loadModels` en el juego, `allModels` en las pruebas) */

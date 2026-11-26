@@ -71,6 +71,8 @@ export interface Level {
   crew?: { id: CraneId; x: number; z: number; h: number; out: boolean }[];
   /** Zona donde tiene que estar todo el lastre (cargas 'ballast') para poder montarlo (B) */
   ballastZone?: string;
+  /** Fase 24 B: clima que cambia y averías durante el turno */
+  events?: import('./events').LevelEvent[];
 }
 
 const B = (x: number, z: number, w: number, d: number, h: number, kind: BoxKind = 'building', extra: { color?: string } = {}): LevelBox => ({ x, z, w, d, h, kind, ...extra });

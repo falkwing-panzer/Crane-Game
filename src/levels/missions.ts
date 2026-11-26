@@ -61,7 +61,7 @@ export const AUX_MISSION: Level = {
   cranes: ['at300'], rec: 'at300', why: {},
   start: { x: 50, z: 30, h: 0 },
   crew: [{ id: 'at300', x: 50, z: 30, h: 0, out: true }, { id: 'medium', x: 18, z: 30, h: Math.PI / 2, out: false }],
-  brief: 'El lastre de la AT 300-6 llegó en un camión. Con la AT 60 (Tab cambia de grúa) descárgalo y déjalo en la zona LASTRE, detrás de la AT 300-6. Con el lastre en su sitio, móntalo en la AT 300-6 ({ballast}) y lleva el generador a su bancada.',
+  brief: 'El lastre de la AT 300-6 llegó en un camión. Con la AT 60 ({switch} cambia de grúa) descárgalo y déjalo en la zona LASTRE, detrás de la AT 300-6. Con el lastre en su sitio, móntalo en la AT 300-6 ({ballast}) y lleva el generador a su bancada.',
   tips: ['En el juego llegan 4 placas de 9 t (aproximación: el lastre completo de la AT 300-6 son 86 t).',
     'Hasta que las 4 placas estén en la zona LASTRE, la AT 300-6 no puede montar el lastre.',
     'El generador pesa 30 t: sin lastre, la AT 300-6 no lo levanta a ese radio.'],
@@ -75,4 +75,41 @@ export const AUX_MISSION: Level = {
   env: 'industrial', seed: 20020,
 };
 
-export const MISSION_LEVELS: Level[] = [ROAD_MISSION, TRUCKS_MISSION, AUX_MISSION];
+/** 21. Clima que cambia: ráfagas anunciadas, niebla y una tormenta que obliga a bajar la pluma y esperar */
+export const STORM_MISSION: Level = {
+  name: 'Tormenta en el puerto', type: 'Clima', par: 540, wind: [3, 2, 60], ground: '#3a3c3f',
+  cranes: ['large', 'at300'], rec: 'large',
+  why: { small: 'Capacidad insuficiente', medium: 'Capacidad insuficiente a ese radio', rt: 'Capacidad insuficiente', crawler: 'No cabe en el muelle', lr: 'Demasiado grande para este muelle', sk: 'Capacidad insuficiente', xl: 'Demasiado grande para este muelle', at450: 'Demasiado grande para este muelle', at650: 'Demasiado grande para este muelle' },
+  start: { x: 32, z: 28, h: 0 },
+  brief: 'Hay que dejar dos contenedores en el muelle con el tiempo cambiando. El anemómetro avisa de las ráfagas 10 s antes; viene niebla y, más tarde, una tormenta: cuando empiece, tienes 20 s para dejar la carga y bajar la pluma por debajo de 30°, y esperar a que pase.',
+  tips: ['Con una ráfaga anunciada, no empieces un izaje: espera a que pase.', 'En la tormenta, nada colgando y la pluma abajo hasta que termine.',
+    'Estabilizadores ({outriggers}) antes de empezar.'],
+  boxes: [B(70, 8, 10, 6, 6, 'shelter'), B(74, 48, 8, 8, 4, 'container')],
+  crates: [CT(52, 14, 9, 'C-21'), CT(52, 42, 10, 'C-22', '#8f3d3d')],
+  zones: [{ x: 14, z: 14, w: 8, d: 5, y: 0, label: 'MUELLE 1' }, { x: 14, z: 42, w: 8, d: 5, y: 0, label: 'MUELLE 2' }],
+  events: [
+    { kind: 'gust', t: 45, v: 8, dur: 10 }, { kind: 'fog', t: 80, dur: 130, dist: 70 },
+    { kind: 'storm', t: 150, dur: 70 }, { kind: 'gust', t: 260, v: 9, dur: 12 },
+  ],
+  env: 'port', seed: 21021,
+};
+
+/** 22. Averías: el anemómetro deja de dar el viento, una fuga hidráulica baja la pluma y el cable se daña */
+export const FAULTS_MISSION: Level = {
+  name: 'Turno con averías', type: 'Averías', par: 600, wind: [2.5, 2, 300], ground: '#3a3c3f',
+  cranes: ['medium', 'large'], rec: 'medium',
+  why: { small: 'Alcance insuficiente', rt: 'No hace falta una todo terreno', crawler: 'No cabe en el patio', lr: 'Demasiado grande para este patio', sk: 'No hace falta una grúa torre', xl: 'Demasiado grande para este patio', at300: 'Demasiado grande para este patio', at450: 'Demasiado grande para este patio', at650: 'Demasiado grande para este patio' },
+  start: { x: 34, z: 28, h: 0 },
+  brief: 'Tres palés al almacén. Durante el turno algo va a fallar: lee los avisos y reacciona. Con una fuga hidráulica, baja la carga enseguida (la pluma cae sola); con el cable dañado, la grúa solo da la mitad de su capacidad.',
+  tips: ['Si el anemómetro falla, el viento no se ve: trabaja como si hubiera ráfagas.', 'La fuga dura un minuto: deja la carga apoyada antes de 45 s.',
+    'Con el cable dañado, el LMI corta a la mitad de carga.'],
+  boxes: [B(70, 28, 10, 20, 7), B(10, 8, 8, 6, 3, 'shelter')],
+  crates: [{ x: 46, z: 16, w: 1.6, d: 1.6, h: 1.4, m: 2.5, label: 'PALÉ 1', color: '#a98454', kind: 'crate' },
+    { x: 48, z: 40, w: 1.6, d: 1.6, h: 1.4, m: 2.5, label: 'PALÉ 2', color: '#a98454', kind: 'crate' },
+    { x: 26, z: 44, w: 1.6, d: 1.6, h: 1.4, m: 2, label: 'PALÉ 3', color: '#a98454', kind: 'crate' }],
+  zones: [{ x: 20, z: 14, w: 9, d: 6, y: 0, label: 'ALMACÉN' }],
+  events: [{ kind: 'anemo', t: 25, dur: 9999 }, { kind: 'leak', t: 110, dur: 60 }, { kind: 'cable', t: 220, dur: 9999 }],
+  env: 'industrial', seed: 22022,
+};
+
+export const MISSION_LEVELS: Level[] = [ROAD_MISSION, TRUCKS_MISSION, AUX_MISSION, STORM_MISSION, FAULTS_MISSION];

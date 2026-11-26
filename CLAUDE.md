@@ -248,6 +248,9 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   cable bajo, coches; después el izaje), 19 "Camiones con horario" (dos muelles, cuatro camiones, retraso) y 20
   "Montaje con grúa auxiliar" (AT 60 + AT 300-6 con Tab; el lastre se monta cuando la AT 60 lo ha descargado en su
   zona). Pruebas en `crane/axles.test.ts` y `levels/missions.test.ts` (el 18 jugado entero por un guion con la AT 60).
+- **Fase 24, parte B** (clima y averías): nivel 21 "Tormenta en el puerto" (ráfagas anunciadas, niebla, tormenta
+  con rayos) y 22 "Turno con averías" (anemómetro, fuga hidráulica, cable dañado). Solo en niveles nuevos. Pruebas en
+  `levels/events.test.ts`.
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -451,6 +454,9 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - Fase 24 A: `crane/axles.ts` (`axleLoad`), `levels/missions.ts` (`MISSION_LEVELS` en `ALL_LEVELS`, `BRIDGE_AXLE`),
   `Level.bridges`/`trucks`/`bays`/`crew`/`ballastZone`, `LevelRules.bridges()`/`trucks()`, `Run.tDone`/`late`,
   `ballastDelivered` en `game/commands.ts`, `Session.place` con `crew`, `crewCranes` en `levelUi.ts`.
+- Fase 24 B: `levels/events.ts` (sin three.js: `LevelEvent`, `gustAt`, `active`, `gustWarnings`, `starting`,
+  `capFactor`, constantes), `Level.events`, `LevelRules.events()`, `Session.capK` (los cortes de `controlUnit` usan
+  la masa / capK), `Presenter.weather` (niebla, lluvia y rayos), viento `NaN` = anemómetro averiado en el reloj.
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
   cut…, de la grúa que se maneja; `units`, todas) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
   dibuja cuadros; así se puede probar desde la consola).
@@ -1023,6 +1029,13 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - **Grúa auxiliar (fase 24)**: `Level.crew` (dos grúas que no son tándem, cada una en su sitio). Las placas de lastre
   son 4 × 9 t (aproximación: el lastre real de la AT 300-6 son 86 t). Montaje con grúa auxiliar de la LR 3000: no se
   hizo (la fase pedía preguntar qué datos faltan; harían falta piezas del montaje que la referencia no trae).
+
+- **Clima y averías (fase 24 B)**, valores del juego: todo es función del reloj del turno (sin estado; va en las
+  instantáneas sin hacer nada). Ráfaga = + v m/s con forma sin² durante dur s, anunciada 10 s antes si el anemómetro
+  funciona. Tormenta: 20 s de margen y después pluma < 30° y nada colgando (si no, "Rayo"); lluvia y rayos (solo
+  dibujo, `Math.random`). Niebla: solo dibujo. Fuga: la pluma de la grúa que se maneja baja 0,35°/s; con la carga
+  colgada más de 45 s desde que empieza, falla. Cable dañado: capacidad al 50 % en los cortes del LMI (`mEval /
+  capK`; `stability.ts` no se tocó), el HUD sigue mostrando el LMI normal (el aviso lo dice).
 
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las

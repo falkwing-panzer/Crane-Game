@@ -39,6 +39,7 @@ import type { HookAnchor } from '../render/camera';
 import { t } from '../i18n';
 import { AchievementToast } from './progressView';
 import { SafetyView } from './safetyView';
+import { active, type LevelEvent } from '../levels/events';
 
 const MODE_TEXT = t.hud.modes;
 const m = t.msg;
@@ -418,6 +419,29 @@ export class Presenter {
     if (fog) { fog.near *= on ? 0.5 : 2; fog.far *= on ? 0.6 : 1 / 0.6; }
   }
 
+  private fog0: { near: number; far: number } | null = null;
+  private stormOn = false;
+  private flash = 0;
+
+  /** Fase 24: niebla (más cerca mientras dura), tormenta (lluvia, cielo oscuro y rayos de vez en cuando) */
+  private weather(evs: LevelEvent[], t: number, dt: number) {
+    const fog = this.ctx.scene.fog as THREE.Fog | null;
+    if (fog) {
+      this.fog0 ??= { near: fog.near, far: fog.far };
+      const f = active(evs, 'fog', t);
+      const far = f && f.kind === 'fog' ? f.dist : this.fog0.far, near = f ? far * 0.2 : this.fog0.near;
+      fog.near += (near - fog.near) * Math.min(1, dt * 0.5);
+      fog.far += (far - fog.far) * Math.min(1, dt * 0.5);
+    }
+    const storm = !!active(evs, 'storm', t);
+    if (storm !== this.stormOn) { this.stormOn = storm; this.setRain(storm); }
+    if (storm && Math.random() < dt / 5) this.flash = 0.12;
+    if (this.flash > 0) {
+      this.flash -= dt;
+      this.ctx.sun.intensity = this.flash > 0 ? this.sunI * 3 : this.sunI * 0.55;
+    }
+  }
+
   /** Tab: la cámara y el título siguen a la grúa que se maneja */
   follow(u: Unit) {
     this.cam.follow(u.crane.cab, (s) => u.crane.eye(s));
@@ -503,7 +527,9 @@ export class Presenter {
       const fl = Math.hypot(_wd.x, _wd.z) || 1, fx = _wd.x / fl, fz = _wd.z / fl;
       const a = (L.wind[2] * Math.PI) / 180, dx = Math.cos(a), dz = Math.sin(a);
       const arrow = (Math.atan2(dx * -fz + dz * fx, dx * fx + dz * fz) * 180) / Math.PI;
-      this.lui.setClock(L, run.t, ses.def.nivel, { wind: run.wind, arrow, lineD: run.lineD });
+      // fase 24: con el anemómetro averiado no hay dato de viento
+      this.lui.setClock(L, run.t, ses.def.nivel, { wind: active(L.events, 'anemo', run.t) ? NaN : run.wind, arrow, lineD: run.lineD });
+      if (L.events) this.weather(L.events, run.t, dt);
       this.lui.showSave(!ses.def.job && ses.running && !run.done && !ses.tipped());
     } else this.lui.setClock(null, 0);
     hud.readout({

@@ -68,8 +68,9 @@ export function controlUnit(ses: Session, u: Unit, dt: number, inp: CraneInput, 
   const md = supportMode(S, T);
   // Como la referencia: los cortes usan el LMI estático; la carga cuenta solo si cuelga.
   // Tándem: la parte de la carga que lleva esta grúa (medida en Rapier).
-  const mEval = ses.hanging(u) ? mLoad : T.hookM;
-  const noHoistUp = !!att && lmiStatic(T, C, md, S.Lb, S.ang, S.slew, mLoad) >= 1;
+  // fase 24: con el cable dañado (capK = 0,5) los cortes llegan con la mitad de carga
+  const mEval = (ses.hanging(u) ? mLoad : T.hookM) / ses.capK;
+  const noHoistUp = !!att && lmiStatic(T, C, md, S.Lb, S.ang, S.slew, mLoad / ses.capK) >= 1;
   let hitMsg = '';
   u.cut = stepCrane(T, S, inp, dt, {
     // C.jibRel sigue al ángulo del plumín que se está probando (T/G)
