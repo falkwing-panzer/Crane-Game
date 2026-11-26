@@ -221,6 +221,7 @@ kbd { display: inline-block; min-width: 1.1em; text-align: center; font: 600 12p
   background: rgba(20, 24, 28, 0.92); border: 1px solid #f0bb27; border-radius: 8px; padding: 8px 16px;
   display: flex; flex-direction: column; align-items: center; gap: 2px; color: #f2f4f6; }
 .ach-toast small { color: #aab3bc; }
+.ach-toast[hidden] { display: none; }
 .lvl.daily { border-color: #f0bb27; }
 .lvl.locked { opacity: 0.55; }
 .lvl.locked b { color: #aab3bc; }
@@ -228,6 +229,7 @@ kbd { display: inline-block; min-width: 1.1em; text-align: center; font: 600 12p
 .radio { position: absolute; left: 50%; bottom: 56px; transform: translateX(-50%); display: flex; gap: 10px; align-items: baseline;
   padding: 6px 14px; font-size: 1.15em; }
 .radio small { color: #aab3bc; }
+.radio[hidden] { display: none; }
 .radio.stop b { color: #ff6b5a; }
 .checks { list-style: none; padding: 0; margin: 8px 0 12px; display: flex; flex-direction: column; gap: 6px; }
 .checks li.ok { color: #7ee0ad; }
