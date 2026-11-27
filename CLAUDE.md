@@ -270,6 +270,11 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   de noche con focos) y 26 "Enfriadora en la azotea" (avenida al atardecer, señalero). Pruebas en
   `levels/scenarios.test.ts` (plan de izaje con cada grúa permitida, sin choques, el 25 y el 26 terminados por un
   operador que solo obedece al señalero, victoria del 24, límite de viento).
+- **Fase 28** (editor y repeticiones, sin esperar aprobación): editor de obras en la planta (`?editor=1`, tarjeta en
+  el menú: cajas, camiones, cargas, zonas, focos, grúa; Comprobar con el plan de izaje, Probar, Copiar enlace,
+  Guardar/Abrir en el navegador), obra dentro del enlace (`?obra=código`, con récord aparte) y repeticiones completas
+  (`?repeticion=h#código`, botón en los carteles de nivel completado y fallido). Pruebas en `share/share.test.ts`
+  (la repetición da exactamente el mismo estado) y un caso nuevo en `e2e/juego.e2e.ts`.
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -493,6 +498,13 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   `terrainFor(D, libre, ridge)`, `render/daylight.ts` (`Daylight`: sol, hemisferio, cielo, niebla y focos;
   `MAX_LAMPS` = 3; `Presenter.daylight`, `CameraRig.setSunDir`), formas de carga en `rigging.ts` (`LOAD_GEO`:
   `wtower`, `hub`, `blade`), señalero hacia la zona libre más cercana, casos nuevos en `BENCH_CASES`.
+- Fase 28: `share/codec.ts` (`pack`/`unpack`, `cached`, `CODE_PARAMS`, `codeOf`, `prepareShared`: la app descomprime
+  antes de `sessionDef`, que es síncrona), `levels/custom.ts` (`sanitizeLevel`, `blankLevel`, `CUSTOM_MAX`, `ENVS`,
+  `EDITOR_CRANES`; `customJob` en `jobSources`, `Job.kind` 'obra'), `editor/doc.ts` (sin DOM: `newDoc`, `addAt`,
+  `hitTest`, `moveSel`, `removeSel`, `check`, `loadSaved`/`saveSite`, clave `gruas-editor`), `editor/editorUi.ts`
+  (`showEditor`), `share/replay.ts` (`ReplayData`, `replayOf`, `replayDef`, `shareLink`), `SessionDef.editor`/
+  `replay`, `Session.replaying`, `GameStep.cleanRun`/`onReplayEnd`, `App.startReplay`, `LevelUi.shareReplay`.
+  Textos en `t.editor` y `t.replays`.
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
   cut…, de la grúa que se maneja; `units`, todas) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
   dibuja cuadros; así se puede probar desde la consola).
@@ -1122,6 +1134,16 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   horizonte. Se restaura todo al desmontar la partida. Solo en los niveles 25 (noche) y 26 (atardecer).
 - **Señalero (fase 27)**: lleva la carga a la zona libre más cercana (una zona con otra carga dentro no cuenta).
 
+- **Obras en el enlace (fase 28)**: sin servidor. JSON → deflate (`CompressionStream`, sin dependencias) → base64
+  para URL; una obra del editor ocupa ~0,4–2 kB. Todo lo que llega por el enlace pasa por `sanitizeLevel` (campos
+  conocidos, números dentro de rango, listas con máximo, grúas de `EDITOR_CRANES`); sin cargas, zonas o grúa, nada.
+  Récord por obra (`obra-` + hash). El editor no trae líneas eléctricas, trabajadores ni terreno.
+- **Repeticiones (fase 28)**: son la grabación de la fase 15 desde el principio del turno + la URL de la partida;
+  al abrirla se monta la misma partida y se vuelve a simular. Van detrás de `#` (pueden ser largas y no se mandan al
+  servidor). Seguir una partida guardada o rebobinar deja el turno sin repetición (`cleanRun`). Mientras se ve no
+  cuenta nada: récords, carrera, estadísticas. Determinista en el mismo navegador; entre máquinas no está garantizado
+  (se avisa en el cartel).
+
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
   grúas grandes (fases 4–6): cabeza cinemática, izado a velocidad plena, estiramiento máximo del cable.
@@ -1265,6 +1287,8 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   (10,8 ms); los de antes, iguales (nivel 14 145, nivel 11 92, nivel 9 93, LR 3000 78, AT 650-8 95, SK 60 70). GPU con
   la gráfica a baja frecuencia (ver la nota de la fase 16). Bundle `app.js` 963 kB (251 kB comprimido).
 
+- Fase 28: sin cambios en draw calls (el editor es un lienzo 2D sobre el menú). Bundle `app.js` 963 → 986 kB (256 kB comprimido).
+
 ### Pendientes
 - Rapier: si una versión nueva da las fuerzas de las juntas, cambiar la tensión medida por la real (comparando antes).
 - Posible mejora de carga: el `.wasm` empieza a bajar cuando ya llegó `app.js` (no se puede precargar desde
@@ -1344,4 +1368,7 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - Fase 27: el aerogenerador no lo terminó ningún guion (solo la victoria con las piezas puestas a mano y el plan de
   izaje); los guiones del 25 y el 26 tardan bastante más que el par (el operador de guion obedece señales con
   movimientos finos). Jesús no ha revisado los pesos, el límite de viento ni la luz en la laptop.
+- Fase 28: el editor no tiene deshacer ni pilas de cargas; las repeticiones solo se probaron con niveles de una grúa (tándem y grúa
+  auxiliar, sin probar). Jesús no ha probado el editor ni las
+  repeticiones en la laptop.
 - Vite avisaría que `app.js` pasa de 500 kB (three.js y el juego, ~780 kB): `chunkSizeWarningLimit` = 1200.

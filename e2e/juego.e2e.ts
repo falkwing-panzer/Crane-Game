@@ -52,7 +52,7 @@ test('menú: los 26 trabajos, las dos pruebas libres, las 6 lecciones y los 3 ex
   await ready(page);
   await expect(page.locator(JOBS)).toHaveCount(28);
   await expect(page.locator('.levels.school a.lvl')).toHaveCount(9);
-  await expect(page.locator('a.lvl.daily')).toHaveCount(2);
+  await expect(page.locator('a.lvl.daily')).toHaveCount(3); // reto diario, carrera y editor (fase 28)
   await expect(page.locator('#lcard h2')).toHaveText('Elige un trabajo');
   expect(log).toEqual([]);
 });
@@ -127,19 +127,19 @@ test('teclas configurables: se cambian en la ayuda, se guardan y la grúa las ob
   await page.keyboard.press('KeyH');
   await page.locator('#help-edit').click();
   await page.locator('.kbtn[data-a="outriggers"]').click();
-  await page.keyboard.press('KeyU');
-  await expect(page.locator('.kbtn[data-a="outriggers"]')).toHaveText('U');
+  await page.keyboard.press('KeyI');
+  await expect(page.locator('.kbtn[data-a="outriggers"]')).toHaveText('I');
   await page.keyboard.press('Escape');
   await expect(page.locator('#help')).toBeHidden();
-  // O ya no hace nada; U despliega los estabilizadores
+  // O ya no hace nada; I despliega los estabilizadores
   await page.keyboard.press('KeyO');
   await expect(page.locator('#msg')).not.toContainText('Desplegando');
-  await page.keyboard.press('KeyU');
+  await page.keyboard.press('KeyI');
   await expect(page.locator('#msg')).toHaveText('Desplegando estabilizadores');
   // al recargar sigue igual
   await page.reload();
   await ready(page);
-  expect(await page.evaluate(() => localStorage.getItem('gruas-teclas'))).toBe('{"outriggers":"KeyU"}');
+  expect(await page.evaluate(() => localStorage.getItem('gruas-teclas'))).toBe('{"outriggers":"KeyI"}');
   expect(log).toEqual([]);
 });
 
@@ -267,5 +267,35 @@ test('escuela: la lección 2 se pasa con el teclado, se guarda y lleva a la sigu
   await expect(page).toHaveURL(/escuela=3/);
   await expect(page.locator('#s-start')).toBeVisible();
   expect(await page.evaluate(() => (window as unknown as { marca?: number }).marca)).toBe(1);
+  expect(log).toEqual([]);
+});
+
+test('editor (fase 28): poner una caja, probar la obra por su enlace; una repetición se reproduce', async ({ page }) => {
+  const log = watchConsole(page);
+  await open(page, 'editor=1');
+  await ready(page);
+  await expect(page.locator('#lcard .eyebrow').first()).toHaveText('Editor de obras');
+  await page.locator('[data-tool="box"]').click();
+  await page.locator('.ed-cv').click({ position: { x: 380, y: 80 } });
+  await expect(page.locator('.ed-props')).toContainText('Obstáculo');
+  await page.locator('#e-check').click();
+  await expect(page.locator('.ed-out')).toContainText('AT 60: llega con cada carga a una zona');
+  await page.locator('#e-play').click();
+  await expect(page).toHaveURL(/obra=/);
+  await expect(page.locator('#lcard h2')).toHaveText('Mi obra');
+  await page.locator('#l-start').click();
+  await expect(page.locator('#overlay')).toBeHidden();
+  // repetición: 4 s girando a la izquierda en el nivel 1, comprimida en la página como la comparte el juego
+  const link = await page.evaluate(async () => {
+    const data = { v: 1, s: '?nivel=1&grua=medium', head: 'Nivel 1 · AT 60', t: 4,
+      rec: [{ n: 240, crane: { slew: 1, luff: 0, tele: 0, hoist: 0, fine: false }, drive: { throttle: 0, steer: 0, fine: false }, cmds: [] }] };
+    const res = new Response(new Blob([JSON.stringify(data)]).stream().pipeThrough(new CompressionStream('deflate-raw')));
+    const b = new Uint8Array(await res.arrayBuffer());
+    const code = btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return `${location.pathname}?repeticion=h&calidad=bajo#${code}`;
+  });
+  await page.goto(link);
+  await expect(page.locator('.replay-note')).toBeVisible();
+  await expect(page.locator('#lcard h2')).toHaveText('Fin de la repetición', { timeout: 30_000 });
   expect(log).toEqual([]);
 });

@@ -74,8 +74,10 @@ export class LevelRules {
     // suavidad (fase 22): medalla aparte, en su propia clave; las estrellas y los récords no cambian
     const sm = smoothScore(run), job = ses.def.job;
     // trabajos con obra propia (reto diario, contratos): récord aparte; la suavidad se guarda solo en los niveles
-    const smoothBest = !job && !!sm && saveSmooth(ses.def.li, sm.score);
-    const record = job ? saveJobRecord(job.key, n, run.t) : saveRecord(ses.def.li, n, run.t);
+    // repetición (fase 28): se ve el resultado, pero no cuenta para nada
+    const keep = !ses.replaying;
+    const smoothBest = keep && !job && !!sm && saveSmooth(ses.def.li, sm.score);
+    const record = keep && (job ? saveJobRecord(job.key, n, run.t) : saveRecord(ses.def.li, n, run.t));
     ses.bus.emit('end', { fail: null, stars: n, record, smooth: sm, smoothBest });
   }
 

@@ -41,6 +41,7 @@ import { t } from '../i18n';
 import { AchievementToast } from './progressView';
 import { SafetyView } from './safetyView';
 import { settleContract, showCareer } from '../career/careerUi';
+import { showEditor } from '../editor/editorUi';
 import { active, type LevelEvent } from '../levels/events';
 
 const MODE_TEXT = t.hud.modes;
@@ -212,6 +213,7 @@ export class Presenter {
     lui.job = def.job;
     lui.unlockAll = settings.desbloquear;
     if (def.career) showCareer(lui, go);
+    else if (def.editor) showEditor(lui, go, def.editor);
     else if (def.showMenu) lui.menu();
     else if (L && !lui.open_(L)) {
       // fase 22: sin la licencia de la familia, el nivel está cerrado (se llega con la URL a mano)
@@ -325,7 +327,7 @@ export class Presenter {
   /** Fase 25: si es un contrato de la carrera, lo cobra (una vez) y devuelve las cuentas para el cartel */
   private contract(e: { fail: unknown; stars?: number; smooth?: { medal: 'oro' | 'plata' | 'bronce' | null } | null }) {
     const { ses } = this, job = ses.def.job, run = ses.run;
-    if (job?.kind !== 'contrato' || job.offer === undefined) return '';
+    if (job?.kind !== 'contrato' || job.offer === undefined || ses.replaying) return '';
     return settleContract(job.offer, ses.units[0].id, {
       ok: !e.fail, stars: e.stars ?? 0, medal: e.smooth?.medal ?? null, bumps: run.bumps, hard: run.hard, prox: run.prox,
       excl: run.excl, skips: run.skips, late: run.late, tipped: ses.units.some((u) => ses.tipped(u)),

@@ -66,6 +66,13 @@ export class GameStep {
   readonly rec = new Recording();
   /** Si no es null, las entradas salen de aquí (repetición, guion); al acabarse vuelve el jugador */
   source: InputSource | null = null;
+  /**
+   * Fase 28: la grabación empieza en el principio del turno (se puede compartir como repetición). Seguir una partida
+   * guardada o rebobinar la deja a medias; reiniciar vuelve a empezarla.
+   */
+  cleanRun = true;
+  /** Repetición: al acabarse las entradas grabadas se para el turno y se avisa */
+  onReplayEnd: (() => void) | null = null;
   readonly interp = new Interp();
   /** Los últimos 8 s de lo que se dibuja, para la repetición del fallo (fase 21) */
   readonly replay = new ReplayBuffer();
@@ -98,6 +105,13 @@ export class GameStep {
     const { ses } = this;
     if (!ses.running) { this.queue.length = 0; return; } // ficha, menú o cartel abiertos: todo quieto
     let inp = this.source?.next() ?? null;
+    if (!inp && ses.replaying) {
+      // fin de la repetición: no hay jugador que siga
+      ses.running = false;
+      this.source = null;
+      this.onReplayEnd?.();
+      return;
+    }
     if (!inp) {
       this.source = null;
       inp = { crane: this.controls.state(), drive: this.controls.drive(), cmds: this.queue.splice(0) };
@@ -183,6 +197,7 @@ export class GameStep {
     if (ses.sch && s.sch) ses.sch = { ...s.sch };
     this.steps = s.step;
     this.rec.truncate(s.step);
+    this.cleanRun = false;
     this.ring = this.ring.filter((r) => r.step <= s.step);
     this.queue.length = 0;
     this.source = null;
@@ -196,6 +211,7 @@ export class GameStep {
       const st = this.start;
       this.restore(st);
       this.rec.clear();
+      this.cleanRun = true;
       this.ring = [];
       this.start = null;
       ses.bus.emit('restart', {});
