@@ -22,7 +22,9 @@ export function bindCommands(ses: Session, game: GameStep, input: Input, view: P
 
   help.onToggle = (open) => input.pause(open);
   input.onHelp = () => help.toggle();
-  input.onEscape = () => help.toggle(false);
+  // Esc: cierra la ayuda y las opciones, y salta la repetición del fallo (fase 21)
+  input.onEscape = () => { help.toggle(false); if (view.opts.open) view.opts.toggle(false); view.skipReplay(); };
+  view.takeReplay = () => game.replay.take();
 
   input.onHook = push('hook');
   input.onReset = push('reset');
@@ -37,6 +39,12 @@ export function bindCommands(ses: Session, game: GameStep, input: Input, view: P
     saveSettings(settings);
     say(settings.sonido ? m.soundOn : m.soundOff, 1.5);
   };
+  // tabla de cargas (fase 20): solo interfaz, no es una entrada de la simulación
+  input.onChart = () => view.chart.toggle();
+  // lista de chequeo (fase 23): el panel la confirma y entra como acción del paso siguiente (queda en la grabación)
+  const ck = view.safety.checklist;
+  input.onChecklist = () => { if (ck) ck.toggle(); else view.hud.say(t.rigger.none, 2); };
+  if (ck) ck.onConfirm = () => game.push('checklist');
   input.onPad = (id) => say(m.pad(id.replace(/\s*\(.*$/, '')), 2.5);
   input.onView = () => {
     say(cam.cycle(ses.act.S, ses.act.pose), 1.5);

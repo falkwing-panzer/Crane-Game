@@ -15,7 +15,7 @@ const idle = { slew: 0, luff: 0, tele: 0, hoist: 0, fine: false, sl: 0, jib: 0 }
 
 describe('nivel de tándem: datos', () => {
   it('es el 14, después de los 13 de la referencia, que no cambian', () => {
-    expect(ALL_LEVELS.length).toBe(14);
+    expect(ALL_LEVELS.length).toBeGreaterThanOrEqual(14); // fase 23: detrás, los niveles nuevos
     expect(ALL_LEVELS.slice(0, 13)).toEqual(LEVELS);
     expect(ALL_LEVELS[13]).toBe(L);
   });

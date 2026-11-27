@@ -21,6 +21,8 @@ export interface LevelCrate {
   lugs?: { x: number; y: number; z: number }[];
   /** Se coloca de pie sobre su eje x (la columna del tándem va tumbada a lo largo de x) */
   stand?: 'x';
+  /** Cesta de personal (fase 23): operarios dentro; límites más estrictos mientras cuelga */
+  people?: number;
 }
 /** Una grúa del tándem: rumbo, giro y ángulo de pluma; se coloca con la cabeza sobre su orejeta */
 export interface TandemCrane { id: CraneId; h: number; slew: number; ang?: number; Lb?: number }
@@ -49,6 +51,28 @@ export interface Level {
   size?: [number, number];
   /** Izaje en tándem (fase 10): grúa principal (orejeta 0) y de cola (orejeta 1) de la primera carga */
   tandem?: { main: TandemCrane; tail: TandemCrane };
+  /** Niveles que no son de la referencia (fase 22 en adelante): entorno del decorado y su semilla */
+  env?: string; seed?: number;
+  /** Fase 23: trabajadores en el suelo (zona de exclusión bajo la carga) */
+  workers?: import('./people').SiteWorker[];
+  /** Señalero: dónde está (y = altura del suelo donde está parado, p. ej. una azotea) */
+  rigger?: { x: number; z: number; y: number };
+  /** A ciegas: solo las cámaras de la cabina y del gancho */
+  blind?: boolean;
+  /** Lista de chequeo antes de cada izaje (saltarla resta una estrella; en el modo experto, falla) */
+  checklist?: boolean;
+  /** Fase 24: puentes con límite por eje (t); pasar por encima con más carga por eje es fallo */
+  bridges?: { x: number; z: number; w: number; d: number; maxAxle: number }[];
+  /** Camiones con horario: llegan a su hora (s) a un muelle (si está libre) con una de las cargas */
+  trucks?: { at: number; bay: number; crate: number }[];
+  /** Muelles de descarga: centro y altura de la caja del camión */
+  bays?: { x: number; z: number; y: number }[];
+  /** Varias grúas que no son un tándem (grúa auxiliar): id, sitio y estabilizadores fuera */
+  crew?: { id: CraneId; x: number; z: number; h: number; out: boolean }[];
+  /** Zona donde tiene que estar todo el lastre (cargas 'ballast') para poder montarlo (B) */
+  ballastZone?: string;
+  /** Fase 24 B: clima que cambia y averías durante el turno */
+  events?: import('./events').LevelEvent[];
 }
 
 const B = (x: number, z: number, w: number, d: number, h: number, kind: BoxKind = 'building', extra: { color?: string } = {}): LevelBox => ({ x, z, w, d, h, kind, ...extra });

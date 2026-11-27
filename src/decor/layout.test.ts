@@ -21,7 +21,9 @@ const overlap = (a: Rect, b: Rect) => a.x0 < b.x1 && b.x0 < a.x1 && a.z0 < b.z1 
 
 describe('decorado (fase 17)', () => {
   it('un entorno por nivel y el medio lado de la prueba libre es el de la física', () => {
-    expect(LEVEL_ENV.length).toBe(ALL_LEVELS.length);
+    // los niveles de la fase 23 en adelante traen su entorno (Level.env)
+    expect(LEVEL_ENV.length).toBe(ALL_LEVELS.filter((L) => !L.env).length);
+    expect(ALL_LEVELS.every((L, i) => L.env || LEVEL_ENV[i])).toBe(true);
     expect(SITE_HALF_DECOR).toBe(SITE_HALF);
   });
 

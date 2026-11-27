@@ -36,15 +36,23 @@ async function ready(page: Page) {
   await page.evaluate(() => new Promise<void>((r) => { let n = 0; const f = () => (++n >= 10 ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); }));
 }
 
-/** Tarjetas de los niveles del menú (sin las de la escuela, fase 19) */
-const JOBS = '.levels:not(.school) a.lvl';
+/** Tarjetas de los niveles del menú (sin las de la escuela, fase 19, ni el reto diario y la carrera, fases 22 y 25) */
+const JOBS = '.levels:not(.school) a.lvl:not(.daily)';
 
-test('menú: los 14 trabajos, las dos pruebas libres y las 6 lecciones de la escuela', async ({ page }) => {
+// Fase 22: las licencias de operador cierran los niveles a un jugador nuevo; las pruebas los abren todos
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    if (!localStorage.getItem('gruas-licencias')) localStorage.setItem('gruas-licencias', '{"ruedas":1,"orugas":1,"torre":1,"tandem":1}');
+  });
+});
+
+test('menú: los 22 trabajos, las dos pruebas libres, las 6 lecciones y los 3 exámenes', async ({ page }) => {
   const log = watchConsole(page);
   await open(page);
   await ready(page);
-  await expect(page.locator(JOBS)).toHaveCount(16);
-  await expect(page.locator('.levels.school a.lvl')).toHaveCount(6);
+  await expect(page.locator(JOBS)).toHaveCount(24);
+  await expect(page.locator('.levels.school a.lvl')).toHaveCount(9);
+  await expect(page.locator('a.lvl.daily')).toHaveCount(2);
   await expect(page.locator('#lcard h2')).toHaveText('Elige un trabajo');
   expect(log).toEqual([]);
 });
@@ -59,7 +67,7 @@ test('ir a un nivel desde el menú no recarga la página', async ({ page }) => {
   await expect(page.locator('#l-start')).toBeVisible();
   expect(await page.evaluate(() => (window as unknown as { marca?: number }).marca)).toBe(1);
   await page.goBack();
-  await expect(page.locator(JOBS)).toHaveCount(16);
+  await expect(page.locator(JOBS)).toHaveCount(24);
   expect(log).toEqual([]);
 });
 
@@ -132,6 +140,60 @@ test('teclas configurables: se cambian en la ayuda, se guardan y la grúa las ob
   await page.reload();
   await ready(page);
   expect(await page.evaluate(() => localStorage.getItem('gruas-teclas'))).toBe('{"outriggers":"KeyU"}');
+  expect(log).toEqual([]);
+});
+
+test('tabla de cargas (C) y plan de izaje en la ficha', async ({ page }) => {
+  const log = watchConsole(page);
+  await open(page, 'nivel=1');
+  await ready(page);
+  // plan de izaje: la planta, una fila por carga y volver a la ficha
+  await page.locator('#l-plan').click();
+  await expect(page.locator('.plan-cv')).toBeVisible();
+  await expect(page.locator('.plan-table tr[data-k]')).toHaveCount(2);
+  const before = await page.locator('.plan-table').innerText();
+  // arrastrar el fantasma cambia los radios
+  const box = (await page.locator('.plan-cv').boundingBox())!;
+  const sx = box.width / 84, x0 = box.x + 10 * sx, y0 = box.y + 46 * sx;
+  await page.mouse.move(x0, y0);
+  await page.mouse.down();
+  await page.mouse.move(x0 + 20 * sx, y0 - 6 * sx, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.locator('.plan-table')).not.toHaveText(before);
+  await page.locator('#p-back').click();
+  await page.locator('#l-start').click();
+  await expect(page.locator('#overlay')).toBeHidden();
+  // tabla de cargas: C la abre con la casilla actual marcada y la vuelve a cerrar
+  await page.keyboard.press('KeyC');
+  await expect(page.locator('.chart')).toBeVisible();
+  await expect(page.locator('.chart td.now')).toHaveCount(1);
+  await expect(page.locator('.chart-now')).toContainText('capacidad');
+  await page.keyboard.press('KeyC');
+  await expect(page.locator('.chart')).toBeHidden();
+  expect(log).toEqual([]);
+});
+
+test('opciones del operador: recuadro del gancho, cámara del gancho con V y modo experto', async ({ page }) => {
+  const log = watchConsole(page);
+  await open(page, 'grua=medium');
+  await ready(page);
+  await page.locator('#opts-btn').click();
+  await page.locator('#opts input[data-k="recuadro"]').check();
+  await page.locator('#opts input[data-k="experto"]').check();
+  await page.locator('#opts-close').click();
+  await expect(page.locator('.pip-frame')).toBeVisible();
+  // modo experto: sin porcentaje del LMI ni capacidad
+  await expect(page.locator('#data')).toContainText('Modo experto');
+  await expect(page.locator('#data')).not.toContainText('Capacidad');
+  // V: orbital → seguimiento → cabina (sin panel de datos) → gancho
+  await page.keyboard.press('KeyV');
+  await page.keyboard.press('KeyV');
+  await expect(page.locator('#data')).toBeHidden();
+  await page.keyboard.press('KeyV');
+  await expect(page.locator('#msg')).toContainText('Cámara del gancho');
+  await expect(page.locator('#data')).toBeVisible();
+  // se guarda
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('gruas-ajustes') || '{}'))).toMatchObject({ recuadro: true, experto: true });
   expect(log).toEqual([]);
 });
 

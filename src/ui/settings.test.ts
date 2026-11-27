@@ -8,8 +8,14 @@ describe('ajustes (fase 11)', () => {
   });
 
   it('lee lo guardado y descarta valores raros', () => {
-    expect(loadSettings('', JSON.stringify({ calidad: 'bajo', sonido: false, volumen: 0.2 }))).toEqual({ calidad: 'bajo', sonido: false, volumen: 0.2 });
+    expect(loadSettings('', JSON.stringify({ calidad: 'bajo', sonido: false, volumen: 0.2 }))).toEqual({ ...DEFAULTS, calidad: 'bajo', sonido: false, volumen: 0.2 });
     expect(loadSettings('', JSON.stringify({ calidad: 'ultra', sonido: 'si', volumen: 3 }))).toEqual(DEFAULTS);
+  });
+
+  it('fase 21: opciones del operador', () => {
+    const s = loadSettings('', JSON.stringify({ recuadro: true, vibracion: false, ayudas: true, experto: true, hud: 1.25 }));
+    expect(s).toMatchObject({ recuadro: true, vibracion: false, ayudas: true, experto: true, hud: 1.25 });
+    expect(loadSettings('', JSON.stringify({ recuadro: 1, hud: 7 }))).toMatchObject({ recuadro: false, hud: 1 });
   });
 
   it('?calidad= manda sobre lo guardado', () => {

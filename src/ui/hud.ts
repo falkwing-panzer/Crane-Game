@@ -4,6 +4,18 @@ import { withKeys } from './keys';
 
 const h = t.hud;
 
+export type LmiCls = 'ok' | 'warn' | 'bad';
+/** Estado del LMI (fase 21: con forma y texto además del color, para quien no distingue los colores) */
+export function lmiCls(lmi: number): LmiCls {
+  return lmi >= 1 ? 'bad' : lmi >= 0.9 ? 'warn' : 'ok';
+}
+/** Fila del LMI: forma, porcentaje, barra y texto del estado */
+export function lmiRow(lmi: number) {
+  const c = lmiCls(lmi);
+  return `<div class="lmi ${c}"><span><em class="shape" aria-hidden="true">${h.lmiIcon[c]}</em>LMI</span><b>${Math.round(lmi * 100)} %</b>` +
+    `<i><u style="width:${Math.min(100, (lmi / 1.25) * 100).toFixed(1)}%"></u><s></s></i></div><div class="lmi-state ${c}">${h.lmiState[c]}</div>`;
+}
+
 // HUD en HTML simple: contador de rendimiento, lecturas de la grúa, mensajes y ayuda de teclas.
 
 export interface Readout {
@@ -114,11 +126,13 @@ export class Hud {
         <h2>${h.tippedTitle}</h2>
         <p id="card-text"></p>
         <button id="card-restart">${h.restart}</button>
+        <button id="card-replay" class="ghost" hidden>${t.replay.again}</button>
       </div>`;
     this.left = root.querySelector('#left')!;
     this.helpBtn = root.querySelector('#help-btn')!;
     this.card = root.querySelector('#card')!;
     root.querySelector('#card-restart')!.addEventListener('click', () => this.onRestart());
+    root.querySelector('#card-replay')!.addEventListener('click', (e) => { (e.currentTarget as HTMLElement).blur(); this.onReplay?.(); });
     const sel = root.querySelector('#crane') as HTMLSelectElement;
     sel.addEventListener('change', () => this.onCrane(sel.value));
     // las teclas del juego no deben mover el menú: se suelta el foco al elegir o al pulsar una tecla
@@ -159,19 +173,24 @@ export class Hud {
     this.otherEl.hidden = !o;
     if (!o) return;
     const f = (v: number, d = 1) => v.toFixed(d).replace('.', ',');
-    const cls = o.lmi >= 1 ? 'bad' : o.lmi >= 0.9 ? 'warn' : 'ok';
     this.otherEl.innerHTML = `<div class="title">${withKeys(h.otherTitle(o.name))}</div>` +
       (o.tipped ? `<div class="cut">${h.tippedBadge}</div>` :
-        `<div class="lmi ${cls}"><span>LMI</span><b>${Math.round(o.lmi * 100)} %</b>` +
-        `<i><u style="width:${Math.min(100, (o.lmi / 1.25) * 100).toFixed(1)}%"></u><s></s></i></div>` +
+        (this.expert ? '' : lmiRow(o.lmi)) +
         (o.tiltDeg > 0.05 ? `<div class="bad">${h.lifting(f(o.tiltDeg))}</div>` : '') +
         `${h.tension} <b>${f(o.tension)} t</b>` + (o.share !== null ? ` · ${h.carries} <b>${f(o.share)} t</b>` : '') +
         (o.sideDeg != null ? `<br>${h.sideAngle(f(o.sideDeg), o.sideDeg > 6 ? 'bad' : o.sideDeg > 4 ? 'warn' : '')}` : ''));
   }
 
-  /** Cartel de vuelco (null = ocultar) */
-  showTipped(text: string | null) {
+  private onReplay: (() => void) | null = null;
+  /** Texto del cartel de vuelco que se muestra (null si no está) */
+  tippedText: string | null = null;
+
+  /** Cartel de vuelco (null = ocultar); onReplay: botón "Ver la repetición" (fase 21) */
+  showTipped(text: string | null, onReplay?: () => void) {
     this.card.hidden = text === null;
+    this.tippedText = text;
+    if (onReplay !== undefined || text === null) this.onReplay = onReplay ?? null;
+    (this.card.querySelector('#card-replay') as HTMLElement).hidden = !this.onReplay;
     if (text !== null) {
       this.card.querySelector('#card-text')!.textContent = withKeys(text);
       (this.card.querySelector('#card-restart') as HTMLButtonElement).focus();
@@ -189,6 +208,15 @@ export class Hud {
   sayOnce(text: string, seconds = 1.9) {
     if (this.msg.textContent === withKeys(text) && this.msgT > 0.5) return;
     this.say(text, seconds);
+  }
+
+  /** Modo experto (fase 21): sin porcentaje del LMI ni capacidad, solo las alarmas */
+  expert = false;
+
+  /** Vista de cabina (fase 21): el panel de datos se oculta (los datos van en la pantalla de la cabina) */
+  setCabin(on: boolean) {
+    this.data.hidden = on;
+    this.otherEl.classList.toggle('cabin', on);
   }
 
   /** Escala de resolución de la calidad adaptativa (fase 15; 1 = la de la calidad elegida) */
@@ -216,7 +244,7 @@ export class Hud {
 
   readout(r: Readout) {
     const f = (v: number, d = 1) => v.toFixed(d).replace('.', ',');
-    const lmiCls = r.lmi >= 1 ? 'bad' : r.lmi >= 0.9 ? 'warn' : 'ok';
+    const ex = this.expert;
     this.data.innerHTML =
       `<div class="title">${this.title}${r.fine ? ` · <span class="warn">${h.fine}</span>` : ''}</div>` +
       (r.tower ? h.trolley(f(r.Lb), f(r.angDeg)) : h.boom(f(r.Lb), f(r.angDeg))) + '<br>' +
@@ -225,15 +253,15 @@ export class Hud {
       h.hook(r.load) + '<br>' +
       h.speed(f(Math.abs(r.speed) * 3.6), r.speed < -0.05) +
       (r.steerDeg === null ? '' : h.steer(f(r.steerDeg, 0))) +
-      `<div class="lmi ${lmiCls}"><span>LMI</span><b>${Math.round(r.lmi * 100)} %</b>` +
-      `<i><u style="width:${Math.min(100, (r.lmi / 1.25) * 100).toFixed(1)}%"></u><s></s></i></div>` +
+      (ex ? `<div class="expert">${h.expert}</div>` : lmiRow(r.lmi)) +
       (r.bypass && !r.tipped ? `<div class="cut">${withKeys(h.bypass)}</div>` : '') +
       (r.tipped ? `<div class="cut">${h.tippedBadge}</div>`
         : r.cut ? `<div class="cut">${h.cut}</div>`
+        : ex ? ''
         : r.lmi >= 1 ? `<div class="bad">${h.over}</div>`
         : r.lmi >= 0.9 ? `<div class="warn">${h.near}</div>` : '') +
       (!r.tipped && r.tiltDeg > 0.05 ? `<div class="bad">${h.craneLifting(f(r.tiltDeg))}</div>` : '') +
-      `${h.capacity} <b class="${r.mHook > r.rated ? 'bad' : ''}">${f(r.mHook)} / ${f(r.rated)} t</b><br>` +
+      (ex ? '' : `${h.capacity} <b class="${r.mHook > r.rated ? 'bad' : ''}">${f(r.mHook)} / ${f(r.rated)} t</b><br>`) +
       `${h.tension} <b>${f(r.tension, 2)} t</b><br>` +
       (r.side ? h.sideAngleMax(f(r.side.deg), r.side.deg > r.side.max ? 'bad' : r.side.deg > (r.side.max * 2) / 3 ? 'warn' : '', r.side.max) + '<br>' : '') +
       assemblyLine(r) +

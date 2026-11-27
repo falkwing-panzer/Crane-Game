@@ -321,7 +321,7 @@ function clothMaterial(uTime: { value: number }, uWind: { value: number }) {
 }
 
 /** Trabajador: botas, pantalón, chaleco reflectante, cabeza y casco (frente hacia +x) */
-function workerGeo() {
+export function workerGeo() {
   const k = new Kit();
   k.solid = false;
   for (const z of [-0.13, 0.13]) k.box(DC.dark, -0.1, 0.12, 0, 0.85, z - 0.08, z + 0.08);

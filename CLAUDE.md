@@ -70,6 +70,11 @@ Fase 14: las teclas se cambian en la ayuda (**Cambiar teclas**); esta tabla es l
 Fase 15: **Retroceso** rebobina 10 s (solo en la prueba libre); botón **Guardar** junto al reloj de un nivel.
 Fase 16: casilla **Lluvia** en el HUD (solo en la prueba libre, no en calidad baja).
 Fase 19: en la **escuela** (`?escuela=1…6`) valen X y Retroceso, pero no P.
+Fase 20: **C** abre / cierra la tabla de cargas (solo interfaz; se puede manejar con ella abierta).
+Fase 23: **J** lista de chequeo antes de izar (niveles 15–17).
+Fase 21: **V** tiene un modo más, **cámara del gancho** (orbital → seguimiento → cabina → gancho → libre del tándem).
+Botón **Opciones** (columna izquierda): recuadro del gancho, vibración del mando, ayudas, modo experto, tamaño del HUD.
+**Esc** también salta la repetición del fallo.
 
 ## Estado y decisiones
 Se trabaja por fases (ver `FASES.md`), con `/clear` entre fases. **Al cerrar cada fase, actualizar esta sección**
@@ -210,6 +215,48 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   hecha; presentación, panel con el paso, sus teclas y la línea de abajo resaltada; avanza solo; rebobinar; cartel
   de lección superada con la siguiente (al final, el nivel 1). Pruebas en `school/lessons.test.ts` (un alumno de
   guion termina las 6 en la simulación de verdad) y un caso nuevo en `e2e/juego.e2e.ts` (33).
+
+- **Fase 20** (tabla de cargas y plan de izaje): tabla de cargas con C (ratedCap por radio y largo de pluma, 360° o
+  giro actual, casilla actual marcada, en rojo lo que no aguantaría con lo que lleva el gancho); botón "Plan de izaje"
+  en la ficha con la grúa fantasma en la planta (verde, ámbar, rojo por carga y contorno del radio útil); resumen del
+  izaje más exigente en los carteles de nivel completado y fallido. Pruebas en `crane/loadChart.test.ts`,
+  `levels/liftPlan.test.ts` (también contra los choques de Rapier), `game/trackLift.test.ts` y un caso nuevo en
+  `e2e/juego.e2e.ts` (34).
+
+- **Fase 21** (vista y tacto del operador, hecha de una tanda por pedido de Jesús, sin plan previo): cámara del
+  gancho como modo de V y como recuadro; pantalla del LMI en la cabina (el panel de datos se oculta en esa vista);
+  vibración del mando; ayudas (plomada, marca de la carga, radio actual y radio máximo con la carga colgada); modo
+  experto; repetición del fallo a cámara lenta; estado del LMI con forma y texto; tamaño del HUD. Pruebas en
+  `render/hookCam.test.ts`, `game/replay.test.ts`, `crane/loadChart.test.ts` (radio máximo), `ui/settings.test.ts` y
+  un caso nuevo en `e2e/juego.e2e.ts` (35).
+
+- **Fase 22, parte A** (plan aprobado por Jesús en 3 partes: A = suavidad, estadísticas y logros; B = reto diario;
+  C = licencias): nota de suavidad por turno con medalla aparte (oro, plata, bronce) en el cartel de nivel completado
+  y en el menú; estadísticas y 27 logros guardados, con aviso al conseguirlos y pantalla "Estadísticas y logros" desde
+  el menú. Pruebas en `game/progress.test.ts` y `school/lessons.test.ts` (lección 4: un izaje real contado).
+- **Fase 22, partes B y C** (Jesús pidió hacer hasta la fase 25 sin esperar aprobaciones; se siguió el plan con lo
+  recomendado): reto diario (`?reto=AAAA-MM-DD`, obra generada con la fecha, récord aparte, enlace con el tiempo
+  `&t=`) y licencias de operador (exámenes en la escuela `?escuela=7…9`, niveles cerrados, "Todo desbloqueado" en
+  Opciones). Pruebas en `levels/generate.test.ts`, `game/licenses.test.ts` y `school/lessons.test.ts` (el alumno de
+  guion aprueba los tres exámenes).
+- **Fase 23** (gente en la obra; hecha sin esperar aprobación por pedido de Jesús): niveles 15 "Azotea a ciegas",
+  16 "Patio interior" (a ciegas: solo cabina y cámara del gancho) y 17 "Cesta de personal"; señalero con señales de
+  brazos y radio en texto (voz opcional en Opciones), trabajadores que caminan con su zona de exclusión, lista de
+  chequeo (J). Pruebas en `levels/safety.test.ts` y `levels/safety.world.test.ts` (un operador de guion que solo
+  obedece la radio termina los tres niveles sin faltas).
+- **Fase 24, parte A** (misiones): nivel 18 "De la base a la obra" (conducir plegada: puente de 12 t por eje, río,
+  cable bajo, coches; después el izaje), 19 "Camiones con horario" (dos muelles, cuatro camiones, retraso) y 20
+  "Montaje con grúa auxiliar" (AT 60 + AT 300-6 con Tab; el lastre se monta cuando la AT 60 lo ha descargado en su
+  zona). Pruebas en `crane/axles.test.ts` y `levels/missions.test.ts` (el 18 jugado entero por un guion con la AT 60).
+- **Fase 24, parte B** (clima y averías): nivel 21 "Tormenta en el puerto" (ráfagas anunciadas, niebla, tormenta
+  con rayos) y 22 "Turno con averías" (anemómetro, fuga hidráulica, cable dañado). Solo en niveles nuevos. Pruebas en
+  `levels/events.test.ts`.
+- **Fase 25** (modo carrera; la fase pedía enseñar antes el equilibrio de dinero: se hizo sin esperar, está abajo en
+  Decisiones para revisarlo): `?carrera=1` (caja, día, contratos, flota, compra, venta, mantenimiento, exportar e
+  importar a un archivo, carrera nueva), contratos `?contrato=k` (niveles fijos u obras generadas) que se juegan como
+  un nivel y se cobran al terminar. Pruebas en `career/career.test.ts` (30 minutos de contratos simulados; ofertas
+  siempre posibles 15 días). Playwright: las pruebas abren todas las licencias (`beforeEach`) y cuentan las tarjetas
+  nuevas del menú.
 
 ### Mapa del código
 - `src/crane/cranes.ts`: `CRANES` (las 11 grúas; el literal se copió tal cual de la referencia y una prueba lo compara),
@@ -366,6 +413,61 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   `SessionDef.school`, `Physics.footprint`, `ui/schoolUi.ts` (`loadSchool`/`markSchool`, clave `gruas-escuela`,
   `schoolUrl`, `schoolMenu`, `SchoolPanel`, `introHtml`, `passedHtml`), `render/ringsView.ts` (aros y bordes de
   las zonas), `Hud.setKeys(resaltadas)`, `HelpFlags.school`, `LevelUi.show`/`card` públicos, textos en `t.school`.
+- Fase 20: `crane/loadChart.ts` (sin three.js ni DOM: `loadChart(T, C, md, slew | null, maxLb)` → filas = radio,
+  columnas = largo, o ángulo en la SK 60; `angleFor` = inversa de `reach`, con plumín por bisección; `capAt`,
+  `SLEW_SAMPLES`, `cellPose`, `chartMark`, `niceSteps`/`roundSteps`), `ui/chartPanel.ts` (`ChartPanel`:
+  `Presenter.chart`, `update` cada cuadro, recalcula solo si cambia la configuración, como mucho cada 0,4 s;
+  `capText`), `levels/liftPlan.ts` (sin three.js ni Rapier: `Ghost`, `toCrane`/`toWorld`, `planConfigs`, `bestLift`,
+  `liftPlan`, `grade`, `PLAN_MARGIN` = 0,8, `RIG_H` = 3 m, `siteProblem`, `usefulRadius`/`usefulContour`,
+  `crateNeedH`), `ui/planView.ts` (`PlanView`: lienzo 2D, arrastrar, rueda, tabla), `LevelUi.plan` (los fantasmas
+  se recuerdan por nivel y grúa mientras dura la visita), `liftHtml` y `LiftStats` en `levelUi.ts`, `trackLift` en
+  `control.ts`; `Run` con `peakLabel`/`peakMass`/`peakR`/`peakCrane`/`maxR`/`maxRLabel`/`heavy`/`heavyLabel`.
+  Acción `chart` en `keys.ts` (`Input.onChart`), textos en `t.chart`, `t.plan` y `t.levels`.
+- Fase 21: `CamMode` `'gancho'`, `hookCamPose`/`HookAnchor`/`HOOK_CAM_DROP` en `render/camera.ts`
+  (`CameraRig.update(…, hook)`), `render/hookPip.ts` (`HookPip`: textura de `PIP_W` × `PIP_H` redibujada uno de cada
+  `EVERY` cuadros y copiada a la esquina), `render/cabScreen.ts` (`CabScreen`, `cabLines`, capa `CAB_LAYER` = 3 que
+  solo ve la cámara principal), `render/aids.ts` (`Aids`: 4 líneas), `maxReach`/`maxReachContour` en
+  `crane/loadChart.ts`, `ui/rumble.ts` (`Rumble`: qué vibración toca, sin DOM; `Input.rumble` la manda),
+  `ui/options.ts` (`OptionsPanel`; `Input.block('opciones')` mientras está abierto), `game/replay.ts`
+  (`ReplayBuffer` en `GameStep.replay`, `Replay`; `readInto` y `mixFrame` exportados de `interp.ts`),
+  `Presenter.takeReplay` (lo pone `bindCommands`), `startReplay`/`skipReplay`/`replaying`, `Hud.expert`/`setCabin`/
+  `tippedText`/`showTipped(texto, onReplay)`, `lmiRow`/`lmiCls` en `hud.ts`, `LevelUi.failed(…, onReplay)`.
+  `Settings`: `recuadro`, `vibracion`, `ayudas`, `experto`, `hud` (`HUD_SIZES`); `--hud-scale` en la raíz de la
+  partida (CSS `zoom` en `.panel` y `.msg`). Textos en `t.options`, `t.cab`, `t.replay`, `t.camera.gancho`,
+  `t.hud.lmiState`/`lmiIcon`.
+- Fase 22: `game/smooth.ts` (sin three.js ni Rapier: `SmoothRun` = campos `sm*` planos en `Run`, `smoothStep`
+  desde `afterUnit` con la carga colgada de la grúa que se maneja, `smoothRest`, `smoothScore`, `SMOOTH` con los
+  umbrales, `medalFor`), `game/stats.ts` (`StatsTracker` en `GameStep.stats`: cuenta por el bus y por paso; `flush`),
+  `game/achievements.ts` (`ACHIEVEMENTS`, `AchEvent`, `newAchievements`, `familyOf`), `ui/progress.ts`
+  (almacenamiento: `gruas-estadisticas`, `gruas-logros`, `gruas-suavidad`; `hasStorage`), `ui/progressView.ts`
+  (`smoothHtml`, `medalHtml`, `progressHtml`, `AchievementToast`). Eventos nuevos: `achievement`; `end` lleva `smooth`
+  y `smoothBest`. `LevelUi.progress()`, `won(…, smooth, smoothBest)`. Textos en `t.progress`.
+- Fase 22 B/C: `levels/generate.ts` (`generateSite(semilla, opts)`, `doable`, `dailySite`, `hashSeed`, `todayUTC`,
+  `GEN_CRANES`), `Level.env`/`seed` (decorado de los niveles que no son de la referencia), `Job` en `SessionDef.job`
+  (`kind`, `L`, `key`, `head`, `url`, `rival`, `date`; `jobSources` para añadir más, la carrera lo usará),
+  `LevelUi.job`/`lvl`/`rec`/`url`, `loadJobRecords`/`saveJobRecord` (clave `gruas-reto`). `game/licenses.ts`
+  (`Family`, `earned`, `loadLicenses` con la migración, `grant`, `craneOk`, `levelOpen`, `missingFor`; clave
+  `gruas-licencias`), `EXAMS`/`lessonByN` y `Lesson.crane`/`license` en `school/lessons.ts`, `licenseMenu` en
+  `schoolUi.ts`, `examUrl` en `levelUi.ts`, `Settings.desbloquear`, `Presenter.licensed`.
+- Fase 23: `levels/people.ts` (sin three.js: `SiteWorker`, `workerAt(w, t)` función del reloj del turno,
+  `overWorker`, `workerMargin`, `EXCL_R`/`EXCL_H`/`EXCL_T`), `levels/safety.ts` (`SAFETY_LEVELS`, en `ALL_LEVELS`
+  detrás del 14), `Level.workers`/`rigger`/`blind`/`checklist`, `LevelCrate.people`, `game/signals.ts` (`Signal`,
+  `signalFor` puro, `sessionSignal(ses)`, `SIG_TOL`), `render/people.ts` (`WorkersView`, `RiggerView` con `POSES`),
+  `ui/safetyUi.ts` (`RadioPanel` con `speechSynthesis`, `ChecklistPanel`), `ui/safetyView.ts` (`SafetyView`:
+  `Presenter.safety`), `LevelRules.people()`, `Run.excl`/`inExcl`/`exclT`/`skips`/`checked`/`lifted`/`bkT`,
+  `Session.expert`, `Cmd` `'checklist'` y acción `checklist` (J), `CameraRig.restrict`/`only`, `Settings.voz`,
+  `stars()` cuenta `excl` y `skips` como golpes, `workerGeo` exportado de `decorView.ts`. Textos en `t.rigger`.
+- Fase 24 A: `crane/axles.ts` (`axleLoad`), `levels/missions.ts` (`MISSION_LEVELS` en `ALL_LEVELS`, `BRIDGE_AXLE`),
+  `Level.bridges`/`trucks`/`bays`/`crew`/`ballastZone`, `LevelRules.bridges()`/`trucks()`, `Run.tDone`/`late`,
+  `ballastDelivered` en `game/commands.ts`, `Session.place` con `crew`, `crewCranes` en `levelUi.ts`.
+- Fase 24 B: `levels/events.ts` (sin three.js: `LevelEvent`, `gustAt`, `active`, `gustWarnings`, `starting`,
+  `capFactor`, constantes), `Level.events`, `LevelRules.events()`, `Session.capK` (los cortes de `controlUnit` usan
+  la masa / capK), `Presenter.weather` (niebla, lluvia y rayos), viento `NaN` = anemómetro averiado en el reloj.
+- Fase 25: `career/career.ts` (sin DOM: `Career`, `Offer`, `newCareer`, `rentOf`/`priceOf`/`maintenanceOf`,
+  `payFor`, `offersFor`, `offerLevel` con `wearFaults`, `settle`/`finish`, `buy`/`sell`/`maintain`, `offerDoable`,
+  guardado `gruas-carrera`, `exportCareer`/`importCareer`), `career/job.ts` (`contractJob` en `jobSources`,
+  `careerLic`; lo importa `app.ts`), `career/careerUi.ts` (`showCareer`, `settleContract`, `settleHtml`),
+  `SessionDef.career`, `Job.offer`/`note`, `Presenter.contract`/`showContract`. Textos en `t.career`.
 - `src/ui/input.ts`, `hud.ts`: teclas, HUD y cartel de vuelco. En desarrollo, `window.__gruas` (S, C, phys, ctx, dyn, pose,
   cut…, de la grúa que se maneja; `units`, todas) y `__gruas.advance(s)`, que avanza la simulación sin `requestAnimationFrame` (el panel oculto del navegador no
   dibuja cuadros; así se puede probar desde la consola).
@@ -816,6 +918,148 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   suelo antes del aviso), caja de vidrio del nivel 6 (0,5 m/s) con viento de 4 m/s y ráfagas de 3. Las zonas llevan
   borde amarillo y postes (el relleno de los niveles casi no se ve de lejos).
 
+- **Tabla de cargas (fase 20)**: cada casilla es `ratedCap` de la referencia en ese punto (incluye el gancho, como el
+  HUD). Por defecto **360°** (decidido con Jesús): la peor de 19 giros de 0 a 180° (el apoyo es simétrico; una prueba
+  comprueba que entre muestras no baja más de un 1 %); la casilla "giro actual" usa el giro redondeado a 2°. Con el
+  modo de apoyo de ese momento (en marcha da la tabla de `move`). El largo que no se puede telescopar ahora (35 m sin
+  Y-guy) sale vacío. SK 60: columnas = ángulo de la pluma y el carro da el radio. Calcularla cuesta hasta ~50 ms
+  (por eso solo al cambiar la configuración). La capacidad de "Ahora" es la del HUD (giro actual), no la casilla.
+- **Plan de izaje (fase 20)**, aproximación del juego (la referencia no lo tiene): para cada carga, el radio y el giro
+  desde el fantasma a su centro y al centro de su zona; la mejor capacidad entre los largos de pluma (cada metro) que
+  llegan a ese radio con la punta a lo alto de la carga + 3 m (`RIG_H`: eslinga, gancho y doble bloqueo) o más, con la
+  grúa montada (estabilizadores o orugas, lastre completo, Y-guy, superlift a r0 o rMax, plumín cada 15° solo en el
+  nivel 11). Verde = carga + gancho ≤ 80 % de esa capacidad (decidido con Jesús), ámbar ≤ 100 %, rojo si no. Destino:
+  la zona más fácil; con pilas (`stack`), la más difícil. Sitio: chasis y zapatas contra cajas, cargas, borde y
+  terreno blando con las medidas de `carrierBlocked`/`padsBlocked` (prueba contra Rapier en 5 niveles; solo difieren
+  justo en el borde). **No mira**: lo que hay en el camino (edificios, líneas), el viento, el contrapeso al girar ni la
+  bandeja del superlift. Contorno del radio útil: con la altura de la carga y sin plumín (con él tardaba ~0,5 s).
+  No hay marca del fantasma en 3D (era opcional; no se hizo).
+- **Resumen del turno (fase 20)**: en el momento del LMI máximo con carga colgada se guardan la carga, las t (en el
+  tándem, la parte de esa grúa), el radio y la grúa; además el radio máximo con carga y la carga más pesada. Campos
+  planos en `Run` (las instantáneas copian `{ ...run }`); al restaurar, `{ ...newRun(), ...s.run }` para partidas
+  guardadas antes.
+
+- **Cámara del gancho (fase 21)**: 0,9 m bajo el ancla del cable (cabeza, punta del plumín o carro de la SK 60),
+  mirando hacia abajo; arriba de la imagen = hacia donde apunta la pluma (`camera.up` horizontal; al cambiar de modo se
+  repone (0, 1, 0), que OrbitControls necesita). Sin rayo de choques ni altura mínima. **Recuadro**: se dibuja en una
+  textura de 284 × 212 (sin la escala de la pantalla) uno de cada 2 cuadros, sin rehacer el mapa de sombras, con
+  `far` 220 m, y en cada cuadro se copia a la esquina (1 llamada). En la vista del gancho no se dibuja (sería la misma
+  imagen). En el tándem, el panel de la otra grúa sube encima del recuadro.
+- **Pantalla de la cabina (fase 21)**: pegada a la cámara (abajo en el centro, la esquina derecha es del recuadro),
+  `depthTest` apagado y su propia capa (`CAB_LAYER`), así no la tapa nada ni sale en el recuadro ni en las sombras.
+  Canvas de 512 × 288 redibujado como mucho 6 veces por segundo y solo si cambia lo que muestra. La vista de cabina
+  es la del conductor (la de siempre); en la RT, la del operador.
+- **Repetición del fallo (fase 21)**: no vuelve a simular con la grabación de la fase 15 (habría que apartar reglas,
+  bus y sonido mientras tanto): guarda lo que se dibuja de cada paso con el turno en marcha (lo mismo que la
+  interpolación) en un anillo de 8 s y lo dibuja a ×0,35 (~23 s), mezclando pasos, con una cámara que da vueltas a
+  34·`camSize` m de la grúa. Sale antes del cartel de vuelco (prueba libre, escuela) y del de nivel fallido; los dos
+  tienen "Ver la repetición". Restaurar una instantánea (reiniciar, rebobinar, continuar) vacía el anillo. Mientras se
+  ve, el sonido y la vibración callan; la simulación sigue (con la grúa volcada no hay nada que mover).
+- **Vibración (fase 21)**: `dual-rumble` en el primer mando conectado. Desde el 90 % de LMI, cada 0,18 s 220 ms del
+  motor débil al 15–70 % (más cerca del corte, más fuerte; con sobrecarga también el fuerte); línea eléctrica: pulsos
+  cada 0,5 s; aterrizaje ≥ 0,6 m/s medio, ≥ 1,4 (`HARD_LANDING`) fuerte; golpe de costado > 0,25 m/s; vuelco 0,7 s.
+  Solo la grúa que se maneja. **No se probó con un mando de verdad** (no hay mando aquí).
+- **Ayudas y modo experto (fase 21)**: ayudas por defecto apagadas; el radio máximo (naranja) es con el largo de pluma
+  actual (bajando la pluma; en la SK 60, sacando el carro) y el apoyo actual, en 36 giros, recalculado como mucho cada
+  0,3 s si cambia algo. Experto: sin fila del LMI, sin "cerca del límite" ni capacidad en el HUD y en la pantalla de
+  la cabina; quedan el corte (cartel CORTE LMI) y las alarmas de sonido; sin ayudas. La tabla de cargas (C) sigue
+  (es una herramienta real del operador).
+- **Estado del LMI con forma y texto (fase 21)**: ● normal, ▲ cerca del límite (≥ 90 %), ■ sobrecarga (≥ 100 %), con el
+  texto debajo de la barra, en el panel de la otra grúa y en la pantalla de la cabina.
+
+- **Suavidad (fase 22)**: medalla **aparte** de las estrellas (decidido con Jesús): `gruas-records` no cambia y los
+  récords de la 1.0 siguen igual. Se mide solo con carga colgada (y 0,25 s después de despegar): balanceo = ángulo
+  del cable con la vertical (media en el tiempo), tirón = peor tensión/estática − 1 (la tensión ya va filtrada 0,3 s;
+  en el tándem no se mide, porque la parte de cada grúa sale de la misma tensión), frenazos = aceleración horizontal
+  de la carga con la velocidad filtrada 0,1 s (media). Nota = 100 − 6·(balanceo − 1,5°) − 1,2·(tirón − 6 %) −
+  4·(frenazos − 0,15 m/s², en décimas); sin nota con menos de 5 s colgada. Oro ≥ 85, plata ≥ 70, bronce ≥ 50.
+  **Umbrales provisionales**, sacados de los alumnos de guion: lección 4 a fondo 75 (balanceo 1,5°, tirón 23 %,
+  0,26 m/s²), lección 5 a fondo 52 (2,3°, 34 %, 0,40), lección 6 con Shift 88 (1,9°, 11 %, 0,22). Se fijarán con
+  partidas de Jesús. Va en el turno (las instantáneas lo copian; no toca la simulación).
+- **Estadísticas y logros (fase 22)**: cuentan lo que hizo el jugador de verdad: van fuera de las instantáneas, así
+  que rebobinar o reiniciar no resta. Con un guion (`GameStep.source`: banco, pruebas) no cuentan. Se guardan al
+  terminar el turno, cada 30 s, al desmontar la partida y al esconder o cerrar la pestaña. Izaje = la carga cuelga y
+  después deja de colgar; cuenta la mayor masa mientras colgó (tándem: la parte de esa grúa); racha sin golpe = izajes
+  seguidos sin golpe (de la carga o del chasis, plumín o torre) mientras colgaba. Horas por grúa: la que se maneja.
+  Con dos pestañas abiertas gana la última que guarda. Logros (27, lista aprobada en el plan con pocos cambios): se
+  miran al terminar un izaje, al ganar un nivel, al volcar, al terminar una lección y cada 5 s.
+
+- **Reto diario (fase 22)**: la fecha en UTC (el mismo reto en todo el mundo a la vez). La obra se genera solo con
+  `rng` (mulberry32) y aritmética básica; se acepta si el plan de izaje dice que la grúa recomendada, desde donde
+  empieza, tiene sitio y llega con cada carga a alguna zona (verde o ámbar); si no, prueba la siguiente (hasta 60).
+  El plan usa trigonometría: dos navegadores solo podrían diferir en una obra justo en el límite (la prueba fija una
+  fecha con una instantánea). Grúas: City 25, AT 60, AT 220, AT 300-6 y AT 500-8 (las permitidas = las que también
+  pueden desde el mismo sitio), 1–3 cargas a 8–22 m, 2–5 obstáculos. Sin guardar a mitad; la suavidad no se guarda
+  (es por nivel fijo); cuenta para estadísticas y logros. El tiempo del enlace no se puede comprobar (se dice).
+- **Licencias (fase 22)**: ruedas, orugas y torre con examen (AT 60, LR 300, SK 60: un izaje completo; ruedas con
+  estabilizadores, torre con montaje); la escuela completa da ruedas. **Tándem sin examen**: se da con ruedas + orugas
+  + el nivel 13 (un examen con dos grúas no cabía en la escuela). Nivel cerrado si ninguna grúa permitida tiene
+  licencia (el 14 pide tándem); si la grúa pedida no tiene licencia y otra permitida sí, se cambia a esa. El reto
+  diario pide ruedas. La prueba libre y la escuela nunca se cierran. Quien ya tenía récords recibe las familias de
+  las grúas permitidas de cada nivel que terminó (los récords no guardan la grúa). Por defecto **cerrado** (un
+  jugador nuevo empieza por la escuela o los exámenes); "Todo desbloqueado" en Opciones.
+- **Examen de torre**: zona de 9 × 9 m. Con 35 m de cable la carga queda girando en cono y casi no se amortigua
+  (el guion de la prueba no consiguió calmarla en 5 min): con una zona de 5 m solo un experto lo aprobaría.
+
+- **Señalero (fase 23)**: solo interfaz (no se graba). Orden: si se lleva la carga apoyada fuera de la zona, sube;
+  si hay que pasar por encima de algo (cajas en la línea recta hacia el destino + 1,5 m; la caja sobre la que está
+  el destino, solo su altura de apoyo) y no basta el cable, sube la pluma (o saca pluma si ya está arriba); después
+  gira, después radio (saca pluma si no sobra altura y el LMI lo permite, si no baja la pluma; para acercar, sube la
+  pluma; en la torre, el carro), después baja y despacio al final. Guía la **punta** (donde quedará el gancho
+  quieto), no el gancho: guiando el gancho, su balanceo lo hacía corregir de un lado a otro sin fin. Antes de bajar
+  espera a que se calme (velocidad o distancia de la carga a la punta). Parada si hay alguien junto a la carga o en
+  los próximos 4 m del camino. Para enganchar pide 0,4 m de precisión; para dejar, 0,6. **Señales elegidas por el
+  juego** (la fase pedía pasarlas a Jesús antes de animarlas; se hizo sin esperar): sube, baja, despacio, gira
+  izquierda/derecha, sube/baja la pluma, saca/mete pluma, carro afuera/adentro, para, espera (hay gente), engancha,
+  suelta. Lista en `game/signals.ts`.
+- **Trabajadores (fase 23)**: solo en los niveles nuevos (los 14 no cambian de dificultad). Caminan por rutas fijas
+  (función del reloj del turno: deterministas). Carga en el aire a menos de 2,5 m + su radio de alguien: aviso,
+  alarma y cuenta como falta; más de 3 s seguidos, falla (como la línea eléctrica). Rutas apartadas de recogida y
+  destino (con una ruta que cruzaba, ni el guion ni un jugador podían evitarlo).
+- **Lista de chequeo (fase 23)**: niveles 15–17. Tres puntos automáticos (grúa apoyada, nadie a menos de 3 m de la
+  carga, viento < 9 m/s) y dos que marca el jugador (peso, eslinga). "Lista hecha" entra como acción del paso (se
+  graba); vale para el siguiente izaje. Despegar sin ella: falta (resta la estrella de golpes); en modo experto,
+  falla. Se pide otra después de soltar.
+- **Cesta (fase 23)**: con la cesta enganchada los mandos van en fino y además al 60 % (cable) y 40 % (giro, pluma,
+  telescopio); falla con más de 1 s fuera de: LMI 50 %, balanceo 5°, subida o bajada 0,6 m/s (la velocidad
+  horizontal no: el balanceo ya tiene su límite) o viento 9 m/s. Plataforma a 18 m (con 22 m y la AT 60 el
+  LMI quedaba justo en el 50 %). Límites del juego, no de una norma: revisar con Jesús.
+- **A ciegas**: `CameraRig.restrict(['cabina', 'gancho'])`. El plan de izaje da por montados lastre e Y-guy: los
+  niveles lo dicen en la ficha.
+
+- **Carga por eje (fase 24)**: masa con la pluma recogida (`craneMasses`, datos de la referencia) repartida por
+  igual entre los ejes: City 25 10,9 t, AT 60 15,0, AT 220 21,3, AT 300-6 11,5, AT 500-8 20,2. El reparto por igual
+  es aproximación (la referencia no trae cargas por eje). **El límite del puente (12 t por eje) lo puso el juego**:
+  la fase pedía preguntar los límites antes de inventarlos y Jesús pidió hacerlo sin esperar. Revisar con él.
+- **Cable bajo (fase 24)**: es una `PowerLine` a 6,5 m (las reglas de las líneas: alarma y fallo). La AT 60 empieza
+  con la pluma a 40° (como siempre): hay que bajarla antes de salir.
+- **Camiones (fase 24)**: las cargas de los camiones que llegan después esperan fuera de la obra con el cuerpo
+  desactivado (`setEnabled(false)`, no chocan); al llegar su hora y con el muelle libre (ninguna carga sobre la caja)
+  pasan a la caja. Mientras el muelle está ocupado cuenta el retraso; más de 20 s en total = falta. Los camiones
+  dibujados son las cajas fijas del muelle (no se mueven).
+- **Grúa auxiliar (fase 24)**: `Level.crew` (dos grúas que no son tándem, cada una en su sitio). Las placas de lastre
+  son 4 × 9 t (aproximación: el lastre real de la AT 300-6 son 86 t). Montaje con grúa auxiliar de la LR 3000: no se
+  hizo (la fase pedía preguntar qué datos faltan; harían falta piezas del montaje que la referencia no trae).
+
+- **Clima y averías (fase 24 B)**, valores del juego: todo es función del reloj del turno (sin estado; va en las
+  instantáneas sin hacer nada). Ráfaga = + v m/s con forma sin² durante dur s, anunciada 10 s antes si el anemómetro
+  funciona. Tormenta: 20 s de margen y después pluma < 30° y nada colgando (si no, "Rayo"); lluvia y rayos (solo
+  dibujo, `Math.random`). Niebla: solo dibujo. Fuga: la pluma de la grúa que se maneja baja 0,35°/s; con la carga
+  colgada más de 45 s desde que empieza, falla. Cable dañado: capacidad al 50 % en los cortes del LMI (`mEval /
+  capK`; `stability.ts` no se tocó), el HUD sigue mostrando el LMI normal (el aviso lo dice).
+
+- **Equilibrio de la carrera (fase 25)**, valores del juego: empiezas con 15 000 € y la City 25. Alquiler por
+  contrato R = 400 + 15 · carga máxima (t) redondeado a 50 € (City 25 800, AT 60 1 300, AT 220 3 700, AT 300-6 4 900,
+  AT 500-8 7 150); compra 30 · R (AT 60 39 000 €); venta al 60 % menos el desgaste. Pago = 1 200 + 25 · toneladas
+  + 1,5 · R de la recomendada, × (0,7 + 0,1 · estrellas), + 5/10/15 % con medalla. Multas: golpe y aterrizaje duro
+  300, alarma de línea 1 000, carga sobre personas 800, izaje sin lista 500, retraso 20 €/s; fallar 1 500 y sin
+  pago; volcar, 25 % del precio (propia) o 5 000 de franquicia (alquilada). Desgaste +10 por contrato en la propia;
+  mantener cuesta 0,06 % del precio por punto; con 60 o más, una avería en el contrato (fuga o cable), con 90, dos.
+  Simulado (8 contratos de unos 4 min, 2 estrellas, un golpe, uno fallado): de 15 000 a ~43 000 € y se puede comprar
+  la AT 60. Contratos: 2 niveles fijos (sin el tándem ni el de grúa auxiliar) y 2 obras generadas por día, todas
+  posibles con una grúa de una familia con licencia (la carrera da siempre la de ruedas). Abandonar un contrato no lo
+  cobra ni lo gasta.
+
 ### Plan y riesgos conocidos
 - **Relación de masas gancho/carga**: resuelto con las iteraciones del solver (ver Decisiones). Volver a medir con las
   grúas grandes (fases 4–6): cabeza cinemática, izado a velocidad plena, estiramiento máximo del cable.
@@ -934,6 +1178,19 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
   ~52.000 triángulos (la AT 60 en la obra de 84 × 56 con el decorado). Sin banco nuevo (Jesús pidió no seguir
   revisando en el navegador).
 
+- Fase 20: sin cambios en draw calls (todo es DOM y un lienzo 2D en la ficha). Plan de izaje: ≤ 6 ms por recálculo
+  al mover el fantasma (nivel 11 con el plumín), contorno ≤ ~70 ms al elegir carga (en Node). Bundle `app.js` 875 kB
+  (219 kB comprimido).
+
+- Fase 21 (`?bench=1`, Chromium sin ventana sobre la Intel, 1920×1080, calidad alta): sin recuadro, todo igual que
+  antes (60 fps, peor cuadro 16,8 ms; nivel 14 145 draw calls, nivel 11 92, nivel 9 93, LR 3000 78, AT 650-8 95,
+  SK 60 70; render CPU 0,9–1,4 ms). Con el recuadro: los 6 a 60 fps y peor cuadro 16,8 ms; en los cuadros en que se
+  redibuja, nivel 14 223 draw calls, nivel 11 144, nivel 9 144, LR 3000 127, AT 650-8 148, SK 60 104; render CPU
+  +0,3 ms (1,0–1,7). El tiempo de GPU del banco no vale con el recuadro (el temporizador sale en 2,3–2,7 ms, menos
+  que sin él: no mide bien con el pase a la textura). La pantalla de la cabina suma 2 draw calls; las ayudas, 4.
+
+- Fase 22 parte A: sin cambios en draw calls (todo es DOM). Bundle sin medir.
+
 ### Pendientes
 - Rapier: si una versión nueva da las fuerzas de las juntas, cambiar la tensión medida por la real (comparando antes).
 - Posible mejora de carga: el `.wasm` empieza a bajar cuando ya llegó `app.js` (no se puede precargar desde
@@ -990,4 +1247,21 @@ contradiga lo anterior. Mantenerla corta: lo que ya dice el código o el histori
 - Escuela: nadie la ha jugado todavía a mano. El alumno de guion tarda 11–172 s por lección; la 6 es lenta (girar
   con Mayús y esperar a que el viento calme el balanceo). Si a una persona se le hace larga, lo primero: zonas más
   grandes o menos viento.
+- Plan de izaje: en el nivel 2 solo hay sitio para la City 25 justo en el centro de la calle (z = 25); el nivel 7 (pick
+  & carry) sale en rojo desde cualquier sitio fijo, porque se recoge en un sitio y se deja en otro. Jesús no ha
+  probado la tabla ni el plan en la laptop.
+- Fase 21: la vibración no se probó con un mando de verdad; Jesús no ha visto la cámara del gancho, el recuadro, la
+  pantalla de la cabina ni la repetición en la laptop. La repetición de los fallos del tándem muestra la grúa que se
+  manejaba (la cámara gira alrededor de ella).
+- Fase 22: fijar los umbrales de la suavidad con partidas de Jesús (el cartel de nivel completado muestra la nota
+  y las tres medidas). Revisar si la carga de la grúa torre con cable largo debería amortiguarse más (gira en cono).
+  Jesús no ha probado el reto diario, los exámenes ni el bloqueo en la laptop.
+- Fase 23: Jesús no ha revisado la lista de señales ni sus posturas, ni los límites de la cesta. La voz depende de
+  las voces en español que tenga el sistema (sin comprobar en la laptop). Los trabajadores atraviesan las cargas
+  apoyadas (no tienen colisionador) y no esquivan a nadie.
+- Fase 25: Jesús no ha revisado el equilibrio de dinero (la fase pedía enseñárselo antes). Un contrato abandonado a
+  mitad sigue en la lista; repetir no está (el cartel solo vuelve a la carrera). Las obras generadas de los contratos
+  usan el mismo generador que el reto diario.
+- `crane/loadChart.test.ts` "se calcula rápido": con toda la batería en paralelo pasó una vez de su límite de
+  tiempo (sola, bien).
 - Vite avisaría que `app.js` pasa de 500 kB (three.js y el juego, ~780 kB): `chunkSizeWarningLimit` = 1200.

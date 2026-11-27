@@ -142,3 +142,96 @@ kbd { display: inline-block; min-width: 1.1em; text-align: center; font: 600 12p
 .lcard ol { margin: 0 0 12px; padding-left: 22px; color: #c3cad1; }
 .lcard .hint { color: #aab3bc; font-size: 13px; }
 .keys b.hl { color: #1b1d20; background: #f0bb27; border-radius: 3px; padding: 0 3px; }
+
+/* fase 20: tabla de cargas (C), abajo a la izquierda; se puede tener abierta mientras se maneja */
+.chart { left: 10px; bottom: 52px; max-width: calc(100% - 240px); max-height: calc(100% - 200px); overflow: auto; pointer-events: auto;
+  font-variant-numeric: tabular-nums; font-size: 12px; }
+.chart[hidden] { display: none; }
+.chart-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: #f0bb27; font-size: 13px; }
+.chart-x { font: inherit; font-size: 11px; padding: 2px 8px; border: 0; border-radius: 4px; background: #3a424b; color: #f2f4f6; cursor: pointer; }
+.chart-mode { display: block; margin: 3px 0 1px; }
+.chart small { color: #aab3bc; display: block; }
+.chart table { border-collapse: collapse; margin: 6px 0; }
+.chart th, .chart td { padding: 1px 6px; text-align: right; border-bottom: 1px solid rgba(255, 255, 255, 0.07); }
+.chart thead th { color: #aab3bc; font-weight: 400; }
+.chart tbody th { color: #aab3bc; font-weight: 400; }
+.chart th.on, .chart tr.on th { color: #f0bb27; font-weight: 700; }
+.chart tr.on td, .chart td.col { background: rgba(240, 187, 39, 0.1); }
+.chart td.now { background: #f0bb27; color: #1b1d20; font-weight: 700; border-radius: 3px; }
+.chart td.over { color: #ff8b7d; }
+.chart td.now.over { background: #ff6b5a; color: #1b1d20; }
+.chart-now { margin: 2px 0 3px; }
+
+/* fase 20: plan de izaje en la ficha */
+.plan-intro { font-size: 13px; }
+.plan-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 8px; }
+.btn.small { padding: 4px 10px; font-size: 12px; }
+.plan-site { margin-left: 8px; color: #aab3bc; }
+.plan-cv { display: block; border-radius: 6px; cursor: grab; touch-action: none; }
+.plan-cv:active { cursor: grabbing; }
+.plan-table table { border-collapse: collapse; width: 100%; margin: 8px 0; font-variant-numeric: tabular-nums; }
+.plan-table th, .plan-table td { padding: 3px 8px; text-align: left; border-bottom: 1px solid #2f363e; }
+.plan-table th { color: #aab3bc; font-weight: 400; }
+.plan-table tr[data-k] { cursor: pointer; }
+.plan-table tr.on { background: rgba(240, 187, 39, 0.1); }
+.plan-table small { color: #aab3bc; margin-left: 4px; }
+.plan-table .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+.plan-legend { display: block; color: #aab3bc; margin: 0 0 12px; }
+
+/* fase 21: estado del LMI con forma y texto (no solo color), modo experto, tamaño del HUD, opciones, recuadro del
+   gancho y repetición */
+.lmi .shape { font-style: normal; margin-right: 4px; }
+.lmi-state { font-size: 11px; margin: -2px 0 3px; text-transform: uppercase; letter-spacing: 0.04em; }
+.lmi-state.ok { color: #7ee0ad; }
+.lmi-state.warn { color: #f5c542; }
+.lmi-state.bad { color: #ff6b5a; font-weight: 700; }
+.data .expert { margin: 6px 0 4px; color: #aab3bc; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+.data[hidden], .data.other.cabin { display: none; }
+#hud .panel, #hud .msg { zoom: var(--hud-scale, 1); }
+.opts-btn { pointer-events: auto; font: inherit; font-weight: 700; color: #f2f4f6; background: rgba(22, 26, 31, 0.72); border: 0; border-radius: 6px;
+  padding: 8px 11px; cursor: pointer; text-align: left; zoom: var(--hud-scale, 1); }
+.opts-btn:hover { color: #f0bb27; }
+.opts label { display: flex; gap: 10px; align-items: flex-start; margin: 8px 0; cursor: pointer; }
+.opts label small { display: block; color: #aab3bc; }
+.opts select { font: inherit; background: #2a3038; color: #f2f4f6; border: 1px solid #4a525c; border-radius: 4px; padding: 2px 4px; }
+.pip-frame { position: absolute; right: 10px; bottom: 56px; border: 2px solid rgba(240, 187, 39, 0.8); border-radius: 4px; box-sizing: border-box;
+  pointer-events: none; }
+.pip-frame[hidden] { display: none; }
+.pip-frame span { position: absolute; left: 4px; top: 2px; font-size: 11px; font-weight: 700; color: #f0bb27; text-shadow: 0 0 3px #000; }
+.replay-bar { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; align-items: center;
+  padding: 8px 14px; border-radius: 6px; background: rgba(160, 30, 20, 0.85); font-weight: 700; pointer-events: auto; z-index: 4; }
+.replay-bar[hidden] { display: none; }
+.replay-bar b::before { content: '\25CF  '; animation: blink 1s steps(2, start) infinite; }
+.replay-bar button { font: inherit; font-size: 12px; padding: 3px 10px; border: 0; border-radius: 4px; background: #f2f4f6; color: #1b1d20; cursor: pointer; }
+.card button.ghost { background: #3a424b; color: #f2f4f6; margin-left: 8px; }
+.card button[hidden] { display: none; }
+.data.other.pip { bottom: 290px; }
+
+/* Fase 22: suavidad, estadísticas y logros */
+.medal { margin-left: 6px; letter-spacing: 0; font-size: 0.95em; }
+.smooth { display: flex; align-items: baseline; gap: 12px; margin: 4px 0 2px; font-size: 1.1em; }
+.dim { color: #aab3bc; }
+.ach-group { margin: 6px 0 10px; }
+.ach-group > small { color: #aab3bc; text-transform: uppercase; letter-spacing: 0.06em; font-size: 11px; }
+.achs { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px; margin-top: 4px; }
+.ach { padding: 6px 8px; border-radius: 6px; background: rgba(255, 255, 255, 0.04); opacity: 0.55; display: flex; flex-direction: column; gap: 2px; }
+.ach.got { opacity: 1; background: rgba(240, 187, 39, 0.14); }
+.ach small { color: #aab3bc; }
+.ach-toast { position: fixed; top: 120px; left: 50%; transform: translateX(-50%); z-index: 40; pointer-events: none;
+  background: rgba(20, 24, 28, 0.92); border: 1px solid #f0bb27; border-radius: 8px; padding: 8px 16px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px; color: #f2f4f6; }
+.ach-toast small { color: #aab3bc; }
+.ach-toast[hidden] { display: none; }
+.lvl.daily { border-color: #f0bb27; }
+.lvl.locked { opacity: 0.55; }
+.lvl.locked b { color: #aab3bc; }
+/* Fase 23: radio del señalero y lista de chequeo */
+.radio { position: absolute; left: 50%; bottom: 56px; transform: translateX(-50%); display: flex; gap: 10px; align-items: baseline;
+  padding: 6px 14px; font-size: 1.15em; }
+.radio small { color: #aab3bc; }
+.radio[hidden] { display: none; }
+.radio.stop b { color: #ff6b5a; }
+.checks { list-style: none; padding: 0; margin: 8px 0 12px; display: flex; flex-direction: column; gap: 6px; }
+.checks li.ok { color: #7ee0ad; }
+.checks li.bad { color: #ff6b5a; }
+.checks label { display: flex; gap: 8px; align-items: center; cursor: pointer; }

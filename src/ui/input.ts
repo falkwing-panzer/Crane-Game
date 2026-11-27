@@ -41,6 +41,10 @@ export class Input {
   onRewind: () => void = () => {};
   /** N: silenciar el sonido (fase 11) */
   onMute: () => void = () => {};
+  /** C: tabla de cargas (fase 20; solo interfaz) */
+  onChart: () => void = () => {};
+  /** Fase 23: lista de chequeo (J) */
+  onChecklist: () => void = () => {};
   /** H: ayuda de controles (fase 13) */
   onHelp: () => void = () => {};
   /** Esc: cerrar la ayuda (fase 13) */
@@ -57,7 +61,7 @@ export class Input {
     const tap: Record<Exclude<TapAction, 'help'>, () => void> = {
       hook: () => this.onHook(), outriggers: () => this.onOutriggers(), ballast: () => this.onBallast(), yguy: () => this.onYGuy(),
       mount: () => this.onMount(), view: () => this.onView(), switch: () => this.onSwitch(), reset: () => this.onReset(),
-      bypass: () => this.onBypass(), rewind: () => this.onRewind(), mute: () => this.onMute(),
+      bypass: () => this.onBypass(), rewind: () => this.onRewind(), mute: () => this.onMute(), chart: () => this.onChart(), checklist: () => this.onChecklist(),
     };
     addEventListener('keydown', (e) => {
       const code = normCode(e.code);
@@ -132,6 +136,18 @@ export class Input {
     };
     for (const a of padEdges(this.padPrev, gp.buttons)) act[a]();
     this.padPrev = pressedList(gp.buttons);
+  }
+
+  /**
+   * Vibración del mando (fase 21): efecto 'dual-rumble' en el primer mando conectado que la tenga (sin mando o sin
+   * motor de vibración, no hace nada).
+   */
+  rumble(fx: { strong: number; weak: number; ms: number }) {
+    if (typeof navigator === 'undefined' || !navigator.getGamepads) return;
+    const gp = [...navigator.getGamepads()].find((g) => g && g.connected) as (Gamepad & { vibrationActuator?: { playEffect?: (t: string, p: object) => Promise<unknown> } }) | undefined;
+    const act = gp?.vibrationActuator;
+    if (!act?.playEffect) return;
+    act.playEffect('dual-rumble', { startDelay: 0, duration: fx.ms, strongMagnitude: fx.strong, weakMagnitude: fx.weak }).catch(() => {});
   }
 
   state(): CraneInput {

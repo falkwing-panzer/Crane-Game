@@ -1,4 +1,5 @@
-// Ajustes del jugador (fase 11): calidad gráfica y sonido. Se guardan en localStorage; ?calidad=bajo|medio|alto en
+// Ajustes del jugador (fase 11): calidad gráfica y sonido; fase 21: recuadro del gancho, vibración, ayudas, modo
+// experto y tamaño del HUD. Se guardan en localStorage; ?calidad=bajo|medio|alto en
 // la URL manda sobre lo guardado (para comparar). Sin three.js, para poder probarlo.
 
 export type Quality = 'bajo' | 'medio' | 'alto';
@@ -28,10 +29,29 @@ export interface Settings {
   sonido: boolean;
   /** volumen 0…1 */
   volumen: number;
+  /** Fase 21: recuadro con la cámara del gancho */
+  recuadro: boolean;
+  /** Fase 21: vibración del mando */
+  vibracion: boolean;
+  /** Fase 21: ayudas (plomada, marca de la carga, radios) */
+  ayudas: boolean;
+  /** Fase 21: modo experto (sin LMI ni capacidad en el HUD, sin ayudas) */
+  experto: boolean;
+  /** Fase 21: tamaño del HUD (1 = el de siempre) */
+  hud: number;
+  /** Fase 22: todo desbloqueado (sin licencias) */
+  desbloquear: boolean;
+  /** Fase 23: voz del señalero (síntesis de voz del navegador) */
+  voz: boolean;
 }
 
+/** Tamaños del HUD que se pueden elegir */
+export const HUD_SIZES = [0.8, 1, 1.25, 1.5];
+
 const STORE = 'gruas-ajustes';
-export const DEFAULTS: Settings = { calidad: 'alto', sonido: true, volumen: 0.6 };
+export const DEFAULTS: Settings = { calidad: 'alto', sonido: true, volumen: 0.6, recuadro: false, vibracion: true, ayudas: false, experto: false, hud: 1, desbloquear: false, voz: false };
+
+const bool = (v: unknown, d: boolean) => (typeof v === 'boolean' ? v : d);
 
 function isQuality(v: unknown): v is Quality {
   return typeof v === 'string' && (QUALITIES as string[]).includes(v);
@@ -48,6 +68,13 @@ export function loadSettings(search = typeof location !== 'undefined' ? location
     calidad: isQuality(saved.calidad) ? saved.calidad : DEFAULTS.calidad,
     sonido: typeof saved.sonido === 'boolean' ? saved.sonido : DEFAULTS.sonido,
     volumen: typeof saved.volumen === 'number' && saved.volumen >= 0 && saved.volumen <= 1 ? saved.volumen : DEFAULTS.volumen,
+    recuadro: bool(saved.recuadro, DEFAULTS.recuadro),
+    vibracion: bool(saved.vibracion, DEFAULTS.vibracion),
+    ayudas: bool(saved.ayudas, DEFAULTS.ayudas),
+    experto: bool(saved.experto, DEFAULTS.experto),
+    hud: typeof saved.hud === 'number' && HUD_SIZES.includes(saved.hud) ? saved.hud : DEFAULTS.hud,
+    desbloquear: bool(saved.desbloquear, DEFAULTS.desbloquear),
+    voz: bool(saved.voz, DEFAULTS.voz),
   };
   const q = new URLSearchParams(search).get('calidad');
   if (isQuality(q)) s.calidad = q;

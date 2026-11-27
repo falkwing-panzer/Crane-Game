@@ -3,10 +3,15 @@ import { apply } from '../crane/pose';
 import { boomFoot, headPos } from '../crane/kinematics';
 import { allPlaced } from '../levels/setup';
 import { OVER_T, ROLL_MAX, SIDE_LOAD, SIDE_MAX, SIDE_T, SIDE_WARN, rollOf } from '../levels/tandemSetup';
-import { HARD_LANDING, LANDING_MIN, LINE_WARN, lineMargin, windArea, windForce } from '../levels/rules';
+import { HARD_LANDING, LANDING_MIN, LINE_WARN, WINDK, lineMargin, windArea, windForce } from '../levels/rules';
 import type { Level } from '../levels/levels';
 import { saveRecord, stars } from '../ui/levelUi';
 import type { Failure } from './events';
+import { smoothScore } from './smooth';
+import { saveJobRecord, saveSmooth } from '../ui/progress';
+import { EXCL_T, overWorker } from '../levels/people';
+import { axleLoad } from '../crane/axles';
+import { active, capFactor, gustAt, gustWarnings, starting, LEAK_RATE, LEAK_T, STORM_ANG, STORM_GRACE } from '../levels/events';
 import type { Session } from './session';
 
 import { t } from '../i18n';
@@ -41,6 +46,12 @@ export class LevelRules {
       // en un nivel, el vuelco es nivel fallido (Repetir vuelve a la ficha)
       bus.on('tipped', (e) => this.finish({ title: tr.tippedTitle, text: e.text })),
     );
+    // fase 24: las cargas de los camiones que llegan más tarde esperan fuera, sin chocar con nada
+    // (los que ya están en su muelle al empezar cuentan como entrados)
+    (L.trucks ?? []).forEach((tk, i) => {
+      if (tk.at > 0) ses.units[0].phys.loads[tk.crate].body.setEnabled(false);
+      else ses.run.tDone |= 1 << i;
+    });
   }
 
   /** Reloj de la comprobación de victoria (instantáneas, fase 15) */
@@ -58,7 +69,12 @@ export class LevelRules {
     ses.running = false;
     if (fail) { ses.bus.emit('end', { fail }); return; }
     const n = stars(L, run);
-    ses.bus.emit('end', { fail: null, stars: n, record: saveRecord(ses.def.li, n, run.t) });
+    // suavidad (fase 22): medalla aparte, en su propia clave; las estrellas y los récords no cambian
+    const sm = smoothScore(run), job = ses.def.job;
+    // trabajos con obra propia (reto diario, contratos): récord aparte; la suavidad se guarda solo en los niveles
+    const smoothBest = !job && !!sm && saveSmooth(ses.def.li, sm.score);
+    const record = job ? saveJobRecord(job.key, n, run.t) : saveRecord(ses.def.li, n, run.t);
+    ses.bus.emit('end', { fail: null, stars: n, record, smooth: sm, smoothBest });
   }
 
   /** Golpe (strike de la referencia): cuenta para las estrellas, uno por segundo como mucho */
@@ -85,10 +101,19 @@ export class LevelRules {
       if (units.every((u) => !u.phys.attached) && allPlaced(phys.loads.map((l) => phys.placed(l)), L.zones)) { this.finish(null); return false; }
     }
     run.bumpCd = Math.max(0, run.bumpCd - dt);
+    if (L.trucks) this.trucks(dt);
+    if (L.events && !this.events(dt)) return false;
     // viento sobre la carga enganchada o el gancho (step de la referencia); tándem: lo pone una sola grúa
     for (const u of units) {
       const a = u.phys.attached;
-      const w = windForce(L, run.t, windArea(a ? { w: 2 * a.half.x, d: 2 * a.half.z, h: 2 * a.half.y } : null));
+      const area = windArea(a ? { w: 2 * a.half.x, d: 2 * a.half.z, h: 2 * a.half.y } : null);
+      const w = windForce(L, run.t, area);
+      // fase 24: ráfagas de los eventos del nivel (la fuerza crece con v²)
+      const g = gustAt(L.events, run.t);
+      if (g > 0) {
+        const v = w.v + g, f = WINDK * v * v * area, ang = (L.wind[2] * Math.PI) / 180;
+        Object.assign(w, { v, x: Math.cos(ang) * f, z: Math.sin(ang) * f });
+      }
       run.wind = w.v;
       u.phys.wind = { x: w.x, z: w.z };
     }
@@ -103,6 +128,8 @@ export class LevelRules {
     const { ses, L } = this, run = ses.run;
     if (run.done) return false;
     if (L.tandem && !this.tandem()) return false;
+    if (!this.people()) return false;
+    if (!this.bridges()) return false;
     if (!L.lines?.length || ses.tipped(ses.units[0])) return true;
     const { T, S, phys, pose } = ses.units[0];
     const hk = phys.hookBody.translation(), a = phys.attached;
@@ -128,6 +155,127 @@ export class LevelRules {
       return false;
     }
     return true;
+  }
+
+  /**
+   * Fase 23: trabajadores (zona de exclusión: aviso y alarma al entrar, fallo si la carga sigue encima de alguien más de
+   * EXCL_T s), lista de chequeo (cada izaje que despega sin ella resta; en el modo experto, falla) y cesta de personal
+   * (LMI ≤ 50 %, balanceo ≤ 5°, ≤ 0,6 m/s y viento ≤ 9 m/s; más de 1 s fuera, falla). Devuelve false si falló.
+   */
+  private people(): boolean {
+    const { ses, L } = this, run = ses.run, dt = FIXED_DT;
+    const u = ses.act, a = u.phys.attached;
+    if (L.workers?.length) {
+      let over = -1;
+      if (a) {
+        const c = a.body.translation();
+        over = overWorker({ x: c.x, z: c.z, r: Math.hypot(a.half.x, a.half.z), bottom: c.y - a.half.y }, L.workers, run.t);
+      }
+      if (over >= 0) {
+        if (!run.inExcl) {
+          run.inExcl = true;
+          run.excl++;
+          ses.bus.emit('prox', {});
+          ses.bus.emit('say', { text: tr.excl, s: 2.5 });
+        }
+        run.exclT += dt;
+        if (run.exclT > EXCL_T) { this.finish({ title: tr.exclTitle, text: tr.exclFail }); return false; }
+      } else { run.inExcl = false; run.exclT = 0; }
+    }
+    const hanging = ses.hanging(u);
+    if (L.checklist) {
+      if (hanging && !run.lifted) {
+        if (!run.checked) {
+          if (ses.expert) { this.finish({ title: tr.checkTitle, text: tr.checkFail }); return false; }
+          run.skips++;
+          ses.bus.emit('say', { text: tr.checkSkip, s: 3 });
+        }
+      } else if (!hanging && run.lifted && !a) run.checked = 0; // soltada: el próximo izaje pide otra lista
+    }
+    run.lifted = hanging ? 1 : 0;
+    if (a?.kind === 'basket' && hanging) {
+      // velocidad de subida o bajada (el balanceo tiene su propio límite)
+      const sp = Math.abs(a.body.linvel().y);
+      const why = u.dyn.lmi > 0.5 ? tr.bkLmi(Math.round(u.dyn.lmi * 100)) : u.sideAng > 5 * Math.PI / 180 ? tr.bkSwing(deg(u.sideAng))
+        : sp > 0.6 ? tr.bkSpeed(sp) : run.wind > 9 ? tr.bkWind(run.wind) : null;
+      if (why) {
+        if (run.bkT === 0) ses.bus.emit('say', { text: why, s: 2 });
+        run.bkT += dt;
+        if (run.bkT > 1) { this.finish({ title: tr.bkTitle, text: why }); return false; }
+      } else run.bkT = 0;
+    }
+    return true;
+  }
+
+  /**
+   * Fase 24 B: avisos (ráfaga anunciada si el anemómetro funciona, inicio de cada evento), fuga hidráulica (la pluma de
+   * la grúa que se maneja baja sola; con la carga colgada más de LEAK_T s, falla), tormenta (pasado el margen, pluma
+   * por encima de 30° o carga colgada: falla) y cable dañado (`ses.capK`). Devuelve false si falló.
+   */
+  private events(dt: number): boolean {
+    const { ses, L } = this, run = ses.run, t = run.t, ev = L.events;
+    const say = (text: string, s = 4) => ses.bus.emit('say', { text, s });
+    if (!active(ev, 'anemo', t)) for (const g of gustWarnings(ev, t - dt, t)) say(tr.gustWarn(g.v + L.wind[0]));
+    for (const e of starting(ev, t - dt, t)) {
+      if (e.kind !== 'gust') say(tr.event[e.kind], 5);
+      if (e.kind === 'storm' || e.kind === 'leak') ses.bus.emit('prox', {});
+    }
+    ses.capK = capFactor(ev, t);
+    const leak = active(ev, 'leak', t), u = ses.act;
+    if (leak && !ses.tipped(u)) {
+      u.S.ang = Math.max(u.T.boom.angMin, u.S.ang - LEAK_RATE * dt);
+      if (t - leak.t > LEAK_T && ses.hanging(u)) { this.finish({ title: tr.leakTitle, text: tr.leakFail }); return false; }
+    }
+    const storm = active(ev, 'storm', t);
+    if (storm && t - storm.t > STORM_GRACE) {
+      for (const v of ses.units) {
+        if (ses.tipped(v)) continue;
+        if (v.S.ang > STORM_ANG || ses.hanging(v)) { this.finish({ title: tr.stormTitle, text: tr.stormFail }); return false; }
+      }
+    }
+    return true;
+  }
+
+  /** Fase 24: con la grúa sobre un puente, la carga por eje no pasa de su límite */
+  private bridges(): boolean {
+    const { ses, L } = this;
+    if (!L.bridges) return true;
+    for (const u of ses.units) {
+      const q = axleLoad(u.T, u.C);
+      if (q === null) continue;
+      for (const b of L.bridges) {
+        if (Math.abs(u.S.x - b.x) <= b.w / 2 && Math.abs(u.S.z - b.z) <= b.d / 2 && q > b.maxAxle) {
+          this.finish({ title: tr.bridgeTitle, text: tr.bridge(u.T.name, q, b.maxAxle) });
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Fase 24: cada camión entra a su hora si su muelle está libre (ninguna carga sobre la caja); su carga, que espera
+   * fuera de la obra, pasa a la caja del camión. Mientras espera, el retraso cuenta.
+   */
+  private trucks(dt: number) {
+    const { ses, L } = this, run = ses.run, phys = ses.units[0].phys;
+    L.trucks!.forEach((tk, i) => {
+      if (run.tDone & (1 << i) || run.t < tk.at) return;
+      const bay = L.bays![tk.bay];
+      const busy = phys.loads.some((l) => {
+        const p = l.body.translation();
+        return Math.abs(p.x - bay.x) < 4.5 && Math.abs(p.z - bay.z) < 1.6 && p.y < bay.y + 3.5;
+      });
+      if (busy) { run.late += dt; return; }
+      const l = phys.loads[tk.crate];
+      l.body.setTranslation({ x: bay.x, y: bay.y + l.half.y + 0.02, z: bay.z }, true);
+      l.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      l.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      l.body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+      l.body.setEnabled(true);
+      run.tDone |= 1 << i;
+      if (tk.at > 0) ses.bus.emit('say', { text: tr.truckIn(i + 1, tk.bay + 1), s: 3 });
+    });
   }
 
   /**

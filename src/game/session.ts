@@ -18,9 +18,11 @@ import { Physics } from '../physics/world';
 import { levelBounds, placeCrane, populate } from '../levels/setup';
 import { ALL_LEVELS as LEVELS, TANDEM_IDS, TEST_COLUMN, placeTandem, tandemColumn } from '../levels/tandemSetup';
 import type { Level } from '../levels/levels';
-import { LESSONS, SCHOOL_CRANE, newSchool, type Lesson, type SchoolState } from '../school/lessons';
+import { SCHOOL_CRANE, lessonByN, newSchool, type Lesson, type SchoolState } from '../school/lessons';
 import { Bus, type GameEvents } from './events';
 import { t } from '../i18n';
+import { newSmooth, type SmoothRun } from './smooth';
+import { dailySite, todayUTC } from '../levels/generate';
 
 /** Grúas del menú: las de ruedas (fase 4), la grúa torre sobre camión (fase 8) y las de orugas (fase 6) */
 export const MENU_IDS: CraneId[] = [...TRUCK_IDS, 'crawler', 'lr'];
@@ -60,12 +62,29 @@ export interface Unit {
  * carga colgada. (parte B) bumpCd: espera entre golpes; lineD: margen a la línea eléctrica más cercana; inProx: dentro
  * de la alarma; wind: viento actual (m/s).
  */
-export interface Run {
+/** Turno; fase 22: con la suavidad (`SmoothRun`) */
+export interface Run extends SmoothRun {
   t: number; done: boolean; hard: number; bumps: number; prox: number; maxLmi: number;
   bumpCd: number; lineD: number; inProx: boolean; wind: number;
+  /**
+   * Izaje más exigente (fase 20), en el momento del LMI máximo: carga, t en el gancho (en el tándem, la parte de esa
+   * grúa), radio y grúa; radio máximo con carga colgada y carga más pesada. Campos planos: las instantáneas copian
+   * el turno con { ...run }.
+   */
+  peakLabel: string; peakMass: number; peakR: number; peakCrane: string;
+  maxR: number; maxRLabel: string; heavy: number; heavyLabel: string;
+  /**
+   * Fase 23: alarmas por pasar la carga encima de alguien, si está dentro y cuánto lleva; izajes sin la lista de
+   * chequeo, lista hecha para el próximo izaje (0/1), la carga colgaba en el paso anterior (0/1); tiempo de la cesta
+   * fuera de sus límites (s).
+   */
+  excl: number; inExcl: boolean; exclT: number; skips: number; checked: number; lifted: number; bkT: number;
+  /** Fase 24: camiones que ya entraron (máscara de bits) y retraso acumulado esperando muelle (s) */
+  tDone: number; late: number;
 }
 
-export const newRun = (): Run => ({ t: 0, done: false, hard: 0, bumps: 0, prox: 0, maxLmi: 0, bumpCd: 0, lineD: Infinity, inProx: false, wind: 0 });
+export const newRun = (): Run => ({ t: 0, done: false, hard: 0, bumps: 0, prox: 0, maxLmi: 0, bumpCd: 0, lineD: Infinity, inProx: false, wind: 0,
+  peakLabel: '', peakMass: 0, peakR: 0, peakCrane: '', maxR: 0, maxRLabel: '', heavy: 0, heavyLabel: '', excl: 0, inExcl: false, exclT: 0, skips: 0, checked: 0, lifted: 0, bkT: 0, tDone: 0, late: 0, ...newSmooth() });
 
 /** Qué se juega, sacado de la URL */
 export interface SessionDef {
@@ -83,7 +102,45 @@ export interface SessionDef {
   /** Lección de la escuela (fase 19): 1…6, o 0 */
   school: number;
   ids: CraneId[];
+  /** Trabajo que no es uno de los niveles fijos (fase 22: reto diario; fase 25: contratos de la carrera) */
+  job: Job | null;
+  /** Pantalla de la carrera (?carrera=1) */
+  career?: boolean;
 }
+
+/** Un trabajo con obra propia: récords aparte, sin guardar a mitad */
+export interface Job {
+  kind: 'reto' | 'contrato';
+  L: Level;
+  /** Clave de su récord (p. ej. reto-2026-11-26) */
+  key: string;
+  /** Cabecera de la ficha y los carteles */
+  head: string;
+  /** URL para repetirlo (sin grúa) */
+  url: string;
+  /** Tiempo del enlace compartido con el que se reta (s) */
+  rival?: number;
+  /** Fecha del reto */
+  date?: string;
+  /** Contrato de la carrera (fase 25): índice de la oferta y texto con el pago y la grúa */
+  offer?: number;
+  note?: string;
+}
+
+/** ?reto=AAAA-MM-DD (o ?reto=1: hoy): el reto diario de esa fecha */
+function dailyJob(params: URLSearchParams): Job | null {
+  const raw = params.get('reto');
+  if (raw === null) return null;
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : todayUTC();
+  const L = dailySite(date);
+  if (!L) return null;
+  const rival = Number(params.get('t'));
+  return { kind: 'reto', L, key: `reto-${date}`, head: t.daily.head(date), url: `?reto=${date}`, date,
+    rival: Number.isFinite(rival) && rival > 0 ? rival : undefined };
+}
+
+/** Trabajos de otros módulos (la carrera, fase 25, se añade desde career/job.ts) */
+export const jobSources: ((p: URLSearchParams) => Job | null)[] = [dailyJob];
 
 /**
  * ?nivel=1…14: un nivel (con ?grua= una de las permitidas; si no, la recomendada).
@@ -95,17 +152,21 @@ export function sessionDef(search: string): SessionDef {
   const params = new URLSearchParams(search);
   const nivel = Number(params.get('nivel')) || 0;
   const sn = Number(params.get('escuela')) || 0;
-  const school = !nivel && sn >= 1 && sn <= LESSONS.length ? sn : 0;
+  const school = !nivel && lessonByN(sn) ? sn : 0;
   const li = nivel >= 1 && nivel <= LEVELS.length ? nivel - 1 : -1;
-  const L = li >= 0 ? LEVELS[li] : null;
+  let job: Job | null = null;
+  if (li < 0 && !school) for (const f of jobSources) if ((job = f(params))) break;
+  const L = li >= 0 ? LEVELS[li] : job?.L ?? null;
   const freeTandem = !L && params.has('tandem');
   const tandem = freeTandem || !!L?.tandem;
+  // fase 25: la pantalla de la carrera va sobre el menú (sin partida)
   const showMenu = !L && !freeTandem && !school && !params.has('grua') && !params.has('libre');
+  const career = showMenu && params.has('carrera');
   const q = params.get('grua') as CraneId | null;
-  const ids: CraneId[] = L?.tandem ? [L.tandem.main.id, L.tandem.tail.id] : freeTandem ? [...TANDEM_IDS]
-    : school ? [SCHOOL_CRANE]
+  const ids: CraneId[] = L?.tandem ? [L.tandem.main.id, L.tandem.tail.id] : L?.crew ? L.crew.map((c) => c.id) : freeTandem ? [...TANDEM_IDS]
+    : school ? [lessonByN(school)!.crane ?? SCHOOL_CRANE]
     : [L ? (q && L.cranes.includes(q) ? q : L.rec) : q && MENU_IDS.includes(q) ? q : 'medium'];
-  return { nivel, li, L, freeTandem, tandem, showMenu, school, ids };
+  return { nivel, li, L, freeTandem, tandem, showMenu, school, ids, job, career };
 }
 
 /** Suelo bajo el chasis en su sitio (gy, gb, gc, gspread de CraneState) */
@@ -140,13 +201,17 @@ export class Session {
   running: boolean;
   /** Puenteo del LMI (tecla P): sin cortes, para poder probar el vuelco */
   bypass = false;
+  /** Modo experto (fase 21; en la fase 23 saltarse la lista de chequeo falla): lo pone el Presenter al empezar */
+  expert = false;
+  /** Fase 24: capacidad disponible (1, o 0,5 con el cable dañado): los cortes del LMI la tienen en cuenta */
+  capK = 1;
   run: Run = newRun();
 
   /** makeModel: los modelos 3D (`loadModels` en el juego, `allModels` en las pruebas) */
   constructor(def: SessionDef, scene: THREE.Scene, makeModel: ModelFactory) {
     this.def = def;
     const L = (this.L = def.L);
-    const lesson = (this.lesson = def.school ? LESSONS[def.school - 1] : null);
+    const lesson = (this.lesson = def.school ? lessonByN(def.school) : null);
     const site = (this.site = L ?? lesson?.site ?? null);
     this.sch = lesson ? newSchool() : null;
     // Estado de cada grúa y su colocación
@@ -206,7 +271,14 @@ export class Session {
     const { L, freeTandem } = this.def;
     if (L?.tandem) placeTandem(states[0], states[1], L.tandem, tandemColumn(L));
     else if (freeTandem) placeTandem(states[0], states[1]);
-    else if (L) placeCrane(states[0].T, states[0].S, L);
+    else if (L?.crew) {
+      // grúa auxiliar (fase 24): cada una en su sitio, con los estabilizadores fuera si se pide
+      L.crew.forEach((c, i) => {
+        const { S } = states[i];
+        S.x = c.x; S.z = c.z; S.h = -c.h;
+        if (c.out) S.out = S.outT = 1;
+      });
+    } else if (L) placeCrane(states[0].T, states[0].S, L);
     else if (this.lesson) {
       const { T, S, C } = states[0];
       placeCrane(T, S, this.lesson.site);

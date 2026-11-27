@@ -140,8 +140,8 @@ const FACADE = ['#a9a296', '#8f9295', '#b7aa92', '#9c8a78', '#7d8790', '#c2bbb0'
  */
 export function decorFor(nivel: number, L: Level | null): Decor {
   const free = !L;
-  const env: Env = free ? 'yard' : LEVEL_ENV[nivel - 1] ?? 'industrial';
-  const seed = free ? 977 : nivel * 7919 + 13;
+  const env: Env = free ? 'yard' : (L.env as Env | undefined) ?? LEVEL_ENV[nivel - 1] ?? 'industrial';
+  const seed = free ? 977 : L.seed ?? nivel * 7919 + 13;
   const R = rng(seed);
   const rnd = (a: number, b: number) => a + R() * (b - a);
   const pick = <T,>(l: T[]) => l[Math.floor(R() * l.length) % l.length];

@@ -1,7 +1,7 @@
 import type { CraneInput } from '../crane/kinematics';
 import type { DriveInput } from '../crane/drive';
 import { stepCrane, stepOutriggers } from '../crane/kinematics';
-import { lmiStatic } from '../crane/stability';
+import { lmiStatic, reach } from '../crane/stability';
 import { dynamicStability, stepTilt, supportMode, TILTED_PHI } from '../crane/ops';
 import { apply, carrierFrame, carrierPose, edgeAxis, rotate, worldToCarrier } from '../crane/pose';
 import { stepDrive, stepSuspension } from '../crane/drive';
@@ -12,6 +12,7 @@ import { stepSuperlift } from '../crane/superlift';
 import { cableAngle } from '../levels/tandemSetup';
 import type { Session, Unit } from './session';
 import { t } from '../i18n';
+import { smoothRest, smoothStep } from './smooth';
 
 /** Mandos sueltos: la grúa que no se maneja se queda quieta */
 export const IDLE: CraneInput = { slew: 0, luff: 0, tele: 0, hoist: 0, fine: false, sl: 0, jib: 0 };
@@ -28,6 +29,11 @@ export function controlUnit(ses: Session, u: Unit, dt: number, inp: CraneInput, 
   const { T, S, C, phys } = u;
   const { bus, L, bypass } = ses;
   if (ses.tipped(u)) return;
+  // cesta de personal (fase 23): con personas colgando, todo a velocidad fina
+  // (y más despacio aún: en fino la punta de una pluma de 40 m sube a ~0,6 m/s y el límite de la cesta es 0,6)
+  if (phys.attached?.kind === 'basket') {
+    inp = { ...inp, fine: true, hoist: inp.hoist * 0.6, slew: inp.slew * 0.4, luff: inp.luff * 0.4, tele: inp.tele * 0.4 };
+  }
   const say = (text: string, s?: number) => bus.emit('say', { text, s, unit: u.i });
   const sayOnce = (text: string) => bus.emit('say', { text, once: true, unit: u.i });
   const att = phys.attached;
@@ -62,8 +68,9 @@ export function controlUnit(ses: Session, u: Unit, dt: number, inp: CraneInput, 
   const md = supportMode(S, T);
   // Como la referencia: los cortes usan el LMI estático; la carga cuenta solo si cuelga.
   // Tándem: la parte de la carga que lleva esta grúa (medida en Rapier).
-  const mEval = ses.hanging(u) ? mLoad : T.hookM;
-  const noHoistUp = !!att && lmiStatic(T, C, md, S.Lb, S.ang, S.slew, mLoad) >= 1;
+  // fase 24: con el cable dañado (capK = 0,5) los cortes llegan con la mitad de carga
+  const mEval = (ses.hanging(u) ? mLoad : T.hookM) / ses.capK;
+  const noHoistUp = !!att && lmiStatic(T, C, md, S.Lb, S.ang, S.slew, mLoad / ses.capK) >= 1;
   let hitMsg = '';
   u.cut = stepCrane(T, S, inp, dt, {
     // C.jibRel sigue al ángulo del plumín que se está probando (T/G)
@@ -124,7 +131,17 @@ export function afterUnit(ses: Session, u: Unit, dt: number) {
   // Estabilidad con la tensión real del cable: un balanceo o un tirón también cuentan.
   const md = supportMode(S, T);
   u.dyn = dynamicStability(T, C, S, md, phys.tension, worldToCarrier(S, phys.gp));
-  if (ses.hanging(u)) ses.run.maxLmi = Math.max(ses.run.maxLmi, u.dyn.lmi); // LMI máximo con la carga colgada (maxLmi de la referencia)
+  if (ses.hanging(u)) {
+    trackLift(ses, u); // LMI máximo con la carga colgada (maxLmi de la referencia) e izaje más exigente
+    // suavidad (fase 22): balanceo, tirones y frenazos de la carga colgada (en el tándem, la grúa que se maneja)
+    if (u === ses.act) {
+      const v = phys.attached!.body.linvel();
+      smoothStep(ses.run, dt, {
+        swing: u.sideAng, tension: phys.tension,
+        static: phys.attached!.lugs ? 0 : T.hookM + ses.loadOnHook(u), vx: v.x, vz: v.z,
+      });
+    }
+  } else if (u === ses.act) smoothRest(ses.run);
   if (stepTilt(S, u.dyn, dt)) {
     const { p, axis } = edgeAxis(T, md, S.edge);
     const f = carrierFrame(S); // la arista viene en el marco del chasis
@@ -135,4 +152,16 @@ export function afterUnit(ses: Session, u: Unit, dt: number) {
     u.tipText = t.msg.tipText(Math.round(u.dyn.u * 100), md === 'tire' || md === 'move');
     bus.emit('tipping', { unit: u.i });
   }
+}
+
+/** Izaje más exigente (fase 20): el LMI máximo con su carga y su radio, el radio máximo y la carga más pesada */
+export function trackLift(ses: Session, u: Unit) {
+  const run = ses.run, { T, S, C } = u;
+  const label = u.phys.attached!.label, m = ses.loadOnHook(u), R = Math.max(0, reach(T, C, S.Lb, S.ang));
+  if (u.dyn.lmi > run.maxLmi) {
+    run.maxLmi = u.dyn.lmi;
+    run.peakLabel = label; run.peakMass = m; run.peakR = R; run.peakCrane = T.name;
+  }
+  if (R > run.maxR) { run.maxR = R; run.maxRLabel = label; }
+  if (m > run.heavy) { run.heavy = m; run.heavyLabel = label; }
 }
