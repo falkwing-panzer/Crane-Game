@@ -118,6 +118,11 @@ export class CameraRig {
     }
   }
 
+  /** Fase 27: otra dirección del sol (atardecer, luna), con la misma distancia */
+  setSunDir(d: THREE.Vector3) {
+    this.sunOffset.copy(d).setLength(this.sunOffset.length());
+  }
+
   private setShadowHalf(h: number) {
     if (h === this.shadowHalf) return;
     this.shadowHalf = h;

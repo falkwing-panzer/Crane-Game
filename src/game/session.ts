@@ -22,7 +22,9 @@ import { SCHOOL_CRANE, lessonByN, newSchool, type Lesson, type SchoolState } fro
 import { Bus, type GameEvents } from './events';
 import { t } from '../i18n';
 import { newSmooth, type SmoothRun } from './smooth';
-import { dailySite, todayUTC } from '../levels/generate';
+import { dailySite, hashSeed, todayUTC } from '../levels/generate';
+import { sanitizeLevel } from '../levels/custom';
+import { cached } from '../share/codec';
 
 /** Grúas del menú: las de ruedas (fase 4), la grúa torre sobre camión (fase 8) y las de orugas (fase 6) */
 export const MENU_IDS: CraneId[] = [...TRUCK_IDS, 'crawler', 'lr'];
@@ -81,10 +83,12 @@ export interface Run extends SmoothRun {
   excl: number; inExcl: boolean; exclT: number; skips: number; checked: number; lifted: number; bkT: number;
   /** Fase 24: camiones que ya entraron (máscara de bits) y retraso acumulado esperando muelle (s) */
   tDone: number; late: number;
+  /** Fase 27: segundos seguidos con una carga grande colgada por encima del límite de viento */
+  wlT: number;
 }
 
 export const newRun = (): Run => ({ t: 0, done: false, hard: 0, bumps: 0, prox: 0, maxLmi: 0, bumpCd: 0, lineD: Infinity, inProx: false, wind: 0,
-  peakLabel: '', peakMass: 0, peakR: 0, peakCrane: '', maxR: 0, maxRLabel: '', heavy: 0, heavyLabel: '', excl: 0, inExcl: false, exclT: 0, skips: 0, checked: 0, lifted: 0, bkT: 0, tDone: 0, late: 0, ...newSmooth() });
+  peakLabel: '', peakMass: 0, peakR: 0, peakCrane: '', maxR: 0, maxRLabel: '', heavy: 0, heavyLabel: '', excl: 0, inExcl: false, exclT: 0, skips: 0, checked: 0, lifted: 0, bkT: 0, tDone: 0, late: 0, wlT: 0, ...newSmooth() });
 
 /** Qué se juega, sacado de la URL */
 export interface SessionDef {
@@ -106,11 +110,15 @@ export interface SessionDef {
   job: Job | null;
   /** Pantalla de la carrera (?carrera=1) */
   career?: boolean;
+  /** Fase 28: editor de obras (?editor=1, o ?editor=código para editar una) */
+  editor?: string | null;
+  /** Fase 28: repetición de un turno (la monta la app con las entradas grabadas) */
+  replay?: { rec: unknown[]; head: string } | null;
 }
 
 /** Un trabajo con obra propia: récords aparte, sin guardar a mitad */
 export interface Job {
-  kind: 'reto' | 'contrato';
+  kind: 'reto' | 'contrato' | 'obra';
   L: Level;
   /** Clave de su récord (p. ej. reto-2026-11-26) */
   key: string;
@@ -139,8 +147,17 @@ function dailyJob(params: URLSearchParams): Job | null {
     rival: Number.isFinite(rival) && rival > 0 ? rival : undefined };
 }
 
+/** ?obra=código (fase 28): una obra del editor que viene en el enlace (la app la descomprime antes) */
+function customJob(params: URLSearchParams): Job | null {
+  const code = params.get('obra');
+  if (!code) return null;
+  const L = sanitizeLevel(cached(code));
+  if (!L) return null;
+  return { kind: 'obra', L, key: `obra-${hashSeed(code)}`, head: t.editor.head, url: `?obra=${code}` };
+}
+
 /** Trabajos de otros módulos (la carrera, fase 25, se añade desde career/job.ts) */
-export const jobSources: ((p: URLSearchParams) => Job | null)[] = [dailyJob];
+export const jobSources: ((p: URLSearchParams) => Job | null)[] = [dailyJob, customJob];
 
 /**
  * ?nivel=1…14: un nivel (con ?grua= una de las permitidas; si no, la recomendada).
@@ -162,11 +179,12 @@ export function sessionDef(search: string): SessionDef {
   // fase 25: la pantalla de la carrera va sobre el menú (sin partida)
   const showMenu = !L && !freeTandem && !school && !params.has('grua') && !params.has('libre');
   const career = showMenu && params.has('carrera');
+  const editor = showMenu && !career ? params.get('editor') : null;
   const q = params.get('grua') as CraneId | null;
   const ids: CraneId[] = L?.tandem ? [L.tandem.main.id, L.tandem.tail.id] : L?.crew ? L.crew.map((c) => c.id) : freeTandem ? [...TANDEM_IDS]
     : school ? [lessonByN(school)!.crane ?? SCHOOL_CRANE]
     : [L ? (q && L.cranes.includes(q) ? q : L.rec) : q && MENU_IDS.includes(q) ? q : 'medium'];
-  return { nivel, li, L, freeTandem, tandem, showMenu, school, ids, job, career };
+  return { nivel, li, L, freeTandem, tandem, showMenu, school, ids, job, career, editor };
 }
 
 /** Suelo bajo el chasis en su sitio (gy, gb, gc, gspread de CraneState) */
@@ -195,6 +213,8 @@ export class Session {
   /** Terreno (fase 18): plano en los niveles; meseta de prueba en la prueba libre; colinas del horizonte */
   readonly terrain: Terrain;
   readonly bus = new Bus<GameEvents>();
+  /** Fase 28: es la repetición de un turno (no se guardan récords, ni la carrera, ni las estadísticas) */
+  replaying = false;
   /** Grúa que se maneja (Tab la cambia en el tándem) */
   act: Unit;
   /** El turno corre (no hay ficha, menú ni cartel abiertos) */
@@ -222,7 +242,7 @@ export class Session {
     this.place(states);
     // decorado de fondo (fase 17) y terreno (fase 18): el terreno sale del decorado (colinas más allá de todo)
     this.decor = decorFor(def.nivel, site);
-    this.terrain = terrainFor(this.decor, !site && !def.freeTandem);
+    this.terrain = terrainFor(this.decor, !site && !def.freeTandem, !!site?.ridge);
     for (const { T, S } of states) Object.assign(S, groundState(T, S, this.terrain));
 
     // Física: la primera grúa crea el mundo; la segunda lo comparte

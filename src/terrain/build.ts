@@ -31,21 +31,23 @@ export function decorReach(D: Decor) {
 }
 
 /** Colinas del horizonte de una partida: empiezan 30 m más allá del decorado (y nunca antes de 420 m) */
-export function hillsFor(D: Decor): Hills {
+export function hillsFor(D: Decor, ridge = false): Hills {
   const R = rng(D.seed + 2);
-  const r0 = Math.max(420, decorReach(D) + 30);
+  const reach = decorReach(D), r0 = Math.max(420, reach + 30);
   const cut: Rect[] = D.water.filter((w) => (w.x1 - w.x0) * (w.z1 - w.z0) > 4000);
   return {
     center: D.center, r0, r1: r0 + 150, hMin: D.city ? 10 : 18, hMax: D.city ? 32 : 60,
     phase: [R() * 6.3, R() * 6.3, R() * 6.3], cut, cutFade: 90,
+    // loma (fase 27): desde lo último del decorado el suelo baja 45 m en 260 m; las colinas lejanas quedan más abajo
+    ...(ridge ? { ridge: { r0: reach + 10, r1: reach + 270, depth: 45 } } : {}),
   };
 }
 
-export function terrainFor(D: Decor, free: boolean): Terrain {
+export function terrainFor(D: Decor, free: boolean, ridge = false): Terrain {
   const patches = [];
   if (free) {
     const r = mesaRect(TEST_MESA);
     patches.push(makePatch({ x0: r.x0 - 2, x1: r.x1 + 2, z0: r.z0 - 2, z1: r.z1 + 2 }, MESA_CELL, (x, z) => mesaHeight(TEST_MESA, x, z)));
   }
-  return new Terrain(patches, hillsFor(D));
+  return new Terrain(patches, hillsFor(D, ridge));
 }

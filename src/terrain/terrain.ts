@@ -65,6 +65,8 @@ export const mesaSlopes = (m: Mesa) => m.run.map((r) => (Math.atan(m.h / r) * 18
 export interface Hills {
   center: [number, number]; r0: number; r1: number; hMin: number; hMax: number;
   phase: [number, number, number]; cut: Rect[]; cutFade: number;
+  /** Fase 27: la obra está en lo alto de una loma: el suelo baja `depth` m entre r0 y r1 de `ridge` (solo decorado) */
+  ridge?: { r0: number; r1: number; depth: number };
 }
 
 const smooth = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -76,14 +78,16 @@ function rectDist(r: Rect, x: number, z: number) {
 
 export function hillHeight(H: Hills, x: number, z: number) {
   const dx = x - H.center[0], dz = z - H.center[1], r = Math.hypot(dx, dz);
-  if (r <= H.r0) return 0;
+  const drop = H.ridge ? H.ridge.depth * smooth(H.ridge.r0, H.ridge.r1, r) : 0;
+  if (r <= H.r0) return drop ? -drop : 0;
   const a = Math.atan2(dz, dx), [p0, p1, p2] = H.phase;
   const v = 0.5 + 0.25 * Math.sin(a * 3 + p0) + 0.17 * Math.sin(a * 7 + p1) + 0.08 * Math.sin(a * 17 + p2);
   // ondulación radial: lomas sucesivas en vez de un muro
   const w = 0.75 + 0.25 * Math.sin(r / 37 + p1 + a * 2) * Math.cos(r / 23 + p2);
   let k = smooth(H.r0, H.r1, r);
   for (const c of H.cut) k *= smooth(0, H.cutFade, rectDist(c, x, z));
-  return k * (H.hMin + (H.hMax - H.hMin) * v) * w;
+  const h = k * (H.hMin + (H.hMax - H.hMin) * v) * w;
+  return drop ? h - drop : h;
 }
 
 export class Terrain {

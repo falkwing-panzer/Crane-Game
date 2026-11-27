@@ -6,7 +6,7 @@ import { baseConfig, lmiStatic } from './stability';
 import { stepSuperlift, trayHitsTracks, SUPERLIFT_SPEED } from './superlift';
 import { apply, carrierFrame, carrierPose, edgeAxis, rotate } from './pose';
 import { dynamicStability, stepTilt } from './ops';
-import { Physics, FIXED_DT } from '../physics/world';
+import { Physics, FIXED_DT, rigPlan } from '../physics/world';
 
 // Fase 6B: LR 3000. Radio del superlift (K/L), choques de la bandeja y cable con cargas de cientos de t.
 
@@ -126,7 +126,8 @@ describe('LR 3000: física', () => {
     expect(tMin).toBeGreaterThan(840 * 0.85);
     expect(tMax).toBeLessThan(840 * 1.15);
     for (let i = 0; i < 300; i++) P.step(S, pose);
-    expect(P.tension).toBeCloseTo(840, 0);
+    // fase 26: la pieza de 6 × 6 m va con balancín (su peso también cuelga del cable)
+    expect(P.tension).toBeCloseTo(840 + (rigPlan(L.half, 800).beam?.mass ?? 0), 0);
   });
 
   it('volcada hacia delante, cae sobre la arista delantera con la pluma al suelo', () => {

@@ -71,6 +71,8 @@ export interface CraneInput {
   sl?: number;
   /** Plumín: +1 bajar (G), −1 subir (T) (jd − ju de la referencia) */
   jib?: number;
+  /** Cuerdas guía (fase 26): +1 girar la carga a la izquierda (Z), −1 a la derecha (U) */
+  guide?: number;
 }
 
 /** Límites que impone el LMI en un paso (ver guard en step() de la referencia). */

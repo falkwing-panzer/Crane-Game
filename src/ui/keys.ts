@@ -5,7 +5,7 @@ import { t } from '../i18n';
 // Mayús, Ctrl y Alt valen igual a la izquierda que a la derecha (`normCode`).
 
 /** Mandos que se mantienen pulsados */
-export const HOLD = ['fw', 'bk', 'stl', 'str', 'sll', 'slr', 'lu', 'ld', 'ti', 'to', 'hu', 'hd', 'ju', 'jd', 'sli', 'slo', 'fine'] as const;
+export const HOLD = ['fw', 'bk', 'stl', 'str', 'sll', 'slr', 'lu', 'ld', 'ti', 'to', 'hu', 'hd', 'ju', 'jd', 'sli', 'slo', 'tgl', 'tgr', 'fine'] as const;
 /** Acciones de un toque */
 export const TAP = ['hook', 'outriggers', 'ballast', 'yguy', 'mount', 'view', 'switch', 'reset', 'bypass', 'rewind', 'mute', 'help', 'chart', 'checklist'] as const;
 export type HoldAction = (typeof HOLD)[number];
@@ -17,7 +17,7 @@ export type KeyMap = Record<Action, string>;
 export const DEFAULT_KEYS: Readonly<KeyMap> = Object.freeze({
   fw: 'ArrowUp', bk: 'ArrowDown', stl: 'ArrowLeft', str: 'ArrowRight',
   sll: 'KeyA', slr: 'KeyD', lu: 'KeyW', ld: 'KeyS', ti: 'KeyQ', to: 'KeyE', hu: 'KeyR', hd: 'KeyF',
-  ju: 'KeyT', jd: 'KeyG', sli: 'KeyK', slo: 'KeyL', fine: 'Shift',
+  ju: 'KeyT', jd: 'KeyG', sli: 'KeyK', slo: 'KeyL', tgl: 'KeyZ', tgr: 'KeyU', fine: 'Shift',
   hook: 'Space', outriggers: 'KeyO', ballast: 'KeyB', yguy: 'KeyY', mount: 'KeyM', view: 'KeyV', switch: 'Tab',
   reset: 'KeyX', bypass: 'KeyP', rewind: 'Backspace', mute: 'KeyN', help: 'KeyH', chart: 'KeyC', checklist: 'KeyJ',
 });

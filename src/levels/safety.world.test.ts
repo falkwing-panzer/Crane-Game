@@ -25,7 +25,7 @@ const OBEY: Record<Signal, Partial<CraneInput>> = {
   carroFuera: { tele: 1, fine: true }, carroDentro: { tele: -1, fine: true }, para: {}, espera: {}, engancha: {}, suelta: {},
 };
 
-function playBlind(n: number, maxS = 1500) {
+export function playBlind(n: number, maxS = 1500) {
   const ses = new Session(sessionDef(`?nivel=${n}`), new THREE.Scene(), allModels);
   const game = new GameStep(ses, { state: () => IDLE, drive: () => IDLE_DRIVE });
   let end: { fail: unknown; stars?: number } | null = null;

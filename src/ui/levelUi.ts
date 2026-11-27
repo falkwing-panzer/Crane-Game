@@ -198,7 +198,8 @@ export class LevelUi {
       <div class="levels">${lic.ruedas || this.unlockAll ? `<a class="lvl daily" href="${location.pathname}?reto=${today}"><small>${t.daily.head(today)}</small><b>${t.daily.menu}</b>
         <span class="stars">${starText(dr?.stars ?? 0)}</span><small>${t.daily.today(dr ? fmt(dr.time) : null)}</small></a>`
         : `<a class="lvl daily locked" href="${examUrl('ruedas')}"><small>${t.daily.head(today)}</small><b>${t.daily.menu}</b><small>${t.license.locked(t.license.names.ruedas)}</small></a>`}
-        <a class="lvl daily" href="${location.pathname}?carrera=1"><small>${t.career.menuText}</small><b>${t.career.menu}</b></a></div>
+        <a class="lvl daily" href="${location.pathname}?carrera=1"><small>${t.career.menuText}</small><b>${t.career.menu}</b></a>
+        <a class="lvl daily" href="${location.pathname}?editor=1"><small>${t.editor.menuText}</small><b>${t.editor.menu}</b></a></div>
       <div class="levels">${LEVELS.map((L, i) => {
         const r = rec[i];
         if (!levelOpen(L, lic, this.unlockAll)) {
@@ -241,7 +242,7 @@ export class LevelUi {
           <small>${c.size}${c.id === L.rec ? tl.recommended : ''}</small><b>${c.name}</b>
           <small>${tl.craneLine(c.structMax, boom)}</small><em class="${ok ? '' : 'why'}">${ok ? c.note : why}</em></button>`;
       }).join('')}</div>`}
-      <div class="row"><a class="btn" href="${homeUrl()}">${tl.menuBtn}</a>${L.tandem || L.crew ? '' : `<button class="btn" id="l-plan">${t.plan.open}</button>`}${cont ? `<button class="btn" id="l-cont">${tl.cont(fmt(cont.t), cont.crane)}</button>` : ''}<button class="btn primary" id="l-start">${tl.start}</button></div>`);
+      <div class="row"><a class="btn" href="${homeUrl()}">${tl.menuBtn}</a>${job?.kind === 'obra' ? `<a class="btn" href="${location.pathname}?editor=${job.url.slice('?obra='.length)}">${t.editor.edit}</a>` : ''}${L.tandem || L.crew ? '' : `<button class="btn" id="l-plan">${t.plan.open}</button>`}${cont ? `<button class="btn" id="l-cont">${tl.cont(fmt(cont.t), cont.crane)}</button>` : ''}<button class="btn primary" id="l-start">${tl.start}</button></div>`);
     const cb = this.card.querySelector<HTMLButtonElement>('#l-cont');
     if (cb && cont) cb.onclick = () => { this.close(); cont.go(); };
     this.card.querySelectorAll<HTMLButtonElement>('.copt').forEach((b) => {
@@ -277,6 +278,21 @@ export class LevelUi {
     ps.onclick = () => { close(); start(); };
   }
 
+  /** Fase 28: enlace con la repetición del turno (null si no se puede compartir) */
+  shareReplay: (() => Promise<string | null>) | null = null;
+
+  /** Botón "Compartir la repetición" de los carteles */
+  private repBtn() { return this.shareReplay ? `<button class="btn" id="l-rep">${t.replays.share}</button>` : ''; }
+  private bindRep() {
+    const b = this.card.querySelector<HTMLButtonElement>('#l-rep');
+    if (!b || !this.shareReplay) return;
+    b.onclick = async () => {
+      const u = await this.shareReplay!();
+      if (!u) { b.textContent = t.replays.notClean; b.disabled = true; return; }
+      void navigator.clipboard?.writeText(u).then(() => { b.textContent = t.replays.copied; }, () => { b.textContent = u; });
+    };
+  }
+
   /** Nivel completado (checkWin de la referencia) */
   won(i: number, crane: string, res: { t: number; hard: number; bumps: number; prox: number; maxLmi: number; excl?: number; skips?: number } & Partial<LiftStats>, record: boolean,
     smooth?: SmoothScore | null, smoothBest = false) {
@@ -285,7 +301,7 @@ export class LevelUi {
       <div class="stars big">${starText(n)}</div>${record ? `<p class="rec">${tl.newRecord}</p>` : ''}
       <div class="stats"><span>${tl.time(fmt(L.par))}</span><b>${fmt(res.t)}</b><span>${tl.hard}</span><b>${res.hard}</b>
       <span>${tl.bumps}</span><b>${res.bumps}</b><span>${tl.prox}</span><b>${res.prox}</b>${L.workers ? `<span>${t.rigger.excl}</span><b>${res.excl ?? 0}</b>` : ''}${L.checklist ? `<span>${t.rigger.skips}</span><b>${res.skips ?? 0}</b>` : ''}<span>${tl.maxLmi}</span><b>${Math.round(res.maxLmi * 100)} %</b></div>${smoothHtml(smooth, smoothBest)}${liftHtml(res, !!L.tandem)}
-      <div class="row"><a class="btn" href="${homeUrl()}">${tl.menuBtn}</a>${job?.date ? `<button class="btn" id="l-share">${t.daily.share}</button>` : ''}<a class="btn${next ? '' : ' primary'}" href="${this.url(i)}">${tl.retry}</a>
+      <div class="row"><a class="btn" href="${homeUrl()}">${tl.menuBtn}</a>${job?.date ? `<button class="btn" id="l-share">${t.daily.share}</button>` : ''}${this.repBtn()}<a class="btn${next ? '' : ' primary'}" href="${this.url(i)}">${tl.retry}</a>
       ${next ? `<a class="btn primary" id="l-next" href="${levelUrl(i + 2)}">${tl.next}</a>` : ''}</div>
       ${next || job ? '' : `<p>${tl.last}</p>`}`);
     const sh = this.card.querySelector<HTMLButtonElement>('#l-share');
@@ -294,15 +310,17 @@ export class LevelUi {
       u.search = `?reto=${job.date}&t=${Math.ceil(res.t)}`;
       void navigator.clipboard?.writeText(u.toString()).then(() => { sh.textContent = t.daily.copied; }, () => { sh.textContent = u.toString(); });
     };
+    this.bindRep();
     this.card.querySelector<HTMLElement>('#l-next')?.focus({ preventScroll: true });
   }
 
   /** Nivel fallido (fail de la referencia) */
   failed(i: number, crane: string, title: string, text: string, res?: { maxLmi: number } & Partial<LiftStats>, onReplay?: () => void) {
     this.show(`<div class="eyebrow">${this.job ? `${this.job.head} · ${crane}` : tl.failed(i + 1, crane)}</div><h2>${title}</h2><p>${withKeys(text)}</p>${res ? liftHtml(res, !!this.lvl(i).tandem, true) : ''}
-      <div class="row"><a class="btn" href="${homeUrl()}">${tl.menuBtn}</a>${onReplay ? `<button class="btn" id="l-replay">${t.replay.again}</button>` : ''}<a class="btn primary" id="l-retry" href="${this.job ? this.url(i) : location.href}">${tl.retry}</a></div>`, true);
+      <div class="row"><a class="btn" href="${homeUrl()}">${tl.menuBtn}</a>${onReplay ? `<button class="btn" id="l-replay">${t.replay.again}</button>` : ''}${this.repBtn()}<a class="btn primary" id="l-retry" href="${this.job ? this.url(i) : location.href}">${tl.retry}</a></div>`, true);
     const rb = this.card.querySelector<HTMLButtonElement>('#l-replay');
     if (rb && onReplay) rb.onclick = () => onReplay();
+    this.bindRep();
     this.card.querySelector<HTMLElement>('#l-retry')?.focus({ preventScroll: true });
   }
 

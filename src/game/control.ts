@@ -29,6 +29,7 @@ export function controlUnit(ses: Session, u: Unit, dt: number, inp: CraneInput, 
   const { T, S, C, phys } = u;
   const { bus, L, bypass } = ses;
   if (ses.tipped(u)) return;
+  phys.guide = inp.guide ?? 0;
   // cesta de personal (fase 23): con personas colgando, todo a velocidad fina
   // (y más despacio aún: en fino la punta de una pluma de 40 m sube a ~0,6 m/s y el límite de la cesta es 0,6)
   if (phys.attached?.kind === 'basket') {

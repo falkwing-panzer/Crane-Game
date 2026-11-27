@@ -54,6 +54,7 @@ export function helpGroups(f: HelpFlags, k: KeyMap = activeKeys()): HelpGroup[] 
   else if (f.tele) crane.push([two('ti', 'to'), h.tele]);
   crane.push([two('hu', 'hd'), h.hoist]);
   crane.push([K('hook'), h.hook]);
+  crane.push([two('tgl', 'tgr'), h.guide]);
   if (f.tie) crane.push([K('hook'), h.tie]);
   crane.push([K('fine'), h.fine]);
   g.push({ title: h.crane, keys: crane });
@@ -101,7 +102,7 @@ export function helpHtml(groups: HelpGroup[]) {
 /** Grupos del editor de teclas (todas las acciones, sirvan o no a la grúa de esta partida) */
 export const KEY_GROUPS: [keyof typeof t.keys.groups, Action[]][] = [
   ['drive', ['fw', 'bk', 'stl', 'str', 'outriggers']],
-  ['crane', ['sll', 'slr', 'lu', 'ld', 'ti', 'to', 'hu', 'hd', 'ju', 'jd', 'sli', 'slo', 'fine', 'hook']],
+  ['crane', ['sll', 'slr', 'lu', 'ld', 'ti', 'to', 'hu', 'hd', 'ju', 'jd', 'sli', 'slo', 'tgl', 'tgr', 'fine', 'hook']],
   ['mount', ['ballast', 'yguy', 'mount']],
   ['game', ['view', 'chart', 'checklist', 'switch', 'reset', 'bypass', 'rewind', 'mute', 'help']],
 ];

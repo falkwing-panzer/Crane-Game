@@ -59,9 +59,22 @@ export interface SignalIn {
   hoistRoom: number;
   /** Se puede subir más la pluma (ángulo por debajo del máximo) */
   luffRoom: boolean;
+  /** Margen de la carga dentro de la zona de destino (m, por lado): la precisión para dejarla (fase 26) */
+  slack?: number;
 }
 
 /** Tolerancias (m): de giro (en el arco), de radio y de altura al bajar; balanceo (m/s) a partir del cual se espera */
+const D = Math.PI / 180;
+/**
+ * Fase 26: con carga, el señalero no pide subir la pluma de 70°: con la pluma tan empinada y poco cable, la carga toca la pluma
+ * (que ahora choca). Para acercar, mete pluma.
+ */
+export const LUFF_MAX = 70 * D;
+/**
+ * Cable mínimo para que la carga cuelgue sin tocar la pluma (fase 26): con la pluma empinada, la carga de radio `r`
+ * en planta queda junto a la pluma si cuelga corta.
+ */
+export const boomClearCable = (ang: number, r: number) => (ang > 0 ? Math.max(CABLE_MIN, (r + 0.7) * Math.tan(ang) - 2) : CABLE_MIN);
 export const SIG_TOL = { arc: 1, radial: 1, pick: 0.4, near: 3, touch: 0.3, swing: 0.7, swingNear: 0.3 };
 
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -82,7 +95,7 @@ export function signalFor(s: SignalIn): Signal {
     return 'sube';
   }
   // para enganchar hace falta más precisión que para dejar la carga en su zona
-  const tol = s.carrying ? 0.6 : SIG_TOL.pick;
+  const tol = s.carrying ? Math.max(0.15, Math.min(0.6, 0.7 * (s.slack ?? 1))) : SIG_TOL.pick;
   if (Math.abs(dA) * Math.max(rA, rG) > tol) return dA > 0 ? 'giraIzq' : 'giraDer';
   const dR = rG - rA;
   if (Math.abs(dR) > tol) {
@@ -90,7 +103,7 @@ export function signalFor(s: SignalIn): Signal {
     // más lejos: se saca pluma (gana radio sin perder altura) mientras quede; más cerca: se sube la pluma
     // (si sobra altura, bajar la pluma gana radio más deprisa)
     if (dR > 0) return s.teleRoom && s.at.bottom - s.clearH < 3 ? 'sacaPluma' : 'bajaPluma';
-    return 'subePluma';
+    return s.luffRoom || s.tower ? 'subePluma' : 'metePluma';
   }
   const h = s.at.bottom - s.goal.y;
   // encima del destino: antes de bajar, que se calme el balanceo
@@ -121,9 +134,16 @@ export function sessionSignal(ses: Session): Signal | null {
   const tip = phys.headWorld();
   const at = { x: tip.x, z: tip.z, bottom: c ? c.y - a!.half.y : hk.y - HOOK_HALF_H };
   let goal: { x: number; z: number; y: number };
+  let slack: number | undefined;
   if (a) {
-    const z = L.zones.reduce((p, q) => (Math.hypot(q.x - at.x, q.z - at.z) < Math.hypot(p.x - at.x, p.z - at.z) ? q : p));
+    // la zona libre más cercana (fase 27: en una zona ya ocupada por otra carga no cabe; las pilas, la de arriba)
+    const taken = (z: (typeof L.zones)[number]) => phys.loads.some((l) => l !== a && (() => { const p = phys.placed(l); return !!p && inZone(p, z); })());
+    const free = L.zones.filter((z) => !taken(z));
+    const z = (free.length ? free : L.zones).reduce((p, q) => (Math.hypot(q.x - at.x, q.z - at.z) < Math.hypot(p.x - at.x, p.z - at.z) ? q : p));
     goal = { x: z.x, z: z.z, y: z.y };
+    // la carga puede llegar girada: se cuenta su lado mayor en las dos direcciones
+    const big = Math.max(a.half.x, a.half.z);
+    slack = Math.min(z.w / 2 - big, z.d / 2 - big);
   } else {
     const n = next.body.translation();
     goal = { x: n.x, z: n.z, y: n.y + next.half.y };
@@ -139,12 +159,12 @@ export function sessionSignal(ses: Session): Signal | null {
   }
   const pos = (l: typeof next) => { const p = l.body.translation(); return { x: p.x, z: p.z, r: Math.hypot(l.half.x, l.half.z) }; };
   return signalFor({
-    pivot: { x: piv.x, z: piv.z }, at, goal, clearH: top + 1.5,
+    pivot: { x: piv.x, z: piv.z }, at, goal, clearH: top + 1.5, slack,
     carrying: !!a, resting: !!a && phys.isResting(a), placed: !!a && inAnyZone(a),
     person: run.inExcl || (!!a && personAhead(pos(a), goal, L.workers ?? [], run.t)), tower: !!T.tower,
     speed: (() => { const v = (a ? a.body : phys.hookBody).linvel(); return Math.hypot(v.x, v.z); })(),
     offset: (() => { const p = (a ? a.body : phys.hookBody).translation(); return Math.hypot(p.x - tip.x, p.z - tip.z); })(),
-    tipY: phys.headWorld().y, hoistRoom: Math.max(0, S.cable - CABLE_MIN), luffRoom: S.ang < T.boom.angMax - 3 * Math.PI / 180,
+    tipY: phys.headWorld().y, hoistRoom: Math.max(0, S.cable - boomClearCable(S.ang, a ? Math.hypot(a.half.x, a.half.z) : 0.5)), luffRoom: S.ang < T.boom.angMax - 3 * D && (!a || S.ang < LUFF_MAX),
     // queda telescopio y sacarlo no llevaría el LMI al corte
     teleRoom: !T.tower && !T.crawler && S.Lb < teleLimit(T, S) - 0.2
       && lmiStatic(T, u.C, supportMode(S, T), Math.min(T.boom.max, S.Lb + 1.5), S.ang, S.slew, T.hookM + (ses.hanging(u) ? ses.loadOnHook(u) : 0))

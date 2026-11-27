@@ -20,6 +20,9 @@ import { Sound } from './ui/audio';
 import { loadModels, type ModelFactory } from './render/models/load';
 import { CRANES } from './crane/cranes';
 import { t } from './i18n';
+import { prepareShared } from './share/codec';
+import { replayDef, replayOf, shareLink } from './share/replay';
+import { Recording } from './game/record';
 
 /** Una partida montada: lo que hay que desmontar al cambiar de nivel o de grúa */
 interface Mounted {
@@ -129,8 +132,12 @@ export class App {
     const note = this.opened > 0 ? this.loading() : null;
     try {
       if (note) await nextPaint();
+      // fase 28: obras y repeticiones del enlace (comprimidas): se descomprimen antes de armar la partida
+      await prepareShared(search, location.hash);
+      const rp = replayOf(search, location.hash);
+      if (rp) await prepareShared(rp.s);
       if (my !== this.seq) return;
-      const def = sessionDef(search);
+      const def = (rp && replayDef(rp)) || sessionDef(search);
       const make = await loadModels(def.ids.map((id) => CRANES[id]));
       if (my !== this.seq) return;
       const m = this.mount(def, make);
@@ -140,6 +147,8 @@ export class App {
       this.cur = m;
       this.opened++;
       this.resume(m, search);
+      if (def.replay) this.startReplay(m, def.replay);
+      else if (new URLSearchParams(search).has('repeticion')) m.view.lui.show(`<h2>${t.replays.end}</h2><p>${t.replays.bad}</p><div class="row"><a class="btn primary" href="${location.pathname}">${t.levels.menuBtn}</a></div>`);
       // partida lista (antes del primer cuadro): performance.getEntriesByName('gruas-partida')
       performance.mark('gruas-partida');
     } finally {
@@ -172,6 +181,23 @@ export class App {
     ses.bus.emit('say', { text: t.msg.continued, s: 2 });
   }
 
+  /** Fase 28: reproduce las entradas grabadas desde el principio del turno, sin mandos del jugador */
+  private startReplay(m: Mounted, r: { rec: unknown[]; head: string }) {
+    const { ses, game, view } = m;
+    ses.replaying = true;
+    game.source = Recording.fromJSON(r.rec as Parameters<typeof Recording.fromJSON>[0]).player();
+    view.lui.close();
+    ses.running = true;
+    view.follow(ses.act);
+    const bar = document.createElement('div');
+    bar.className = 'panel replay-note';
+    bar.innerHTML = `<b>${t.replays.banner(r.head)}</b><small>${t.replays.note}</small><a class="btn" href="${location.pathname}">${t.replays.exit}</a>`;
+    m.el.appendChild(bar);
+    game.onReplayEnd = () => {
+      if (!ses.run.done) view.lui.show(`<h2>${t.replays.end}</h2><p>${t.replays.note}</p><div class="row"><a class="btn primary" href="${location.pathname}">${t.levels.menuBtn}</a></div>`);
+    };
+  }
+
   /** Aviso mientras se arma la partida nueva (tapa la escena vacía) */
   private loading() {
     const el = document.createElement('div');
@@ -192,6 +218,8 @@ export class App {
     const ses = new Session(def, ctx.scene, make);
     const game = new GameStep(ses, input);
     const view = new Presenter(ctx, ses, settings, el, sound, input, (u) => { void this.go(new URL(u, location.href).search); });
+    // fase 28: compartir la repetición del turno desde los carteles de nivel completado y fallido
+    if (!def.replay) view.lui.shareReplay = () => shareLink(ses, game, location.search, `${ses.L?.name ?? ''} · ${ses.units[0].T.name}`);
     bindCommands(ses, game, input, view, settings, () => this.loop.paused);
     return { ses, game, view, el, mark };
   }

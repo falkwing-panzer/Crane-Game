@@ -1,3 +1,5 @@
+import { FLIP_LEVEL } from './flip';
+import { SCENARIO_LEVELS } from './scenarios';
 // Izaje en tándem (fase 10): la prueba libre (?tandem=1) y el nivel 14 "Columna en tándem". Sin three.js (se usa en
 // las pruebas). Nada de esto está en la referencia (su nivel 13 tiene una columna de 1.200 t que la AT 500-8 no podría
 // llevar de cola): columna de 40 m, Ø 5 m y 400 t, límites y obra de 120 × 80 m aprobados por Jesús.
@@ -115,8 +117,8 @@ export const TANDEM_LEVEL: Level = {
   zones: [{ x: 92, z: 10, w: 9, d: 9, y: 2, label: 'CIMENTACIÓN' }],
 };
 
-/** Los 13 niveles de la referencia, el de tándem (fase 10) y los de la fase 23 (15–17) */
-export const ALL_LEVELS: Level[] = [...LEVELS, TANDEM_LEVEL, ...SAFETY_LEVELS, ...MISSION_LEVELS];
+/** Los 13 niveles de la referencia, el de tándem (fase 10), los de las fases 23–24 (15–22) el volteo (fase 26, 23) y los escenarios de la fase 27 (24–26) */
+export const ALL_LEVELS: Level[] = [...LEVELS, TANDEM_LEVEL, ...SAFETY_LEVELS, ...MISSION_LEVELS, FLIP_LEVEL, ...SCENARIO_LEVELS];
 
 /** La columna del nivel de tándem en el mundo: centro (sobre el transportador) y orejetas */
 export function tandemColumn(L: Level): { pos: V3; lugs: V3[] } {

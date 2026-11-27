@@ -235,3 +235,24 @@ kbd { display: inline-block; min-width: 1.1em; text-align: center; font: 600 12p
 .checks li.ok { color: #7ee0ad; }
 .checks li.bad { color: #ff6b5a; }
 .checks label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+
+/* Fase 28: editor de obras y repeticiones */
+.lcard.wide { width: min(1180px, 100%); }
+.ed { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; }
+.ed-tools { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.ed-tools .btn { padding: 3px 8px; font-size: 12px; }
+.ed-tools .btn.on { background: #f0bb27; color: #1b1d20; }
+.ed-cv { width: 100%; height: auto; display: block; border-radius: 6px; background: #22262b; cursor: crosshair; touch-action: none; }
+.ed-right, .ed-props { display: flex; flex-direction: column; gap: 5px; font-size: 13px; }
+.ed-right label, .ed-fields label { display: flex; flex-direction: column; gap: 2px; color: #aab3bc; }
+.ed-right input, .ed-right select, .ed-right textarea, .ed-fields input, .ed-fields select { font: inherit; background: #15181c; color: #f2f4f6; border: 1px solid #3a4048; border-radius: 4px; padding: 3px 5px; }
+.ed-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px 8px; }
+.ed-cranes { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; }
+.ed-cranes label { flex-direction: row; align-items: center; gap: 4px; color: #f2f4f6; }
+.row3 { display: flex; gap: 4px; }
+.row3 input { width: 0; flex: 1; }
+.ed-out ul { margin: 6px 0; }
+@media (max-width: 900px) { .ed { grid-template-columns: 1fr; } }
+.replay-note { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; align-items: center; padding: 6px 14px; pointer-events: auto; max-width: calc(100% - 32px); }
+.replay-note small { color: #aab3bc; }
+.ed-right label:has(> input[type='checkbox']) { flex-direction: row; align-items: center; gap: 6px; color: #f2f4f6; }

@@ -1,3 +1,4 @@
+import { Daylight } from '../render/daylight';
 import * as THREE from 'three';
 import { CRANES, isCrawler, type CraneSpec } from '../crane/cranes';
 import { reach, ratedCap } from '../crane/stability';
@@ -40,6 +41,7 @@ import { t } from '../i18n';
 import { AchievementToast } from './progressView';
 import { SafetyView } from './safetyView';
 import { settleContract, showCareer } from '../career/careerUi';
+import { showEditor } from '../editor/editorUi';
 import { active, type LevelEvent } from '../levels/events';
 
 const MODE_TEXT = t.hud.modes;
@@ -112,6 +114,7 @@ export class Presenter {
   readonly decor: DecorView;
   /** Intensidad del sol sin lluvia (con lluvia se oscurece; se repone al desmontar) */
   private sunI: number;
+  private daylight: Daylight | null = null;
   /** Escuela (fase 19): panel del paso, aros y teclas resaltadas */
   private school: { panel: SchoolPanel; rings: RingsView; hl: string } | null = null;
 
@@ -136,6 +139,11 @@ export class Presenter {
     // cuadrícula de 5 m solo en la prueba libre (fase 17)
     const grid = ctx.scene.getObjectByName('cuadricula');
     if (grid) grid.visible = ses.decor.grid;
+    // fase 27: atardecer o noche, con focos de trabajo
+    if (ses.site?.light) {
+      this.daylight = new Daylight(ctx, ses.site.light, ses.site.lamps ?? [], (x, z) => ses.terrain.height(x, z));
+      this.cam.setSunDir(this.daylight.sunDir);
+    }
     this.sunI = ctx.sun.intensity;
     // tándem: cámara libre en el centro de las grúas (V), que no salta al cambiar de grúa con Tab
     if (multi) this.cam.enableFree(() => {
@@ -205,6 +213,7 @@ export class Presenter {
     lui.job = def.job;
     lui.unlockAll = settings.desbloquear;
     if (def.career) showCareer(lui, go);
+    else if (def.editor) showEditor(lui, go, def.editor);
     else if (def.showMenu) lui.menu();
     else if (L && !lui.open_(L)) {
       // fase 22: sin la licencia de la familia, el nivel está cerrado (se llega con la URL a mano)
@@ -318,7 +327,7 @@ export class Presenter {
   /** Fase 25: si es un contrato de la carrera, lo cobra (una vez) y devuelve las cuentas para el cartel */
   private contract(e: { fail: unknown; stars?: number; smooth?: { medal: 'oro' | 'plata' | 'bronce' | null } | null }) {
     const { ses } = this, job = ses.def.job, run = ses.run;
-    if (job?.kind !== 'contrato' || job.offer === undefined) return '';
+    if (job?.kind !== 'contrato' || job.offer === undefined || ses.replaying) return '';
     return settleContract(job.offer, ses.units[0].id, {
       ok: !e.fail, stars: e.stars ?? 0, medal: e.smooth?.medal ?? null, bumps: run.bumps, hard: run.hard, prox: run.prox,
       excl: run.excl, skips: run.skips, late: run.late, tipped: ses.units.some((u) => ses.tipped(u)),
@@ -639,6 +648,7 @@ export class Presenter {
     this.off.length = 0;
     if (this.fx?.raining) this.setRain(false);
     this.fx?.dispose();
+    this.daylight?.dispose();
     this.cabScreen.dispose();
     this.aids.dispose();
     this.pip.dispose();
